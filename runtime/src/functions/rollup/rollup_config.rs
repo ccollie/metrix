@@ -409,7 +409,8 @@ impl RollupConfig {
             func_args.push(rfa);
         }
 
-        match func_args.len() {
+        let len = func_args.len();
+        match len {
             0 => {}
             1 => {
                 let rfa = &func_args[0];
@@ -438,6 +439,10 @@ impl RollupConfig {
         }
 
         Ok(samples_scanned)
+    }
+
+    fn exec_configs(configs: &[RollupConfig]) {
+
     }
 
     fn validate(&self) -> RuntimeResult<()> {

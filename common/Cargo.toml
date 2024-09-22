@@ -15,6 +15,7 @@ path="src/lib.rs"
 agnostic-lite.workspace = true
 ahash.workspace = true
 cfg-if.workspace = true
+chili.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 dynamic-lru-cache.workspace = true

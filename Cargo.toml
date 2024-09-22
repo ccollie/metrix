@@ -23,10 +23,11 @@ resolver = "2"
 agnostic-lite = {  version = "0.3", default-features = false, features = ["time"] }
 ahash = { version = "0.8", features = ["std", "serde"] }
 byte-pool = "0.2"
+chili = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.10.0"
+chrono-tz = "0.10"
 cfg-if = "1.0.0"
-dynamic-lru-cache = "0.2.1"
+dynamic-lru-cache = "0.2"
 enquote = "1.1"
 futures = "0.3"
 get-size = { version = "^0.1", features = ["derive"] }
