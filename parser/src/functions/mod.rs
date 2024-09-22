@@ -6,8 +6,8 @@ pub use signature::*;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use std::sync::LazyLock;
-use strum::IntoEnumIterator;
+use std::sync::{LazyLock};
+use strum::{IntoEnumIterator};
 pub use transform::*;
 
 use crate::ast::Expr;

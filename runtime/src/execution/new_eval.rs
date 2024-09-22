@@ -4,7 +4,7 @@ use rayon::join;
 use rayon::prelude::IntoParallelRefIterator;
 use tracing::{field, trace, trace_span, Span};
 
-use metricsql_parser::ast::{BinaryExpr, Expr, FunctionExpr, ParensExpr, RollupExpr};
+use metricsql_parser::ast::{BinaryExpr, Expr, FunctionExpr, Operator, ParensExpr, RollupExpr, UnaryExpr};
 use metricsql_parser::functions::{BuiltinFunction, RollupFunction, TransformFunction};
 use crate::execution::{Context, EvalConfig};
 use crate::functions::rollup::{get_rollup_function_factory, rollup_default, RollupHandler};
@@ -14,7 +14,7 @@ use crate::prelude::{QueryValue, Timeseries};
 use crate::{RuntimeError, RuntimeResult};
 use crate::execution::aggregate::eval_aggr_func;
 use crate::execution::binary::*;
-use crate::execution::rollups::RollupExecutor;
+use crate::execution::rollups::RollupEvaluator;
 use crate::execution::vectors::vector_vector_binop;
 use crate::prelude::binary::scalar_binary_operation;
 
@@ -25,7 +25,7 @@ fn map_error<E: Display>(err: RuntimeError, e: E) -> RuntimeError {
     RuntimeError::General(format!("cannot evaluate {e}: {}", err))
 }
 
-pub fn exec_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<QueryValue> {
+pub fn eval_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<QueryValue> {
     let tracing = ctx.trace_enabled();
     match expr {
         Expr::StringLiteral(s) => Ok(QueryValue::String(s.to_string())),
@@ -59,14 +59,14 @@ pub fn exec_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Q
             let re = RollupExpr::new(expr.clone());
             let handler = RollupHandler::Wrapped(rollup_default);
             let mut executor =
-                RollupExecutor::new(RollupFunction::DefaultRollup, handler, expr, &re);
+                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, &re);
             let val = executor.eval(ctx, ec).map_err(|err| map_error(err, expr))?;
             Ok(val)
         }
         Expr::Rollup(re) => {
             let handler = RollupHandler::Wrapped(rollup_default);
             let mut executor =
-                RollupExecutor::new(RollupFunction::DefaultRollup, handler, expr, re);
+                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, re);
             executor.eval(ctx, ec).map_err(|err| map_error(err, expr))
         }
         Expr::Aggregation(ae) => {
@@ -75,12 +75,15 @@ pub fn exec_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Q
             trace!("series={}", rv.len());
             Ok(rv)
         }
-        Expr::Function(fe) => eval_function_op(ctx, ec, expr, fe),
-        _ => unimplemented!(),
+        Expr::Function(fe) => eval_function(ctx, ec, expr, fe),
+        Expr::UnaryOperator(ue) => eval_unary_op(ctx, ec, ue),
+        _ => {
+            Err(RuntimeError::NotImplemented(format!("No handler for {:?}", expr)))
+        },
     }
 }
 
-fn eval_function_op(
+fn eval_function(
     ctx: &Context,
     ec: &EvalConfig,
     expr: &Expr,
@@ -104,7 +107,8 @@ fn eval_function_op(
             let nrf = get_rollup_function_factory(rf);
             let (args, re, _) = eval_rollup_func_args(ctx, ec, fe)?;
             let func_handler = nrf(&args)?;
-            let mut rollup_handler = RollupExecutor::new(rf, func_handler, expr, &re);
+            let mut rollup_handler = RollupEvaluator::new(rf, func_handler, expr, &re);
+            // todo: record samples_scanned in span
             let val = rollup_handler
                 .eval(ctx, ec)
                 .map_err(|err| map_error(err, fe))?;
@@ -122,7 +126,7 @@ fn eval_parens_op(ctx: &Context, ec: &EvalConfig, pe: &ParensExpr) -> RuntimeRes
         ));
     }
     if pe.expressions.len() == 1 {
-        return exec_expr(ctx, ec, &pe.expressions[0]);
+        return eval_expr(ctx, ec, &pe.expressions[0]);
     }
     let args = eval_exprs_in_parallel(ctx, ec, &pe.expressions)?;
     let rv = handle_union(args, ec)?;
@@ -157,7 +161,8 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
             eval_string_string_binop(be.op, left, right, be.returns_bool())
         }
         (left, right) => {
-            let (lhs, rhs) = join(|| exec_expr(ctx, ec, left), || exec_expr(ctx, ec, right));
+            // maybe chili here instead of rayon
+            let (lhs, rhs) = join(|| eval_expr(ctx, ec, left), || eval_expr(ctx, ec, right));
 
             match (lhs?, rhs?) {
                 (QueryValue::Scalar(left), QueryValue::Scalar(right)) => {
@@ -190,6 +195,25 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
     res
 }
 
+fn eval_unary_op(ctx: &Context, ec: &EvalConfig, ue: &UnaryExpr) -> RuntimeResult<QueryValue> {
+    let is_tracing = ctx.trace_enabled();
+
+    let value = eval_expr(ctx, ec, &ue.expr)?;
+
+    match value {
+        QueryValue::Scalar(left) => {
+            Ok((-1.0 * left).into())
+        }
+        QueryValue::InstantVector(vector) => {
+            eval_scalar_vector_binop(-1.0, Operator::Mul, vector, false, false, is_tracing)
+        }
+        _ => {
+            Err(RuntimeError::NotImplemented(format!(
+                "invalid unary operand: {}", ue.expr.variant_name(),
+            )))
+        }
+    }
+}
 
 fn eval_transform_func(
     ctx: &Context,
@@ -236,7 +260,7 @@ pub(super) fn eval_exprs_sequentially(
         return Ok(Vec::new());
     }
     args.iter()
-        .map(|expr| exec_expr(ctx, ec, expr))
+        .map(|expr| eval_expr(ctx, ec, expr))
         .collect::<RuntimeResult<Vec<Value>>>()
 }
 
@@ -250,7 +274,7 @@ pub(super) fn eval_exprs_in_parallel(
     }
     let res: RuntimeResult<Vec<Value>> = args
         .par_iter()
-        .map(|expr| exec_expr(ctx, ec, expr))
+        .map(|expr| eval_expr(ctx, ec, expr))
         .collect();
 
     res
@@ -284,7 +308,7 @@ pub(super) fn eval_rollup_func_args(
             args.push(QueryValue::Scalar(f64::NAN)); // placeholder
             continue;
         }
-        let value = exec_expr(ctx, ec, arg).map_err(|err| {
+        let value = eval_expr(ctx, ec, arg).map_err(|err| {
             let msg = format!("cannot evaluate arg #{} for {}: {}", i + 1, fe, err);
             RuntimeError::ArgumentError(msg)
         })?;

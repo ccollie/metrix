@@ -96,28 +96,28 @@ impl ParseCache {
                 let has_subquery = expr.contains_subquery();
                 let sort_results = should_sort_results(&expr);
 
-                let node = compile_expression(&expr);
-                if let Ok(eval_node) = node {
-                    ParseCacheValue {
-                        expr: Some(expr),
-                        eval_node: Some(eval_node),
-                        err: None,
-                        has_subquery,
-                        sort_results,
-                    }
-                } else {
-                    let err = node.err().unwrap();
-                    ParseCacheValue {
-                        expr: None,
-                        eval_node: None,
-                        has_subquery: false,
-                        sort_results: false,
-                        err: Some(ParseError::General(format!(
-                            "Error optimizing expression: {:?}",
-                            err
-                        ))),
-                    }
-                }
+                let res = ParseCacheValue {
+                    expr: Some(expr),
+                    eval_node: None,
+                    err: None,
+                    has_subquery,
+                    sort_results,
+                };
+
+               // // let expr = optimize(&expr);
+               //      let err = node.err().unwrap();
+               //      ParseCacheValue {
+               //          expr: None,
+               //          eval_node: None,
+               //          has_subquery: false,
+               //          sort_results: false,
+               //          err: Some(ParseError::General(format!(
+               //              "Error optimizing expression: {:?}",
+               //              err
+               //          ))),
+               //      }
+               //  }
+               res
             }
             Err(e) => ParseCacheValue {
                 expr: None,

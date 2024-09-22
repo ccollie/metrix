@@ -5,13 +5,13 @@ use metricsql_parser::label::LabelFilter;
 use metricsql_parser::optimizer::{push_down_binary_op_filters_in_place, trim_filters_by_match_modifier};
 use crate::execution::{Context, EvalConfig};
 use crate::execution::binary::{can_push_down_common_filters, get_common_label_filters};
-use crate::execution::new_eval::exec_expr;
+use crate::execution::new_eval::eval_expr;
 use crate::execution::utils::series_len;
 use crate::prelude::Timeseries;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::QueryValue;
 
-pub(crate) fn vector_vector_binop(
+pub(super) fn vector_vector_binop(
     expr: &BinaryExpr,
     ctx: &Context,
     ec: &EvalConfig,
@@ -71,11 +71,11 @@ fn exec_binary_op_args(
         return match rayon::join(
             || {
                 trace!("left");
-                exec_expr(ctx, ec, expr_first)
+                eval_expr(ctx, ec, expr_first)
             },
             || {
                 trace!("right");
-                exec_expr(ctx, ec, expr_second)
+                eval_expr(ctx, ec, expr_second)
             },
         ) {
             (Ok(first), Ok(second)) => Ok((first, second)),
@@ -110,7 +110,7 @@ fn exec_binary_op_args(
     //   See https://www.robustperception.io/exposing-the-software-version-to-prometheus
     //
     // Invariant: self.lhs and self.rhs are both ValueType::InstantVector
-    let mut first = exec_expr(ctx, ec, expr_first)?;
+    let mut first = eval_expr(ctx, ec, expr_first)?;
     // if first.is_empty() && self.op == Or, the result will be empty,
     // since the "exprFirst op exprSecond" would return an empty result in any case.
     // https://github.com/VictoriaMetrics/VictoriaMetrics/issues/3349
@@ -118,7 +118,7 @@ fn exec_binary_op_args(
         return Ok((QueryValue::empty_vec(), QueryValue::empty_vec()));
     }
     let sec_expr = push_down_filters(be, &mut first, expr_second, ec)?;
-    let second = exec_expr(ctx, ec, &sec_expr)?;
+    let second = eval_expr(ctx, ec, &sec_expr)?;
 
     Ok((first, second))
 }

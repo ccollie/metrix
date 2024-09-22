@@ -3323,7 +3323,7 @@ mod tests {
 
     #[test]
     fn limitk_1() {
-        // NOTE: the answer here is dependent on thee hashing algo used to preserve consistent
+        // NOTE: the answer here is dependent on the hashing algo used to preserve consistent
         // ordering of the series. As such it depends on the hash and not the data. If the
         // implementation changes, it's legit to change the answer here.
         let q = r#"limitk(1, label_set(10, "foo", "bar") or label_set(time()/150, "xbaz", "sss"))"#;

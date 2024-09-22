@@ -39,8 +39,8 @@ pub(crate) fn exec_internal(
 
     let parsed = parse_promql_internal(context, q)?;
 
-    match (&parsed.eval_node, &parsed.has_subquery) {
-        (Some(eval_node), has_subquery) => {
+    match (&parsed.expr, &parsed.has_subquery) {
+        (Some(expr), has_subquery) => {
             if *has_subquery {
                 let _ = ec.get_timestamps()?;
             }
@@ -74,12 +74,7 @@ pub(crate) fn exec_internal(
             }
             .entered();
 
-            // DAGNodes can be stateful, therefore we need to clone the node before
-            // executing it.
-            // todo: possible optimization: if we're not from a cache, we can avoid cloning
-            let mut node = eval_node.clone();
-
-            let rv = node.execute(context, ec)?;
+            let rv = eval_expr(context, ec, expr)?;
 
             if is_tracing {
                 let ts_count: usize;

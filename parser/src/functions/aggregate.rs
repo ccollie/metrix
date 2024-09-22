@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, VariantArray};
 
 use crate::common::ValueType;
 use crate::functions::signature::{Signature, Volatility};

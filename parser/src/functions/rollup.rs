@@ -457,8 +457,8 @@ pub const fn get_rollup_arg_idx_for_optimization(
     // This must be kept in sync with GetRollupArgIdx()
     use RollupFunction::*;
     match func {
-        AbsentOverTime => None,
-        QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
+        CountValuesOverTime => Some(1),
+        AggrOverTime | QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
         QuantilesOverTime => Some(arg_count - 1),
         _ => Some(0),
     }

@@ -115,7 +115,7 @@ pub(super) fn new_rollup_count_values(args: &[QueryValue]) -> RuntimeResult<Roll
     }
 
     match args[1] {
-        QueryValue::RangeVector(ref tss) => tss,
+        QueryValue::InstantVector(ref tss) => tss,
         _ => {
             return Err(RuntimeError::ArgumentError(
                 "expecting instant vector as the second arg to count_values_over_time()"
