@@ -36,7 +36,7 @@ mod test {
 	#[test]
 	fn test_if_expression_unmarshal_failure() {
 		fn check(s: &str) {
-			IfExpression::parse(s).expect("expecting non-nil error");
+			assert!(IfExpression::parse(s).is_err(), "expecting non-nil error");
 		}
 
 		check("{");
