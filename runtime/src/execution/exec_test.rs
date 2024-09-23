@@ -3974,6 +3974,14 @@ mod tests {
     }
 
     #[test]
+    fn range_trim_outliers_1() {
+        let q = "range_trim_outliers(0.5, time() > 1200)";
+        let r = make_result(&[f64::NAN, f64::NAN, f64::NAN, 1600.0, 1800.00, f64::NAN]);
+        let result_expected = vec![r];
+        test_query(q, result_expected);
+    }
+
+    #[test]
     fn range_trim_spikes() {
         let q = "range_trim_spikes(0.2, time())";
         let mut r = QueryResult::default();
@@ -3981,6 +3989,14 @@ mod tests {
         r.values = vec![f64::NAN, 1200_f64, 1400_f64, 1600_f64, 1800_f64, f64::NAN];
         r.timestamps = Vec::from(TIMESTAMPS_EXPECTED);
         test_query(q, vec![r])
+    }
+
+    #[test]
+    fn range_trim_spikes_1() {
+        let q = "range_trim_spikes(0.2, time() > 1200 <= 1800)";
+        let r = make_result(&[f64::NAN, f64::NAN, f64::NAN, 1600.0, f64::NAN, f64::NAN]);
+        let result_expected = vec![r];
+        test_query(q, result_expected);
     }
 
     #[test]
@@ -3992,17 +4008,31 @@ mod tests {
     }
 
     #[test]
+    fn range_trim_zscore_1() {
+        let q = r#"round(range_zscore(time() > 1200 < 1800), 0.1)"#;
+        let r = make_result(&[f64::NAN, f64::NAN, -1.0, -1.0, f64::NAN, f64::NAN]);
+        let result_expected = vec![r];
+        test_query(q, result_expected)
+    }
+
+    #[test]
     fn range_zscore() {
         let q = "round(range_zscore(time()), 0.1)";
         let r = make_result(&[-1.5, -0.9, -0.3, 0.3, 0.9, 1.5]);
-        let result_expected = vec![r];
-        test_query(q, result_expected)
+        test_query(q, vec![r])
     }
 
     #[test]
     fn range_quantile() {
         let q = "range_quantile(0.5, time())";
         let r = make_result(&[1500.0, 1500.0, 1500.0, 1500.0, 1500.0, 1500.0]);
+        test_query(q, vec![r]);
+    }
+
+    #[test]
+    fn range_quantile_1() {
+        let q = "range_quantile(0.5, time() > 1200 < 2000)";
+        let r = make_result(&[1600.0, 1600.0, 1600.0, 1600.0, 1600.0, 1600.0]);
         test_query(q, vec![r]);
     }
 
@@ -4014,10 +4044,26 @@ mod tests {
     }
 
     #[test]
+    fn range_stddev_1() {
+        let q = "round(range_stddev(time() > 1200 < 1800),0.01)";
+        let r = make_result(&[100.0, 100.0, 100.0, 100.0, 100.0, 100.0]);
+        test_query(q, vec![r]);
+    }
+
+    #[test]
     fn range_stdvar() {
         let q = "round(range_stdvar(time()), 0.01)";
         let r = make_result(&[
             116666.67, 116666.67, 116666.67, 116666.67, 116666.67, 116666.67,
+        ]);
+        test_query(q, vec![r]);
+    }
+
+    #[test]
+    fn range_stdvar_1() {
+        let q = "round(range_stdvar(time() > 1200 < 1800),0.01)";
+        let r = make_result(&[
+            10_000.0, 10_000.0, 10_000.0, 10_000.0, 10_000.0, 10_000.0,
         ]);
         test_query(q, vec![r]);
     }
@@ -4198,6 +4244,10 @@ mod tests {
             "running_max(abs(1300-time()))",
             &[300.0, 300.0, 300.0, 300.0, 500.0, 700.0],
         );
+        assert_result_eq(
+            "running_max(abs(1300-time()) > 300 < 700)",
+            &[f64::NAN, f64::NAN, f64::NAN, f64::NAN, 500.0, 500.0],
+        );
     }
 
     #[test]
@@ -4209,9 +4259,19 @@ mod tests {
     }
 
     #[test]
+    fn running_min_1() {
+        assert_result_eq(
+            "running_min(abs(1500-time()) < 400 > 100)",
+            &[f64::NAN, 300.0, 300.0, 300.0, 300.0, 300.0],
+        );
+    }
+
+    #[test]
     fn running_sum() {
         assert_result_eq("running_sum(1)", &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         assert_result_eq("running_sum(time()/1e3)", &[1.0, 2.2, 3.6, 5.2, 7.0, 9.0]);
+        assert_result_eq("running_sum(time()/1e3 > 1.2 < 1.8)",
+                         &[f64::NAN, f64::NAN, 1.4, 3.3, 3.3, 3.3]);
     }
 
     #[test]
@@ -4219,6 +4279,10 @@ mod tests {
         assert_result_eq(
             "running_avg(time())",
             &[1000_f64, 1100.0, 1200.0, 1300.0, 1400.0, 1500.0],
+        );
+        assert_result_eq(
+            "running_avg(time() > 1200 < 1800)",
+            &[f64::NAN, f64::NAN, 1400.0, 1500.0, 1500.0, 1500.0],
         );
     }
 
@@ -4269,6 +4333,10 @@ mod tests {
             "range_min(time())",
             &[1000_f64, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0],
         );
+        assert_result_eq(
+            "range_min(time() > 1200 < 1800)",
+            &[1400_f64, 1400.0, 1400.0, 1400.0, 1400.0, 1400.0],
+        );
     }
 
     #[test]
@@ -4281,10 +4349,59 @@ mod tests {
     }
 
     #[test]
+    fn range_normalize_1() {
+        let q = r#"range_normalize(time() > 1200 < 1800,alias(-(time() > 1200 < 2000), "negative"))"#;
+        let r1 = make_result(&[f64::NAN, f64::NAN, 0.0, 1.0, f64::NAN, f64::NAN]);
+        let mut r2 = make_result(&[f64::NAN, f64::NAN, 1.0, 0.5, 0.0, f64::NAN]);
+        r2.metric.measurement = "negative".to_string();
+        test_query(q, vec![r1, r2]);
+    }
+
+    #[test]
     fn range_first() {
         assert_result_eq(
             "range_first(time())",
             &[1000_f64, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0],
+        );
+        assert_result_eq(
+            "range_first(time() > 1200 < 1800)",
+            &[1400.0, 1400.0, 1400.0, 1400.0, 1400.0, 1400.0],
+        );
+    }
+
+    #[test]
+    fn range_mad() {
+        assert_result_eq(
+            "range_mad(time())",
+            &[300.0, 300.0, 300.0, 300.0, 300.0, 300.0],
+        );
+        assert_result_eq(
+            "range_mad(time() > 1200 < 1800)",
+            &[100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
+        );
+    }
+
+    #[test]
+    fn range_max() {
+        assert_result_eq(
+            "range_max(time())",
+            &[2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0],
+        );
+        assert_result_eq(
+            "range_max(time() > 1200 < 1800)",
+            &[1600.0, 1600.0, 1600.0, 1600.0, 1600.0, 1600.0],
+        );
+    }
+
+    #[test]
+    fn range_sum() {
+        assert_result_eq(
+            "range_sum(time())",
+            &[9000.0, 9000.0, 9000.0, 9000.0, 9000.0, 9000.0],
+        );
+        assert_result_eq(
+            "range_sum(time() > 1200 < 1800)",
+            &[3000.0, 3000.0, 3000.0, 3000.0, 3000.0, 3000.0],
         );
     }
 
@@ -4294,11 +4411,25 @@ mod tests {
             "range_last(time())",
             &[2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0],
         );
+        assert_result_eq(
+            "range_last(time() > 1200 < 1800)",
+            &[1600.0, 1600.0, 1600.0, 1600.0, 1600.0, 1600.0],
+        );
     }
 
     #[test]
     fn range_linear_regression() {
-        let q = "range_linear_regression(time())";
+        assert_result_eq("range_linear_regression(time())",&[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
+        assert_result_eq("range_linear_regression(-time())", &[-1000.0, -1200.0, -1400.0, -1600.0, -1800.0, -2000.0]);
+        assert_result_eq(
+            "range_linear_regression(time() > 1200 < 1800)",
+            &[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0],
+        );
+    }
+
+    #[test]
+    fn range_linear_regression1() {
+        let q = "range_linear_regression(time() > 1200 < 1800)";
         let r = make_result(&[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
         test_query(q, vec![r]);
     }

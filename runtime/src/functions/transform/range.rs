@@ -85,10 +85,8 @@ pub(crate) fn range_first(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Times
         }
 
         let v_first = ts.values[first];
-        for v in ts.values[first..].iter_mut() {
-            if !v.is_nan() {
-                *v = v_first;
-            }
+        for v in ts.values.iter_mut() {
+            *v = v_first;
         }
     }
 
@@ -102,17 +100,15 @@ pub(crate) fn range_last(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timese
 }
 
 pub(super) fn set_last_values(_tfa: &mut TransformFuncArg, tss: &mut Vec<Timeseries>) {
-    for ts in tss {
+    for ts in tss.iter_mut() {
         let last = get_last_non_nan_index(&ts.values);
-        if last == 0 {
+        if last >= ts.values.len() - 1 {
             continue;
         }
         let v_last = ts.values[last];
 
         for v in ts.values[0..last].iter_mut() {
-            if !v.is_nan() {
-                *v = v_last;
-            }
+            *v = v_last;
         }
     }
 }
