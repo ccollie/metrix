@@ -59,7 +59,7 @@ impl AbsentTransformNode {
         let mut rvs = eval_number(ec, 1.0)?;
         if let Some(labels) = &self.labels {
             for label in labels {
-                rvs[0].metric_name.set_label_value(&label.name, &label.value);
+                rvs[0].metric_name.set(&label.name, &label.value);
             }
         }
         Ok(rvs)

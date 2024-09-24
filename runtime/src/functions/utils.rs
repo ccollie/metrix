@@ -43,20 +43,13 @@ pub fn get_first_non_nan_index(values: &[f64]) -> usize {
 }
 
 pub fn skip_trailing_nans(values: &[f64]) -> &[f64] {
-    let mut i = values.len() - 1;
-    while i > 0 && values[i].is_nan() {
-        i -= 1;
-    }
-    &values[0..i + 1]
+    let i = values.iter().rposition(|&v| !v.is_nan()).map_or(0, |i| i + 1);
+    &values[0..i]
 }
 
 #[inline]
 pub fn get_last_non_nan_index(values: &[f64]) -> usize {
-    let mut i = values.len() - 1;
-    while i > 0 && values[i].is_nan() {
-        i -= 1;
-    }
-    i
+    values.iter().rposition(|&v| !v.is_nan()).unwrap_or(0)
 }
 
 pub(crate) fn float_to_int_bounded(f: f64) -> i64 {

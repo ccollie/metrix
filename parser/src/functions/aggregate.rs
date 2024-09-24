@@ -131,7 +131,7 @@ impl AggregateFunction {
             TopkAvg => "topk_avg",
             TopkLast => "topk_last",
             TopkMedian => "topk_median",
-            ZScore => "score",
+            ZScore => "zscore",
         }
     }
 

@@ -59,7 +59,7 @@ pub(crate) fn alias(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>
         if alias.is_empty() {
             ts.metric_name.remove_label(METRIC_NAME_LABEL);
         } else {
-            ts.metric_name.set_label_value(METRIC_NAME_LABEL, &alias)
+            ts.metric_name.set(METRIC_NAME_LABEL, &alias)
         }
     }
 
@@ -76,7 +76,7 @@ pub(crate) fn handle_label_set(
             if value.is_empty() {
                 ts.metric_name.remove_label(dst_label);
             } else {
-                ts.metric_name.set_label_value(dst_label, value)
+                ts.metric_name.set(dst_label, value)
             }
         }
     }
@@ -108,7 +108,7 @@ fn transform_label_value_func(
             if transformed.is_empty() {
                 ts.metric_name.remove_label(label);
             } else {
-                ts.metric_name.set_label_value(label, transformed);
+                ts.metric_name.set(label, transformed);
             }
         }
     }
@@ -147,7 +147,7 @@ pub(crate) fn label_map(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeser
             None => {
                 if let Some(val) = m.get(empty.as_str()) {
                     if !val.is_empty() {
-                        ts.metric_name.set_label_value(&label, val);
+                        ts.metric_name.set(&label, val);
                     }
                 }
             }
@@ -219,7 +219,7 @@ fn transform_label_copy_ext(
             // this is done because value is a live (owned) ref to data in ts.metric_name
             // because of this, there was an outstanding borrow
             let v = value.clone();
-            ts.metric_name.set_label_value(dst_label, &v);
+            ts.metric_name.set(dst_label, &v);
 
             if remove_src_labels && src_label != dst_label {
                 ts.metric_name.remove_label(src_label)
@@ -260,7 +260,7 @@ pub(crate) fn label_join(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timese
         if dst_value.is_empty() {
             ts.metric_name.remove_label(&dst_label);
         } else {
-            ts.metric_name.set_label_value(&dst_label, &dst_value);
+            ts.metric_name.set(&dst_label, &dst_value);
         }
     }
 
@@ -333,10 +333,10 @@ fn handle_label_replace(
             match b {
                 Cow::Borrowed(_) => {
                     let cloned = b.to_string();
-                    ts.metric_name.set_label_value(dst_label, &cloned);
+                    ts.metric_name.set(dst_label, &cloned);
                 }
                 Cow::Owned(owned) => {
-                    ts.metric_name.set_label_value(dst_label, &owned);
+                    ts.metric_name.set(dst_label, &owned);
                 }
             };
         }

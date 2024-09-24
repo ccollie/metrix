@@ -49,9 +49,7 @@ pub fn validate_function_args(func: &BuiltinFunction, args: &[Expr]) -> ParseRes
         Ok(())
     };
 
-    let validate_return_type = |return_type: ValueType,
-                                expected: ValueType,
-                                index: usize|
+    let validate_return_type = |return_type: ValueType, expected: ValueType, index: usize|
      -> ParseResult<()> {
         match expected {
             ValueType::RangeVector => {

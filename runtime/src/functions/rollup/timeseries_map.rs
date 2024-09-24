@@ -55,7 +55,7 @@ impl MapInner {
         self.series.entry(value).or_insert_with_key(move |value| {
             let values: Vec<f64> = vec![f64::NAN; timestamps.len()];
             let mut ts = Timeseries::with_shared_timestamps(timestamps, &values);
-            ts.metric_name.set_label_value(label_name, value);
+            ts.metric_name.set(label_name, value);
             ts
         })
     }

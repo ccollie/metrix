@@ -54,7 +54,7 @@ impl MetricName {
 
         let mut res = MetricName::default();
         for i in (0..ss.len()).step_by(2) {
-            res.set_label_value(ss[i], ss[i + 1]);
+            res.set(ss[i], ss[i + 1]);
         }
 
         Ok(res)
@@ -130,7 +130,7 @@ impl MetricName {
     }
 
     /// adds new tag to mn with the given key and value.
-    pub fn set_label_value(&mut self, key: &str, value: &str) {
+    pub fn set(&mut self, key: &str, value: &str) {
         if key == METRIC_NAME_LABEL {
             self.measurement = value.into();
         } else {
@@ -264,9 +264,9 @@ impl MetricName {
                 Some(tag_value) => {
                     if !prefix.is_empty() {
                         let key = format!("{prefix}{}", tag_name);
-                        self.set_label_value(&key, tag_value);
+                        self.set(&key, tag_value);
                     } else {
-                        self.set_label_value(tag_name, tag_value);
+                        self.set(tag_name, tag_value);
                     }
                 }
                 None => {
@@ -283,9 +283,9 @@ impl MetricName {
             }
             if !prefix.is_empty() {
                 let key = format!("{prefix}{}", tag.name);
-                self.set_label_value(&key, &tag.value);
+                self.set(&key, &tag.value);
             } else {
-                self.set_label_value(&tag.name, &tag.value);
+                self.set(&tag.name, &tag.value);
             }
         }
     }

@@ -168,13 +168,13 @@ impl Bucket {
         let src = self.ts.borrow();
         let mut ts: Timeseries = src.clone();
         ts.values.fill(0.0);
-        ts.metric_name.set_label_value(LE, le_str);
+        ts.metric_name.set(LE, le_str);
         Rc::new(RefCell::new(ts))
     }
 
     fn set_le(&mut self, end_str: &str) {
         let mut ts = self.ts.borrow_mut();
-        ts.metric_name.set_label_value(LE, end_str);
+        ts.metric_name.set(LE, end_str);
     }
 
     pub fn pop_timeseries(&mut self) -> Option<Timeseries> {
@@ -418,11 +418,11 @@ pub(crate) fn histogram_share(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<T
         if !bounds_label.is_empty() {
             ts_lower = xss[0].ts.clone();
             ts_lower.metric_name.remove_label(&bounds_label);
-            ts_lower.metric_name.set_label_value(&bounds_label, "lower");
+            ts_lower.metric_name.set(&bounds_label, "lower");
 
             ts_upper = xss[0].ts.clone();
             ts_upper.metric_name.remove_label(&bounds_label);
-            ts_upper.metric_name.set_label_value(&bounds_label, "upper")
+            ts_upper.metric_name.set(&bounds_label, "upper")
         } else {
             ts_lower = Timeseries::default();
             ts_upper = Timeseries::default();
@@ -585,7 +585,7 @@ pub(crate) fn histogram_quantiles(tfa: &mut TransformFuncArg) -> RuntimeResult<V
             Ok(mut tss_tmp) => {
                 for ts in tss_tmp.iter_mut() {
                     // ts.metric_name.remove_tag(&dst_label);
-                    ts.metric_name.set_label_value(&dst_label, &phi_str);
+                    ts.metric_name.set(&dst_label, &phi_str);
                 }
                 rvs.extend(tss_tmp)
             }
@@ -686,10 +686,10 @@ pub(crate) fn histogram_quantile(tfa: &mut TransformFuncArg) -> RuntimeResult<Ve
 
         if !bounds_label.is_empty() {
             ts_lower = xss[0].ts.clone(); // todo: use take and clone instead of 2 clones ?
-            ts_lower.metric_name.set_label_value(&bounds_label, "lower");
+            ts_lower.metric_name.set(&bounds_label, "lower");
 
             ts_upper = xss[0].ts.clone();
-            ts_upper.metric_name.set_label_value(&bounds_label, "upper");
+            ts_upper.metric_name.set(&bounds_label, "upper");
         } else {
             ts_lower = Timeseries::default();
             ts_upper = Timeseries::default();

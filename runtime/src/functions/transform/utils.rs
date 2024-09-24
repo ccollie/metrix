@@ -47,13 +47,19 @@ pub fn get_timezone_offset(zone: &impl TimeZone, timestamp_msecs: i64) -> Option
 #[inline]
 /// This exists solely for readability
 pub(super) fn clamp_min(val: f64, limit: f64) -> f64 {
-    val.min(limit)
+    if val < limit {
+        limit
+    } else {
+        val
+    }
 }
 
 pub(crate) fn ru(free_value: f64, max_value: f64) -> f64 {
     // ru(freev, maxv) = clamp_min(maxv - clamp_min(freev, 0), 0) / clamp_min(maxv, 0) * 100
-    clamp_min(max_value - clamp_min(free_value, 0_f64), 0_f64) / clamp_min(max_value, 0_f64)
-        * 100_f64
+    let used = clamp_min(max_value - clamp_min(free_value, 0.0), 0.0);
+    let max =  clamp_min(max_value, 0.0);
+    let utilization = used / max;
+    utilization * 100_f64
 }
 
 pub fn extract_labels_from_expr(arg: &Expr) -> Option<Labels> {

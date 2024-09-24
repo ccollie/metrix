@@ -86,7 +86,6 @@ where
 }
 
 pub type RollupFuncFloatArg = fn(&RollupFuncArg, &f64) -> f64;
-
 pub(crate) type RollupHandlerFloat = GenericRollupHandler<f64, fn(&RollupFuncArg, &f64) -> f64>;
 
 pub(crate) type RollupHandlerVec =

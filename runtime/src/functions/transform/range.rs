@@ -1,17 +1,17 @@
-use std::ops::Deref;
 use metricsql_common::pool::get_pooled_vec_f64;
+use std::ops::Deref;
 
 use crate::common::math::{
     linear_regression, mad, mean, quantile, quantile_sorted, stddev, stdvar,
 };
-use crate::execution::eval_number;
 use crate::functions::arg_parse::{get_float_arg, get_series_arg};
+use crate::functions::skip_trailing_nans;
 use crate::functions::transform::running::{running_avg, running_max, running_min, running_sum};
-use crate::functions::transform::utils::{expect_transform_args_num, ru};
+use crate::functions::transform::utils::expect_transform_args_num;
 use crate::functions::transform::{TransformFn, TransformFuncArg};
-use crate::functions::utils::{get_first_non_nan_index, get_last_non_nan_index};
-use crate::{RuntimeResult};
-use crate::types::{QueryValue, Timeseries};
+use crate::functions::utils::get_first_non_nan_index;
+use crate::types::Timeseries;
+use crate::RuntimeResult;
 
 pub(crate) fn range_avg(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     transform_range_impl(tfa, running_avg)
@@ -34,7 +34,7 @@ fn transform_range_impl(
     running_fn: impl TransformFn,
 ) -> RuntimeResult<Vec<Timeseries>> {
     let mut rvs = running_fn(tfa)?;
-    set_last_values(tfa, &mut rvs);
+    set_last_values(&mut rvs);
     Ok(rvs)
 }
 
@@ -45,7 +45,7 @@ pub(crate) fn transform_range_quantile(
 
     let mut series = get_series_arg(&tfa.args, 1, tfa.ec)?;
     range_quantile(phi, &mut series);
-    set_last_values(tfa, &mut series);
+    set_last_values(&mut series);
     Ok(series)
 }
 
@@ -73,6 +73,7 @@ pub(crate) fn range_quantile(phi: f64, series: &mut [Timeseries]) {
             ts.values[last_idx] = quantile_sorted(phi, &values)
         }
     }
+    set_last_values(series);
 }
 
 pub(crate) fn range_first(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
@@ -95,19 +96,19 @@ pub(crate) fn range_first(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Times
 
 pub(crate) fn range_last(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
-    set_last_values(tfa, &mut series);
+    set_last_values(&mut series);
     Ok(series)
 }
 
-pub(super) fn set_last_values(_tfa: &mut TransformFuncArg, tss: &mut Vec<Timeseries>) {
+pub(super) fn set_last_values(tss: &mut [Timeseries]) {
     for ts in tss.iter_mut() {
-        let last = get_last_non_nan_index(&ts.values);
-        if last >= ts.values.len() - 1 {
+        let values = skip_trailing_nans(&ts.values);
+        if values.is_empty() {
             continue;
         }
-        let v_last = ts.values[last];
+        let v_last = ts.values[values.len() - 1];
 
-        for v in ts.values[0..last].iter_mut() {
+        for v in ts.values.iter_mut() {
             *v = v_last;
         }
     }
@@ -145,6 +146,7 @@ pub(crate) fn range_trim_spikes(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec
 
     for ts in rvs.iter_mut() {
         values.clear();
+
         for v in ts.values.iter() {
             if !v.is_nan() {
                 values.push(*v);
@@ -153,6 +155,7 @@ pub(crate) fn range_trim_spikes(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec
 
         values.sort_by(|a, b| a.total_cmp(b));
 
+        // todo: chili::join or rayon::join
         let v_max = quantile_sorted(phi_upper, &values);
         let v_min = quantile_sorted(phi_lower, &values);
         for v in ts.values.iter_mut() {
@@ -178,6 +181,19 @@ pub(crate) fn range_linear_regression(
         let (v, k) = linear_regression(&ts.values, timestamps, intercept_timestamp);
         for (value, timestamp) in ts.values.iter_mut().zip(timestamps.iter()) {
             *value = v + k * ((timestamp - intercept_timestamp) as f64 / 1e3)
+        }
+    }
+
+    Ok(series)
+}
+
+pub(crate) fn range_mad(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+    let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
+
+    for ts in series.iter_mut() {
+        let v = mad(&ts.values);
+        for val in ts.values.iter_mut() {
+            *val = v
         }
     }
 
@@ -270,30 +286,4 @@ pub(crate) fn range_zscore(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Time
         }
     }
     Ok(rvs)
-}
-
-pub(crate) fn range_ru(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
-    if tfa.args.len() != 2 {
-        // error
-    }
-    match (&tfa.args[0], &tfa.args[1]) {
-        (QueryValue::Scalar(left), QueryValue::Scalar(right)) => {
-            // slight optimization
-            let value = ru(*left, *right);
-            eval_number(tfa.ec, value)
-        }
-        _ => {
-            let mut free_series = get_series_arg(&tfa.args, 0, tfa.ec)?; // todo: get_range_vector
-            let max_series = get_series_arg(&tfa.args, 1, tfa.ec)?; // todo: get_range_vector
-
-            for (free_ts, max_ts) in free_series.iter_mut().zip(max_series) {
-                // calculate utilization and store in `free`
-                for (free_value, max_value) in free_ts.values.iter_mut().zip(max_ts.values) {
-                    *free_value = ru(*free_value, max_value)
-                }
-            }
-
-            Ok(free_series)
-        }
-    }
 }

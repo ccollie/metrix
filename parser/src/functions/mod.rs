@@ -171,6 +171,8 @@ impl Display for FunctionMeta {
         write!(f, ")")
     }
 }
+
+// TODO: use blart
 type FunctionRegistry = FastHashMap<&'static str, FunctionMeta>;
 static REGISTRY: OnceLock<FunctionRegistry> = OnceLock::new();
 

@@ -494,17 +494,20 @@ pub(super) fn rollup_tlast_change(rfa: &RollupFuncArg) -> f64 {
         return NAN;
     }
 
-    let last = rfa.values.len() - 1;
-    let last_value = rfa.values[last];
+    let values = rfa.values;
+    let timestamps = rfa.timestamps;
+
+    let last = values.len() - 1;
+    let last_value = values[last];
 
     for i in (0..last).rev() {
-        if rfa.values[i] != last_value {
-            return rfa.timestamps[i + 1] as f64 / 1e3_f64;
+        if values[i] != last_value {
+            return timestamps[i + 1] as f64 / 1e3_f64;
         }
     }
 
     if rfa.prev_value.is_nan() || rfa.prev_value != last_value {
-        return rfa.timestamps[0] as f64 / 1e3_f64;
+        return timestamps[0] as f64 / 1e3_f64;
     }
     NAN
 }
@@ -618,10 +621,12 @@ pub(super) fn rollup_increase_pure(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
 
-    let count = rfa.values.len();
-    let mut prev_value = rfa.prev_value;
+    let values = rfa.values;
+    let count = values.len();
 
     // restore to the real value because of potential staleness reset
+    let mut prev_value = rfa.real_prev_value;
+
     if prev_value.is_nan() {
         if count == 0 {
             return NAN;
@@ -629,11 +634,12 @@ pub(super) fn rollup_increase_pure(rfa: &RollupFuncArg) -> f64 {
         // Assume the counter starts from 0.
         prev_value = 0.0;
     }
+
     if rfa.values.is_empty() {
         // Assume the counter didn't change since prev_value.
         return 0f64;
     }
-    rfa.values[count - 1] - prev_value
+    values[count - 1] - prev_value
 }
 
 pub(super) fn rollup_lifetime(rfa: &RollupFuncArg) -> f64 {

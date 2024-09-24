@@ -1,15 +1,15 @@
 use std::default::Default;
 use std::ops::Deref;
 
-use ahash::AHashMap;
-use topologic::AcyclicDependencyGraph;
-
+use ahash::HashMapExt;
+use metricsql_common::hash::IntMap;
 use metricsql_parser::ast::{
     AggregationExpr, BinaryExpr, Expr, FunctionExpr, MetricExpr, ParensExpr, RollupExpr, UnaryExpr,
 };
 use metricsql_parser::common::{Value, ValueType};
 use metricsql_parser::functions::{BuiltinFunction, RollupFunction, TransformFunction};
 use metricsql_parser::prelude::{adjust_comparison_ops, Operator};
+use topologic::AcyclicDependencyGraph;
 
 use crate::execution::binary::{can_push_down_common_filters, should_reset_metric_group};
 use crate::execution::dag::absent_transform_node::AbsentTransformNode;
@@ -34,11 +34,11 @@ use crate::functions::rollup::{
     rollup_func_requires_config,
     RollupHandler,
 };
-use crate::{RuntimeError, RuntimeResult};
 use crate::types::{QueryValue, Timestamp};
+use crate::{RuntimeError, RuntimeResult};
 
 pub struct DAGBuilder {
-    node_map: AHashMap<usize, DAGNode>,
+    node_map: IntMap<usize, DAGNode>,
     graph: AcyclicDependencyGraph<usize>,
 }
 
@@ -46,7 +46,7 @@ impl DAGBuilder {
     fn new() -> Self {
         DAGBuilder {
             graph: AcyclicDependencyGraph::new(),
-            node_map: AHashMap::with_capacity(16),
+            node_map: IntMap::with_capacity(16),
         }
     }
 

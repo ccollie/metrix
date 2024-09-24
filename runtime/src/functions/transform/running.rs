@@ -1,6 +1,7 @@
 use crate::functions::arg_parse::get_series_arg;
 use crate::functions::transform::TransformFuncArg;
 use crate::{RuntimeResult, types::Timeseries};
+use crate::functions::utils::get_first_non_nan_index;
 
 pub(crate) fn running_avg(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     running_func_impl(tfa, handle_avg)
@@ -48,13 +49,7 @@ fn running_func_impl(
         ts.metric_name.reset_measurement();
 
         // skip leading NaN values
-        let mut start = 0;
-        for (i, v) in ts.values.iter_mut().enumerate() {
-            if !v.is_nan() {
-                start = i;
-                break;
-            }
-        }
+        let mut start = get_first_non_nan_index(&ts.values);
 
         // make sure there's at least 2 items remaining
         if ts.values.len() - start < 2 {

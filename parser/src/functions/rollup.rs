@@ -200,8 +200,7 @@ impl RollupFunction {
         match self {
             CountEqOverTime | CountLeOverTime | CountNeOverTime | CountGtOverTime
             | DurationOverTime | PredictLinear | ShareEqOverTime | ShareGtOverTime
-            | ShareLeOverTime | SumEqOverTime | SumGtOverTime | SumLeOverTime | TFirstOverTime
-            | TLastChangeOverTime | TLastOverTime => {
+            | ShareLeOverTime | SumEqOverTime | SumGtOverTime | SumLeOverTime | TFirstOverTime => {
                 Signature::exact(vec![RangeVector, Scalar], Volatility::Immutable)
             }
             CountValuesOverTime => {

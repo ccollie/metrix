@@ -39,6 +39,19 @@ pub(crate) fn get_string_arg(args: &[QueryValue], arg_num: usize) -> RuntimeResu
     res
 }
 
+// this is similar to the code below, but included here for easy refactoring later
+pub(crate) fn get_instant_vector_arg(
+    args: &[QueryValue],
+    arg_num: usize,
+    ec: &EvalConfig,
+) -> RuntimeResult<Vec<Timeseries>> {
+    if let Some(arg) = args.get(arg_num) {
+        return arg.get_instant_vector(ec);
+    }
+    let msg = format!("missing arg # {}", arg_num + 1);
+    Err(RuntimeError::ArgumentError(msg))
+}
+
 pub(crate) fn get_series_arg(
     args: &[QueryValue],
     arg_num: usize,
