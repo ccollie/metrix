@@ -54,14 +54,6 @@ pub(super) fn clamp_min(val: f64, limit: f64) -> f64 {
     }
 }
 
-pub(crate) fn ru(free_value: f64, max_value: f64) -> f64 {
-    // ru(freev, maxv) = clamp_min(maxv - clamp_min(freev, 0), 0) / clamp_min(maxv, 0) * 100
-    let used = clamp_min(max_value - clamp_min(free_value, 0.0), 0.0);
-    let max =  clamp_min(max_value, 0.0);
-    let utilization = used / max;
-    utilization * 100_f64
-}
-
 pub fn extract_labels_from_expr(arg: &Expr) -> Option<Labels> {
     if let Expr::MetricExpression(me) = arg {
         return Some(extract_labels(me));

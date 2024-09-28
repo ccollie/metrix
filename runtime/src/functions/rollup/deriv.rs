@@ -29,8 +29,7 @@ pub(super) fn new_rollup_irate(_: &[QueryValue]) -> RuntimeResult<RollupHandler>
 }
 
 pub(super) fn deriv_values(values: &mut [f64], timestamps: &[Timestamp]) {
-    // There is no need in handling NaNs here, since they are impossible
-    // on values from storage.
+    // There is no need in handling NaNs here, since they are impossible on values from storage.
     if values.is_empty() {
         return;
     }
@@ -69,25 +68,12 @@ pub(super) fn rollup_deriv_slow(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_deriv_fast(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
-    let timestamps = &rfa.timestamps;
+    let values = rfa.values;
+    let timestamps = rfa.timestamps;
     let mut prev_value = rfa.prev_value;
     let mut prev_timestamp = rfa.prev_timestamp;
     if prev_value.is_nan() {
-        if values.is_empty() {
-            return f64::NAN;
-        }
-        if values.len() == 1 {
-            // It is impossible to determine the duration during which the value changed
-            // from 0 to the current value.
-            // The following attempts didn't work well:
-            // - using scrape interval as the duration. It fails on Prometheus restarts when it
-            //   skips scraping for the counter. This results in too high rate() value for the first point
-            //   after Prometheus restarts.
-            // - using window or step as the duration. It results in too small rate() values for the first
-            //   points of time series.
-            //
-            // So just return NAN
+        if values.is_empty() || values.len() == 1 {
             return f64::NAN;
         }
         prev_value = values[0];
@@ -106,8 +92,8 @@ pub(super) fn rollup_deriv_fast(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_ideriv(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
-    let timestamps = &rfa.timestamps;
+    let values = rfa.values;
+    let timestamps = rfa.timestamps;
     let mut count = rfa.values.len();
     if count < 2 {
         if count == 0 {

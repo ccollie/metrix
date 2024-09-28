@@ -48,11 +48,11 @@ impl<'a> BinaryOpFuncArg<'a> {
     }
 }
 
-pub type BinaryOpFuncResult = RuntimeResult<Vec<Timeseries>>;
+pub type BinaryOpFuncResult = RuntimeResult<InstantVector>;
 
 macro_rules! make_binary_func {
     ($name: ident, $op: expr) => {
-        fn $name(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+        fn $name(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
             const FUNC: BinopFunc = get_scalar_binop_handler($op, false);
             binary_op_func_impl(FUNC, bfa)
         }
@@ -120,7 +120,7 @@ pub(crate) fn exec_binop(bfa: &mut BinaryOpFuncArg) -> BinaryOpFuncResult {
     }
 }
 
-fn binary_op_func_impl(bf: BinopFunc, bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_func_impl(bf: BinopFunc, bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     if bfa.left.is_empty() || bfa.right.is_empty() {
         return Ok(vec![]);
     }
@@ -187,8 +187,8 @@ fn adjust_binary_op_tags(
     let (mut m_left, mut m_right) = create_series_map_by_tag_set(bfa);
 
     // TODO: I think if we wanted we could reuse bfa.left and bfa.right here
-    let mut rvs_left: Vec<Timeseries> = Vec::with_capacity(4);
-    let mut rvs_right: Vec<Timeseries> = Vec::with_capacity(4);
+    let mut rvs_left = std::mem::take(&mut bfa.left);
+    let mut rvs_right = std::mem::take(&mut bfa.right);
 
     let card = VectorMatchCardinality::OneToOne;
     let none_matching = None;
@@ -332,10 +332,10 @@ fn group_join(
     single_timeseries_side: &str,
     bfa: &BinaryOpFuncArg,
     reset_metric_group: bool,
-    rvs_left: &mut Vec<Timeseries>,
-    rvs_right: &mut Vec<Timeseries>,
+    rvs_left: &mut InstantVector,
+    rvs_right: &mut InstantVector,
     tss_left: &mut [Timeseries],
-    tss_right: &mut Vec<Timeseries>,
+    tss_right: &mut InstantVector,
 ) -> RuntimeResult<()> {
     let empty_prefix = "";
     let empty_labels = Labels::default();
@@ -467,7 +467,7 @@ pub fn merge_non_overlapping_timeseries(dst: &mut Timeseries, src: &Timeseries) 
     true
 }
 
-fn binary_op_if(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_if(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     let (mut m_left, m_right) = create_series_map_by_tag_set(bfa);
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(m_left.len());
 
@@ -481,12 +481,12 @@ fn binary_op_if(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     Ok(rvs)
 }
 
-/// vector1 and vector2 results in a vector consisting of the elements of vector1 for which there
+/// `vector1 and vector2` results in a vector consisting of the elements of vector1 for which there
 /// are elements in vector2 with exactly matching label sets.
 /// Other elements are dropped. The metric name and values are carried over from the left-hand side vector.
 ///
 /// https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators
-fn binary_op_and(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_and(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     if bfa.left.is_empty() || bfa.right.is_empty() {
         return Ok(vec![]); // Short-circuit: AND with nothing is nothing.
     }
@@ -506,7 +506,7 @@ fn binary_op_and(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     Ok(rvs)
 }
 
-fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     if bfa.left.is_empty() {
         return Ok(std::mem::take(&mut bfa.right)); // Short-circuit: default with nothing is nothing.
     }
@@ -524,11 +524,11 @@ fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>
     Ok(rvs)
 }
 
-/// vector1 or vector2 results in a vector that contains all original elements (label sets + values)
+/// `vector1 or vector2` results in a vector that contains all original elements (label sets + values)
 /// of vector1 and additionally all elements of vector2 which do not have matching label sets in vector1.
 ///
 /// https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators
-fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     if bfa.left.is_empty() {
         // Short-circuit.
         return Ok(std::mem::take(&mut bfa.right));
@@ -563,12 +563,12 @@ fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     Ok(left)
 }
 
-/// vector1 unless vector2 results in a vector consisting of the elements of vector1
+/// `vector1 unless vector2` results in a vector consisting of the elements of vector1
 /// for which there are no elements in vector2 with exactly matching label sets.
 /// All matching elements in both vectors are dropped.
 ///
 /// https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators
-fn binary_op_unless(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_unless(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     // If right is empty, we simply return the left
     // if left is empty we will return it anyway.
     if bfa.right.is_empty() || bfa.left.is_empty() {
@@ -590,7 +590,7 @@ fn binary_op_unless(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>>
 }
 
 /// q1 ifnot q2 removes values from q1 for existing values from q2.
-fn binary_op_if_not(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+fn binary_op_if_not(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     let (m_left, m_right) = create_series_map_by_tag_set(bfa);
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(m_left.len());
 

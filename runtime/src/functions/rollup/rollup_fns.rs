@@ -424,7 +424,7 @@ pub(super) fn rollup_median(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_tmin(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
+    let values = rfa.values;
     if values.is_empty() {
         return NAN;
     }
@@ -477,7 +477,7 @@ pub(super) fn rollup_tfirst(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_tlast(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let timestamps = &rfa.timestamps;
+    let timestamps = rfa.timestamps;
     if timestamps.is_empty() {
         // do not take into account rfa.prev_timestamp, since it may lead
         // to inconsistent results comparing to Prometheus on broken time series
@@ -529,7 +529,7 @@ pub(super) fn rollup_sum(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_rate_over_sum(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let timestamps = &rfa.timestamps;
+    let timestamps = rfa.timestamps;
     if timestamps.is_empty() {
         return NAN;
     }
@@ -541,7 +541,7 @@ pub(super) fn rollup_range(rfa: &RollupFuncArg) -> f64 {
     if rfa.values.is_empty() {
         return NAN;
     }
-    let values = &rfa.values;
+    let values = rfa.values;
     let mut max = values[0];
     let mut min = max;
     for v in values.iter() {
@@ -602,7 +602,7 @@ pub(super) fn rollup_count(rfa: &RollupFuncArg) -> f64 {
 }
 
 pub(super) fn rollup_stale_samples(rfa: &RollupFuncArg) -> f64 {
-    let values = &rfa.values;
+    let values = rfa.values;
     if values.is_empty() {
         return NAN;
     }
@@ -644,7 +644,7 @@ pub(super) fn rollup_increase_pure(rfa: &RollupFuncArg) -> f64 {
 
 pub(super) fn rollup_lifetime(rfa: &RollupFuncArg) -> f64 {
     // Calculate the duration between the first and the last data points.
-    let timestamps = &rfa.timestamps;
+    let timestamps = rfa.timestamps;
     let count = timestamps.len();
     if rfa.prev_value.is_nan() {
         if count < 2 {
@@ -840,7 +840,7 @@ pub(super) fn rollup_mode_over_time(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_ascent_over_time(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
+    let values = rfa.values;
     let mut prev_value = rfa.prev_value;
     let mut start: usize = 0;
     if prev_value.is_nan() {
@@ -903,7 +903,7 @@ pub(super) fn rollup_zscore_over_time(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_first(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
+    let values = rfa.values;
     if values.is_empty() {
         // do not take into account rfa.prev_value, since it may lead
         // to inconsistent results comparing to Prometheus on broken time series
@@ -914,7 +914,7 @@ pub(super) fn rollup_first(rfa: &RollupFuncArg) -> f64 {
 }
 
 pub(crate) fn rollup_default(rfa: &RollupFuncArg) -> f64 {
-    let values = &rfa.values;
+    let values = rfa.values;
     if values.is_empty() {
         // do not take into account rfa.prev_value, since it may lead
         // to inconsistent results comparing to Prometheus on broken time series

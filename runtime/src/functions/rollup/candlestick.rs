@@ -74,7 +74,7 @@ pub(super) fn rollup_low(rfa: &RollupFuncArg) -> f64 {
     }
     let vals = &values[start..];
     for v in vals.iter() {
-        if v < &min {
+        if *v < min {
             min = *v
         }
     }

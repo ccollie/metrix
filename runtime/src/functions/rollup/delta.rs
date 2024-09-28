@@ -106,7 +106,7 @@ pub(super) fn rollup_delta_prometheus(rfa: &RollupFuncArg) -> f64 {
 pub(super) fn rollup_idelta(rfa: &RollupFuncArg) -> f64 {
     // There is no need in handling NaNs here, since they must be cleaned up
     // before calling rollup fns.
-    let values = &rfa.values;
+    let values = rfa.values;
     if values.is_empty() {
         if rfa.prev_value.is_nan() {
             return f64::NAN;

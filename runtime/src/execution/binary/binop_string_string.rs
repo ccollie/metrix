@@ -1,3 +1,4 @@
+use enquote::enquote;
 use metricsql_parser::prelude::{string_compare, Operator};
 
 use crate::{RuntimeError, RuntimeResult};
@@ -20,12 +21,15 @@ pub(crate) fn eval_string_string_binop(
         _ => {
             if op.is_comparison() {
                 let cmp = string_compare(right, left, op, is_bool).map_err(|_| {
-                    RuntimeError::Internal(format!("string compare failed: op = {op}"))
+                    RuntimeError::Internal(format!("Invalid string comparison: op = {op}"))
                 })?;
                 Ok(QueryValue::Scalar(cmp))
             } else {
                 Err(RuntimeError::NotImplemented(
-                    format!("Unimplemented string operator: {op} {left} {right}")
+                    format!("Unimplemented string operator: {} {op} {}",
+                            enquote('"', left),
+                            enquote('"', right)
+                    )
                 ))
             }
         }

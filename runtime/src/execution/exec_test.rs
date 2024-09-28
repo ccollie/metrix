@@ -5217,9 +5217,6 @@ label_set(time()+200, "__name__", "bar", "a", "x"),
         // With expressions
         f("ttf()");
         f("ttf(1, 2)");
-        f("ru()");
-        f("ru(1)");
-        f("ru(1,3,3)");
 
         // Invalid rollup tags
         f(r#"rollup_rate(time()[5m], "")"#);
