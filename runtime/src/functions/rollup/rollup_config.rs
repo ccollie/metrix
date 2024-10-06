@@ -88,9 +88,9 @@ pub struct TagFunction {
     pub(crate) func: RollupHandler,
 }
 
-pub type PreFunctionVec = SmallVec<[PreFunction;4]>;
-pub type TagFunctionVec = SmallVec<[TagFunction;4]>;
-pub type RollupConfigVec = SmallVec<[RollupConfig;4]>;
+pub type PreFunctionVec = SmallVec<PreFunction, 4>;
+pub type TagFunctionVec = SmallVec<TagFunction, 4>;
+pub type RollupConfigVec = SmallVec<RollupConfig, 4>;
 
 #[derive(Clone, Default, Debug)]
 pub struct RollupFunctionHandlerMeta {
@@ -360,7 +360,7 @@ impl RollupConfig {
         let mut samples_scanned = values.len() as u64;
         let samples_scanned_per_call = self.samples_scanned_per_call as u64;
 
-        let mut func_args = SmallVec::<[RollupFuncArg; 6]>::new();
+        let mut func_args = SmallVec::<RollupFuncArg, 6>::new();
 
         for (idx, t_end) in self.timestamps.iter().enumerate() {
             let t_start = *t_end - window;

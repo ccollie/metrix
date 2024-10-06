@@ -54,7 +54,7 @@ metricsql_common={ path = "../common" }
 metricsql_parser={ path = "../parser" }
 static_assertions = "1.1.0"
 prometheus = "0.13.4"
-lazy_static = "1.5.0"
+lazy_static = "1.5"
 
 [features]
 default = ["tokio"]

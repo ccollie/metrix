@@ -10,7 +10,7 @@ pub(super) fn new_rollup_holt_winters(args: &[QueryValue]) -> RuntimeResult<Roll
 
     let handler = RollupHandlerVec::new(
         smallvec![sf, tf],
-        |rfa: &RollupFuncArg, vals: &SmallVec<[f64; 4]>| -> f64 {
+        |rfa: &RollupFuncArg, vals: &SmallVec<f64, 4>| -> f64 {
             let sf = vals[0];
             let tf = vals[1];
             holt_winters_internal(rfa, sf, tf)

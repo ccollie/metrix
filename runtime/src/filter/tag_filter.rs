@@ -316,7 +316,7 @@ impl Deref for TagFilters {
 }
 
 
-pub type LabelFilterVec = SmallVec<[TagFilters; 3]>;
+pub type LabelFilterVec = SmallVec<TagFilters, 3>;
 
 
 /// Create a set of optimized matchers from a list of LabelFilter matchers

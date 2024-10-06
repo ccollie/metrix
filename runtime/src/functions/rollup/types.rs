@@ -89,7 +89,7 @@ pub type RollupFuncFloatArg = fn(&RollupFuncArg, &f64) -> f64;
 pub(crate) type RollupHandlerFloat = GenericRollupHandler<f64, fn(&RollupFuncArg, &f64) -> f64>;
 
 pub(crate) type RollupHandlerVec =
-    GenericRollupHandler<SmallVec<[f64; 4]>, fn(&RollupFuncArg, &SmallVec<[f64; 4]>) -> f64>;
+    GenericRollupHandler<SmallVec<f64, 4>, fn(&RollupFuncArg, &SmallVec<f64, 4>) -> f64>;
 
 #[derive(Clone, Debug)]
 pub(crate) enum RollupHandler {

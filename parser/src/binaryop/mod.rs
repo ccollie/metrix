@@ -3,7 +3,7 @@ use crate::parser::{ParseError, ParseResult};
 
 pub type BinopFunc = fn(left: f64, right: f64) -> f64;
 
-/// eq returns true of left == right.
+/// eq returns true if left == right.
 #[inline]
 fn op_eq(left: f64, right: f64) -> bool {
     // Special handling for nan == nan.
@@ -13,7 +13,7 @@ fn op_eq(left: f64, right: f64) -> bool {
     left == right
 }
 
-/// neq returns true of left != right.
+/// neq returns true if left != right.
 #[inline]
 fn op_neq(left: f64, right: f64) -> bool {
     // Special handling for comparison with nan.
@@ -118,7 +118,7 @@ fn op_default(left: f64, right: f64) -> f64 {
     left
 }
 
-/// If returns left if right is not NaN. Otherwise, NaN is returned.
+/// returns left if right is not NaN. Otherwise, NaN is returned.
 #[inline]
 fn op_if(left: f64, right: f64) -> f64 {
     if right.is_nan() {

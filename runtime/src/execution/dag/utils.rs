@@ -72,7 +72,7 @@ pub(super) fn resolve_rollup_handler(
         let empty = vec![];
         return get_rollup_function_handler(func, &empty);
     }
-    let mut args: SmallVec<[QueryValue; 4]> = SmallVec::with_capacity(arg_nodes.len());
+    let mut args: SmallVec<QueryValue, 4> = SmallVec::with_capacity(arg_nodes.len());
     for arg in arg_nodes {
         let mut value = QueryValue::default();
         arg.resolve(&mut value, dependencies);

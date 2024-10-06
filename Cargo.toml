@@ -29,7 +29,8 @@ chrono-tz = "0.10"
 cfg-if = "1.0.0"
 dynamic-lru-cache = "0.2"
 enquote = "1.1"
-futures = "0.3"
+# peg this to 0.3.30 until all crate dependents are update, since 0.3.31 introduces a breaking change
+futures = "0.3.29"
 get-size = { version = "^0.1", features = ["derive"] }
 gxhash = "3.4"
 integer-encoding = "4.0"
@@ -48,13 +49,12 @@ serde_derive = "1"
 serde_regex="1.1"
 serde_with = "3"
 scopeguard = "1.2.0"
-smallvec = { version = "1.13.2", features = ["union", "const_generics"] }
+smallvec = { version = "2.0.0-alpha.7", features = ["specialization", "std"] }
 snafu = "0.8"
 snafu-derive = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = { version = "0.26" }
 test-case = "3"
-tinyvec = { version = "1.8", features = ["alloc", "rustc_1_61"] }
 tracing = "0.1"
 phf = { version = "0.11", features = ["macros"] }
 thiserror = "1"
