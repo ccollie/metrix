@@ -20,7 +20,7 @@ resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace.dependencies]
-agnostic-lite = {  version = "0.3", default-features = false, features = ["time"] }
+agnostic-lite = {  version = "0.3.16", default-features = false, features = ["time"] }
 ahash = { version = "0.8", features = ["std", "serde"] }
 byte-pool = "0.2"
 chili = "0.1"
@@ -30,7 +30,7 @@ cfg-if = "1.0.0"
 dynamic-lru-cache = "0.2"
 enquote = "1.1"
 # peg this to 0.3.30 until all crate dependents are update, since 0.3.31 introduces a breaking change
-futures = "0.3.29"
+futures = "0.3.31"
 get-size = { version = "^0.1", features = ["derive"] }
 gxhash = "3.4"
 integer-encoding = "4.0"
