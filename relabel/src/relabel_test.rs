@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
     use metricsql_common::prelude::Label;
     use crate::relabel::{fill_label_references};
     use crate::relabel::{labels_to_string, sanitize_metric_name, DebugStep, ParsedRelabelConfig};
@@ -450,40 +451,45 @@ source_labels: ["xxx", "bar"]
 
     #[test]
     fn keep_if_equal_hit() {
-        check_apply(r#"
-- action: keep_if_equal
-source_labels: ["xxx", "bar"]
-"#, r#"{xxx="yyy",bar="yyy"}"#, true, r#"{bar="yyy",xxx="yyy"}"#);
+        let cfg = RelabelConfig {
+            action: RelabelAction::KeepIfEqual,
+            source_labels: vec!["xxx".to_string(), "bar".to_string()],
+            ..Default::default()
+        };
+        check(cfg, r#"{xxx="yyy",bar="yyy"}"#, true, r#"{bar="yyy",xxx="yyy"}"#);
     }
 
     #[test]
     fn drop_if_equal_miss() {
-        check_apply(r#"
-- action: drop_if_equal
-source_labels: ["foo", "bar"]
-"#, "{}", true, "{}");
+        let cfg = RelabelConfig {
+            action: RelabelAction::DropIfEqual,
+            source_labels: vec!["foo".to_string(), "bar".to_string()],
+            ..Default::default()
+        };
+        check(cfg.clone(), "{}", true, "{}");
 
-        check_apply(r#"
-- action: drop_if_equal
-source_labels: ["xxx", "bar"]
-"#, r#"{xxx="yyy"}"#, true, r#"{xxx="yyy"}"#);
+        check(cfg, r#"{xxx="yyy"}"#, true, r#"{xxx="yyy"}"#);
     }
 
     #[test]
     fn drop_if_equal_hit() {
-        check_apply(r#"
-- action: drop_if_equal
-source_labels: [xxx, bar]
-"#, r#"{xxx="yyy",bar="yyy"}"#, true, "{}")
+        let cfg = RelabelConfig {
+            action: RelabelAction::DropIfEqual,
+            source_labels: vec!["xxx".to_string(), "bar".to_string()],
+            ..Default::default()
+        };
+        check(cfg, r#"{xxx="yyy",bar="yyy"}"#, true, "{}")
     }
 
     #[test]
     fn keepequal_hit() {
-        check_apply(r#"
-- action: keepequal
-source_labels: [foo]
-target_label: bar
-"#, r#"{foo="a",bar="a"}"#, true, r#"{bar="a",foo="a"}"#)
+        let config = RelabelConfig {
+            action: RelabelAction::KeepEqual,
+            source_labels: vec!["foo".to_string()],
+            target_label: "bar".to_string(),
+            ..Default::default()
+        };
+        check(config, r#"{foo="a",bar="a"}"#, true, r#"{bar="a",foo="a"}"#)
     }
 
     #[test]
@@ -553,20 +559,24 @@ if: ['foobar', '{foo="yyy"}', '{a="b"}']
 
     #[test]
     fn keep_hit() {
-        check_apply(r#"
-- action: keep
-source_labels: [foo]
-regex: "yyy"
-"#, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::Keep,
+            source_labels: vec!["foo".to_string()],
+            regex: Some("yyy".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
     }
 
     #[test]
     fn keep_hit_regexp() {
-        check_apply(r#"
-- action: keep
-source_labels: ["foo"]
-regex: ".+"
-"#, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::Keep,
+            source_labels: vec!["foo".to_string()],
+            regex: Some(".+".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
     }
 
     #[test]
@@ -581,17 +591,22 @@ regex:
 
     #[test]
     fn keep_metrics_if_miss() {
-        check_apply(r#"
-- action: keep_metrics
-if: 'bar'
-"#, "foo", true, "{}")
+        let cfg = RelabelConfig {
+            action: RelabelAction::KeepMetrics,
+            if_expr: Some("bar".to_string()),
+            ..Default::default()
+        };
+        check(cfg, "foo", true, "{}")
     }
 
+    #[test]
     fn keep_metrics_if_hit() {
-        check_apply(r#"
-- action: keep_metrics
-if: 'foo'
-"#, "foo", true, "foo")
+        let cfg = RelabelConfig {
+            action: RelabelAction::KeepMetrics,
+            if_expr: Some("foo".to_string()),
+            ..Default::default()
+        };
+        check(cfg, "foo", true, "foo")
     }
 
     #[test]
@@ -606,24 +621,24 @@ regex:
 
     #[test]
     fn drop_miss() {
-        check_apply(r#"
-- action: drop
-source_labels: [foo]
-regex: ".+"
-"#, "{}", false, "{}");
-        check_apply(r#"
-- action: drop
-source_labels: [foo]
-regex: ".+"
-"#, r#"{xxx="yyy"}"#, true, r#"{xxx="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::Drop,
+            source_labels: vec!["foo".to_string()],
+            regex: Some(".+".to_string()),
+            ..Default::default()
+        };
+        check(cfg.clone(), "{}", false, "{}");
+        check(cfg, r#"{xxx="yyy"}"#, true, r#"{xxx="yyy"}"#)
     }
 
     #[test]
     fn drop_if_miss() {
-        check_apply(r#"
-- action: drop
-if: '{foo="bar"}'
-"#, r#"{foo="yyy"}"#, true, r#"{foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::Drop,
+            if_expr: Some(r#"{foo="bar"}"#.to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, true, r#"{foo="yyy"}"#)
     }
 
     #[test]
@@ -668,19 +683,24 @@ regex:
 "#, "xxx", true, "xxx")
 }
 
-fn drop_metrics_if_miss() {
-check_apply(r#"
-- action: drop_metrics
-if: bar
-", "foo", true, "foo")
+    #[test]
+    fn drop_metrics_if_miss() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::DropMetrics,
+            if_expr: Some("bar".to_string()),
+            ..Default::default()
+        };
+        check(cfg, "foo", true, "foo")
     }
 
     #[test]
     fn drop_metrics_if_hit() {
-        check_apply(r#"
-- action: drop_metrics
-if: foo
-"#, "foo", true, "{}")
+        let cfg = RelabelConfig {
+            action: RelabelAction::DropMetrics,
+            if_expr: Some("foo".to_string()),
+            ..Default::default()
+        };
+        check(cfg, "foo", true, "{}")
     }
 
     #[test]
@@ -695,80 +715,99 @@ regex:
 
     #[test]
     fn hashmod_miss() {
-        check_apply(r#"
-- action: hashmod
-source_labels: [foo]
-target_label: aaa
-modulus: 123
-"#, r#"{xxx="yyy"}"#, false, r#"{aaa="81",xxx="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::HashMod,
+            source_labels: vec!["foo".to_string()],
+            target_label: "aaa".to_string(),
+            modulus: 123,
+            ..Default::default()
+        };
+        check(cfg, r#"{xxx="yyy"}"#, false, r#"{aaa="81",xxx="yyy"}"#)
     }
 
     #[test]
     fn hashmod_if_miss() {
-        check_apply(r#"
-- action: hashmod
-if: '{foo="bar"}'
-source_labels: [foo]
-target_label: aaa
-modulus: 123
-"#, r#"{foo="yyy"}"#, true, r#"{foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::HashMod,
+            if_expr: Some(r#"{foo="bar"}"#.to_string()),
+            source_labels: vec!["foo".to_string()],
+            target_label: "aaa".to_string(),
+            modulus: 123,
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, true, r#"{foo="yyy"}"#)
     }
 
     #[test]
     fn hashmod_if_hit() {
-        check_apply(r#"
-- action: hashmod
-if: '{foo="yyy"}'
-source_labels: [foo]
-target_label: aaa
-modulus: 123
-"#, r#"{foo="yyy"}"#, true, r#"{aaa="73",foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::HashMod,
+            source_labels: vec!["foo".to_string()],
+            target_label: "aaa".to_string(),
+            if_expr: Some(r#"{foo="yyy"}"#.to_string()),
+            modulus: 123,
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, true, r#"{aaa="73",foo="yyy"}"#)
     }
 
+    #[test]
     fn hashmod_hit() {
-        check_apply(r#"
-- action: hashmod
-source_labels: [foo]
-target_label: aaa
-modulus: 123
-"#, r#"{foo="yyy"}"#, true, r#"{aaa="73",foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::HashMod,
+            source_labels: vec!["foo".to_string()],
+            target_label: "aaa".to_string(),
+            modulus: 123,
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, true, r#"{aaa="73",foo="yyy"}"#)
     }
 
     #[test]
     fn labelmap_copy_label_if_miss() {
-        check_apply(r#"
-- action: labelmap
-if: '{foo="yyy",foobar="aab"}'
-regex: "foo"
-replacement: "bar"
-"#, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{foo="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMap,
+            if_expr: Some(r#"{foo="yyy",foobar="aab"}"#.to_string()),
+            regex: Some("foo".to_string()),
+            replacement: "bar".to_string(),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{foo="yyy",foobar="aaa"}"#)
     }
 
     #[test]
     fn labelmap_copy_label_if_hit() {
-        check_apply(r#"
-- action: labelmap
-if: '{foo="yyy",foobar="aaa"}'
-regex: "foo"
-replacement: "bar"
-"#, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{bar="yyy",foo="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMap,
+            if_expr: Some(r#"{foo="yyy",foobar="aaa"}"#.to_string()),
+            regex: Some("foo".to_string()),
+            replacement: "bar".to_string(),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{bar="yyy",foo="yyy",foobar="aaa"}"#)
     }
 
     #[test]
     fn labelmap_copy_label() {
-        check_apply(r#"
-- action: labelmap
-regex: "foo"
-replacement: "bar"
-"#, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{bar="yyy",foo="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMap,
+            regex: Some("foo".to_string()),
+            replacement: "bar".to_string(),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{bar="yyy",foo="yyy",foobar="aaa"}"#)
     }
 
     #[test]
     fn labelmap_remove_prefix_dot_star() {
-        check_apply(r#"
-- action: labelmap
-regex: "foo(.*)"
-"#, r#"{xoo="yyy",foobar="aaa"}"#, true, r#"{bar="aaa",foobar="aaa",xoo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMap,
+            regex: Some("foo(.*)".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{xoo="yyy",foobar="aaa"}"#, true, r#"{bar="aaa",foobar="aaa",xoo="yyy"}"#)
     }
 
     #[test]
@@ -792,74 +831,90 @@ regex: "foo(.*)"
         check(cfg, r#"{foo="yyy",foobar="aaa"}"#, true, r#"{bar-x="aaa",foo="yyy",foobar="aaa"}"#)
     }
 
+    #[test]
     fn labelmap_all_if_miss() {
-        check_apply(r#"
-- action: labelmap_all
-if: foobar
-regex: "\\."
-replacement: "-"
-"#, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo.bar.baz="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMapAll,
+            if_expr: Some("foobar".to_string()),
+            regex: Some("\\.".to_string()),
+            replacement: "_".to_string(),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo.bar.baz="yyy",foobar="aaa"}"#)
     }
 
+    #[test]
     fn labelmap_all_if_hit() {
-        check_apply(r#"
-- action: labelmap_all
-if: '{foo.bar.baz="yyy"}'
-regex: "\\."
-replacement: "-"
-"#, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo-bar-baz="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMapAll,
+            if_expr: Some(r#"{foo.bar.baz="yyy"}"#.to_string()),
+            regex: Some("\\.".to_string()),
+            replacement: "_".to_string(),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo-bar-baz="yyy",foobar="aaa"}"#)
     }
 
     #[test]
     fn labelmap_all() {
-        check_apply(r#"
-- action: labelmap_all
-regex: "\\."
-replacement: "-"
-"#, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo-bar-baz="yyy",foobar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMapAll,
+            regex: Some("\\.".to_string()),
+            replacement: "_".to_string(),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{foo.bar.baz="yyy",foobar="aaa"}"#, true, r#"{foo-bar-baz="yyy",foobar="aaa"}"#)
     }
 
     #[test]
     fn labelmap_all_regexp() {
-        check_apply(r#"
-- action: labelmap_all
-regex: "ba(.)"
-replacement: "${1}ss"
-"#, r#"{foo.bar.baz="yyy",foozar="aaa"}"#, true, r#"{foo.rss.zss="yyy",foozar="aaa"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelMapAll,
+            regex: Some("ba(.)".to_string()),
+            replacement: "${1}ss".to_string(),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{foo.bar.baz="yyy",foozar="aaa"}"#, true, r#"{foo.rss.zss="yyy",foozar="aaa"}"#)
     }
 
     #[test]
     fn label_drop() {
-        check_apply(r#"
-- action: labeldrop
-regex: dropme
-"#, r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
-// if_miss
-        check_apply(r#"
-- action: labeldrop
-if: foo
-regex: dropme
-"#, r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{dropme="aaa",foo="bar",xxx="yyy"}"#);
-// if-hit
-        check_apply(r#"
-- action: labeldrop
-if: '{xxx="yyy"}'
-regex: dropme
-"#, r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
-        check_apply(r#"
-- action: labeldrop
-regex: dropme
-"#, r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
-// regex in single quotes
-        check_apply(r#"
-- action: labeldrop
-regex: 'dropme'
-"#, r#"{xxx="yyy",dropme="aaa"}"#, false, r#"{xxx="yyy"}"#);
-// regex in double quotes
-        check_apply(r#"
-- action: labeldrop
-regex: "dropme"
-"#, r#"{xxx="yyy",dropme="aaa"}"#, false, r#"{xxx="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            regex: Some("dropme".to_string()),
+            ..Default::default()
+        };
+        check(cfg.clone(), r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
+
+        check(cfg.clone(), r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
+        // regex in single quotes
+        check(cfg.clone(), r#"{xxx="yyy",dropme="aaa"}"#, false, r#"{xxx="yyy"}"#);
+        // regex in double quotes
+        check(cfg, r#"{xxx="yyy",dropme="aaa"}"#, false, r#"{xxx="yyy"}"#)
+    }
+
+    #[test]
+    fn if_hit() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            if_expr: Some("foo".to_string()),
+            regex: Some("dropme".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{dropme="aaa",foo="bar",xxx="yyy"}"#);
+    }
+
+    #[test]
+    fn if_miss() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            if_expr: Some(r#"{xxx="yyy"}"#.to_string()),
+            regex: Some("dropme".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{xxx="yyy",dropme="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
     }
 
     #[test]
@@ -912,23 +967,25 @@ regex: keepme
 
     #[test]
     fn labelkeep_regexp() {
-        check_apply(r#"
-- action: labelkeep
-regex: "keepme.*"
-"#, r#"{keepme="aaa"}"#, true, r#"{keepme="aaa"}"#);
-        check_apply(r#"
-- action: labelkeep
-regex: "keepme.*"
-"#, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{keepme="aaa",keepme-aaa="234"}"#);
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelKeep,
+            regex: Some("keepme.*".to_string()),
+            ..Default::default()
+        };
+
+        check(cfg.clone(), r#"{keepme="aaa"}"#, true, r#"{keepme="aaa"}"#);
+        check(cfg, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{keepme="aaa",keepme-aaa="234"}"#);
     }
 
     #[test]
     fn upper_lower_case() {
-        check_apply(r#"
-- action: uppercase
-source_labels: ["foo"]
-target_label: foo
-"#, r#"{foo="bar"}"#, true, r#"{foo="BAR"}"#);
+        let config1 = RelabelConfig {
+            action: RelabelAction::Uppercase,
+            source_labels: vec!["foo".to_string()],
+            target_label: "foo".to_string(),
+            ..Default::default()
+        };
+        check(config1, r#"{foo="bar"}"#, true, r#"{foo="BAR"}"#);
         check_apply(r#"
 - action: lowercase
 source_labels: ["foo", "bar"]
@@ -948,24 +1005,30 @@ target_label: baz
 
     #[test]
     fn graphite_match() {
-        check_apply(r#"
-- action: graphite
-match: foo.*.baz
-labels:
-__name__: aaa
-job: ${1}-zz
-"#, r#"foo.bar.baz"#, true, r#"aaa{job="bar-zz"}"#);
+        let cfg = RelabelConfig {
+            action: RelabelAction::Graphite,
+            r#match: "foo.*.baz".to_string(),
+            labels: HashMap::from([
+                ("name".to_string(), "aaa".to_string()),
+                ("job".to_string(), "${1}-zz".to_string())
+            ]),
+            ..Default::default()
+        };
+        check(cfg, r#"foo.bar.baz"#, true, r#"aaa{job="bar-zz"}"#);
     }
 
     #[test]
     fn graphite_mismatch() {
-        check_apply(r#"
-- action: graphite
-match: foo.*.baz
-labels:
-__name__: aaa
-job: ${1}-zz
-"#, r#"foo.bar.bazz"#, true, r#"foo.bar.bazz"#);
+        let config = RelabelConfig {
+            action: RelabelAction::Graphite,
+            r#match: "foo.*.baz".to_string(),
+            labels: HashMap::from([
+                ("name".to_string(), "aaa".to_string()),
+                ("job".to_string(), "${1}-zz".to_string())
+            ]),
+            ..Default::default()
+        };
+        check(config, r#"foo.bar.bazz"#, true, r#"foo.bar.bazz"#);
     }
 
     #[test]
