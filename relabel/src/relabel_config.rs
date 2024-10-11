@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 use std::str::FromStr;
+use bon::Builder;
 use crate::relabel_error::RelabelResult;
 
 pub const METRIC_NAME_LABEL: &str = "__name__";
@@ -101,10 +102,10 @@ impl FromStr for RelabelAction {
     }
 }
 
-/// RelabelConfig represents relabel config.
+/// `RelabelConfig` represents relabel config.
 ///
 /// See https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Builder)]
 pub struct RelabelConfig {
     pub if_expr: Option<String>,
     pub action: RelabelAction,
@@ -113,6 +114,7 @@ pub struct RelabelConfig {
     pub target_label: String,
     pub regex: Option<String>,
     pub modulus: u64,
+    #[builder(default = "$1".to_string())]
     pub replacement: String,
 
     /// match is used together with Labels for `action: graphite`. For example:

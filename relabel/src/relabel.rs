@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 use std::sync::{LazyLock, OnceLock};
+use bon::Builder;
 use xxhash_rust::xxh3::xxh3_64;
 use metricsql_common::regex_util::PromRegex;
 use metricsql_parser::label::Label;
@@ -42,7 +43,7 @@ pub struct DebugStep {
 /// ParsedRelabelConfig contains parsed `relabel_config`.
 ///
 /// See https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct ParsedRelabelConfig {
     /// rule_original contains the original relabeling rule for the given ParsedRelabelConfig.
     pub rule_original: String,
@@ -484,13 +485,12 @@ fn handle_replace(prc: &ParsedRelabelConfig, labels: &mut Vec<Label>, labels_off
     }
 }
 
-/// labels_to_string returns Prometheus string representation for the given labels.
+/// `labels_to_string` returns Prometheus string representation for the given labels.
 ///
 /// Labels in the returned string are sorted by name,
 /// while the __name__ label is put in front of {} labels.
 pub fn labels_to_string(labels: &[Label]) -> String {
     let mut labels_copy = Vec::with_capacity(labels.len());
-    labels_copy.sort();
     let mut mname = "";
     let mut capacity = 0;
     for label in labels.iter() {
@@ -505,7 +505,12 @@ pub fn labels_to_string(labels: &[Label]) -> String {
     if !mname.is_empty() && labels_copy.is_empty() {
         return mname.to_string();
     }
+    labels_copy.sort();
+
     let mut b = String::with_capacity(capacity);
+    if !mname.is_empty() {
+        b.push_str(mname);
+    }
     b.push('{');
     for (i, label) in labels_copy.iter().enumerate() {
         b.push_str(&label.name);
@@ -572,14 +577,14 @@ fn label_name_sanitizer() -> &'static FastStringTransformer {
     })
 }
 
-/// sanitize_label_name replaces unsupported by Prometheus chars in label names with _.
+/// `sanitize_label_name` replaces unsupported by Prometheus chars in label names with _.
 ///
 /// See https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
 pub fn sanitize_label_name(name: &str) -> String {
     label_name_sanitizer().transform(name)
 }
 
-/// sanitize_metric_name replaces unsupported by Prometheus chars in metric names with _.
+/// `sanitize_metric_name` replaces unsupported by Prometheus chars in metric names with _.
 ///
 // See https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
 pub fn sanitize_metric_name(value: &str) -> String {

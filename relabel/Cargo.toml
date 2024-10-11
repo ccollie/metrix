@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 ahash.workspace = true
+bon = "2.3"
 dynamic-lru-cache.workspace = true
 enquote.workspace = true
 regex.workspace = true
