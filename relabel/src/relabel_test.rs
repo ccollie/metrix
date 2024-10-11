@@ -551,10 +551,12 @@ regex: ".+"
 
     #[test]
     fn keep_if_hit() {
-        check_apply(r#"
-- action: keep
-if: ['foobar', '{foo="yyy"}', '{a="b"}']
-"#, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::Keep,
+            if_expr: Some(r#"['foobar', '{foo="yyy"}', '{a="b"}']"#.to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{foo="yyy"}"#, false, r#"{foo="yyy"}"#)
     }
 
     #[test]
