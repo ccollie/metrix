@@ -527,16 +527,16 @@ source_labels: ["xxx", "bar"]
 
     #[test]
     fn keep_miss() {
-        check_apply(r#"
-- action: keep
-source_labels: [foo]
-regex: ".+"
-"#, "{}", true, "{}");
-        check_apply(r#"
-- action: keep
-source_labels: [foo]
-regex: ".+"
-"#, r#"{xxx="yyy"}"#, true, "{}")
+        let cfg = RelabelConfig {
+            action: RelabelAction::Keep,
+            source_labels: vec!["foo".to_string()],
+            regex: Some(".+".to_string()),
+            ..Default::default()
+        };
+
+        check(cfg.clone(), "{}", true, "{}");
+
+        check(cfg, r#"{xxx="yyy"}"#, true, "{}")
     }
 
     #[test]
@@ -921,50 +921,78 @@ regex:
 
     #[test]
     fn labeldrop_prefix() {
-        check_apply(r#"
-- action: labeldrop
-regex: "dropme.*"
-"#, r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
-        check_apply(r#"
-- action: labeldrop
-regex: "dropme(.+)"
-"#, r#"{xxx="yyy",dropme-please="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#)
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            regex: Some("dropme.*".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
+
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            regex: Some("dropme(.+)".to_string()),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{xxx="yyy",dropme-please="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#)
     }
 
     #[test]
     fn labeldrop_regexp() {
-        check_apply(r#"
-- action: labeldrop
-regex: ".*dropme.*"
-"#, r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
-        check_apply(r#"
-- action: labeldrop
-regex: ".*dropme.*"
-"#, r#"{xxx="yyy",dropme-please="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            regex: Some(".*dropme.*".to_string()),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{aaa="bbb"}"#, true, r#"{aaa="bbb"}"#);
+
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelDrop,
+            regex: Some(".*dropme.*".to_string()),
+            ..Default::default()
+        };
+
+        check(cfg, r#"{xxx="yyy",dropme-please="aaa",foo="bar"}"#, false, r#"{foo="bar",xxx="yyy"}"#);
     }
 
     #[test]
     fn labelkeep() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelKeep,
+            regex: Some("keepme".to_string()),
+            ..Default::default()
+        };
+        check(cfg, r#"{keepme="aaa"}"#, true, r#"{keepme="aaa"}"#);
+    }
+
+    #[test]
+    fn labelkeep_hit() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelKeep,
+            if_expr: Some(r#"{aaaa="awef"}"#.to_string()),
+            regex: Some("keepme".to_string()),
+            ..Default::default()
+        };
+        // if-hit
+        check(cfg, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{keepme="aaa"}"#);
         check_apply(r#"
 - action: labelkeep
-regex: "keepme"
-"#, r#"{keepme="aaa"}"#, true, r#"{keepme="aaa"}"#);
-// if_miss
-        check_apply(r#"
-- action: labelkeep
-if: '{aaaa="awefx"}'
-regex: keepme
-"#, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{aaaa="awef",keepme="aaa",keepme-aaa="234"}"#);
-// if-hit
-        check_apply(r#"
-- action: labelkeep
-if: '{aaaa="awef"}'
 regex: keepme
 "#, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{keepme="aaa"}"#);
-        check_apply(r#"
-- action: labelkeep
-regex: keepme
-"#, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{keepme="aaa"}"#);
+
+    }
+
+    #[test]
+    fn labelkeep_miss() {
+        let cfg = RelabelConfig {
+            action: RelabelAction::LabelKeep,
+            if_expr: Some(r#"{aaaa="awefx"}"#.to_string()),
+            regex: Some("keepme".to_string()),
+            ..Default::default()
+        };
+        // if_miss
+        check(cfg, r#"{keepme="aaa",aaaa="awef",keepme-aaa="234"}"#, false, r#"{aaaa="awef",keepme="aaa",keepme-aaa="234"}"#);
     }
 
     #[test]

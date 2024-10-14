@@ -13,7 +13,6 @@ pub struct LabelFilter {
     pub op: LabelFilterOp,
     // todo: enum
     pub value: String,
-
     // re contains compiled regexp for `=~` and `!~` op.
     pub re: Option<StringMatchHandler>,
 }
