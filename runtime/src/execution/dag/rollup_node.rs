@@ -180,7 +180,7 @@ impl RollupNode {
         let start: i64;
         {
             let (cached, _start) = ctx.rollup_result_cache.get(ec, &self.expr, window)?;
-            tss_cached = cached.unwrap();
+            tss_cached = cached.unwrap_or_default();
             start = _start;
         }
 
