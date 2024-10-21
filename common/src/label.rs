@@ -34,10 +34,19 @@ impl Label {
 
 impl PartialOrd for Label {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.name == other.name {
-            return Some(self.value.cmp(&other.value));
+        let cmp = self.cmp(other);
+        Some(cmp)
+    }
+}
+
+impl Ord for Label {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let cmp = self.name.cmp(&other.name);
+        if cmp!= Ordering::Equal {
+            cmp
+        } else {
+            self.value.cmp(&other.value)
         }
-        Some(self.name.cmp(&other.name))
     }
 }
 

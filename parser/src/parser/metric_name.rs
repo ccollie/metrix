@@ -34,6 +34,7 @@ fn parse_label_filters(lex: &mut Lexer<Token>, labels: &mut Vec<Label>) -> Parse
     use Token::*;
 
     let mut was_ident = false;
+    let save_count = labels.len();
     loop {
         let (tok, name) = get_next(lex)?;
         match tok {
@@ -54,7 +55,10 @@ fn parse_label_filters(lex: &mut Lexer<Token>, labels: &mut Vec<Label>) -> Parse
             },
             RightBrace => {
                 if !was_ident {
-                    return Err(unexpected("metric name", name, "identifier", None));
+                    let count = labels.len() - save_count;
+                    if count > 0 {
+                        return Err(unexpected("metric name", name, "identifier", None));
+                    }
                 }
                 break
             },
@@ -103,6 +107,7 @@ mod tests {
     #[test]
     fn test_parse_metric_name() {
         let cases = vec![
+            ("foo{}", vec![Label::new("__name__".to_string(), "foo".to_string())]),
             ("foo", vec![Label::new("__name__".to_string(), "foo".to_string())]),
             (
                 "foo{bar=\"baz\"}",

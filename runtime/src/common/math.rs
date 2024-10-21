@@ -254,6 +254,11 @@ pub fn round_to_decimal_digits(f: f64, digits: i16) -> f64 {
         // Do not modify stale nan mark value.
         return f;
     }
+
+    if digits == 0 {
+        return f.round();
+    }
+
     if digits <= -100 || digits >= 100 {
         return f;
     }

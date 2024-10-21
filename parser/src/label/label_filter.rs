@@ -71,6 +71,21 @@ impl Hash for MatchOp {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for MatchOp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            MatchOp::Equal => serializer.serialize_str("="),
+            MatchOp::NotEqual => serializer.serialize_str("=~"),
+            MatchOp::Re(_reg) => serializer.serialize_str("=~"),
+            MatchOp::NotRe(_reg) => serializer.serialize_str("!~"),
+        }
+    }
+}
+
 #[derive(
     Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, Serialize, Deserialize,
 )]
@@ -129,6 +144,7 @@ impl fmt::Display for LabelFilterOp {
 /// LabelFilter represents MetricsQL label filter like `foo="bar"`.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LabelFilter {
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub op: LabelFilterOp,
 
     /// label contains label name for the filter.
@@ -322,6 +338,7 @@ pub type Matcher = LabelFilter;
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Matchers {
     pub matchers: Vec<LabelFilter>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "<[_]>::is_empty"))]
     pub or_matchers: Vec<Vec<LabelFilter>>,
 }
 
