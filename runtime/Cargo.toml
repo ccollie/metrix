@@ -46,6 +46,7 @@ serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
 topologic = "1.1"
+smol = {  version = "2.0.1", optional = true }
 tokio = { version = "1", optional = true, features = ["macros"] }
 scopeguard.workspace = true
 tracing.workspace = true
@@ -60,9 +61,4 @@ lazy_static = "1.5"
 default = ["tokio"]
 tokio = ["dep:tokio", "agnostic-lite/tokio"]
 async-std = ["dep:async-std", "agnostic-lite/async-std"]
-
-[target.'cfg(target_arch = "x86_64")']
-rustflags = ["-C", "target-feature=+bmi1,+bmi2,+avx2"]
-
-[profile.release]
-target-cpu = "native"
+smol = ["dep:smol", "agnostic-lite/smol"]

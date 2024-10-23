@@ -4,7 +4,7 @@ use cfg_if::cfg_if;
 use snafu::Snafu;
 use std::any::Any;
 use std::future::Future;
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 cfg_if! {
@@ -61,13 +61,10 @@ impl ErrorExt for Error {
     }
 }
 
-pub fn get_runtime() -> &'static AsyncRuntime {
-    static RUNTIME: OnceLock<AsyncRuntime> = OnceLock::new();
-    RUNTIME.get_or_init(AsyncRuntime::new)
-}
+pub static ASYNC_RUNTIME: LazyLock<AsyncRuntime> = LazyLock::new(AsyncRuntime::new);
 
-pub fn runtime() -> &'static impl RuntimeLite {
-    get_runtime()
+pub fn get_runtime() -> &'static AsyncRuntime {
+    &ASYNC_RUNTIME
 }
 
 pub fn block_on<F: Future>(future: F) -> F::Output {

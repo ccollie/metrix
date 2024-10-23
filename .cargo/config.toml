@@ -21,3 +21,11 @@ rustflags = ["-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
 
+[build]
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+

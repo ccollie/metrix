@@ -63,4 +63,3 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [profile.release]
 lto = "fat"
-target-cpu = "native"
