@@ -1,28 +1,19 @@
-#[cfg(target_arch = "aarch64")]
-pub use gxhash::*;
-#[cfg(all(target_feature = "avx2", target_arch = "x86_64"))]
-pub use gxhash::*;
+use cfg_if::cfg_if;
 
-#[cfg(not(any(
-    all(target_feature = "avx2", target_arch = "x86_64"),
-    target_arch = "aarch64"
-)))]
-pub use fast_hash_fallback::*;
-pub use no_hash::*;
+cfg_if!(
+    if #[cfg(all(feature = "gxhash", target_feature="aes"))] {
+        mod gx_hash;
+        pub use gx_hash::*;
+    } else {
+        mod fast_hash_fallback;
+        pub use fast_hash_fallback::*;
+    }
+);
 
-#[cfg(target_arch = "aarch64")]
-mod gxhash;
-
-#[cfg(all(target_feature = "avx2", target_arch = "x86_64"))]
-mod gxhash;
-
-#[cfg(not(any(
-    all(target_feature = "avx2", target_arch = "x86_64"),
-    target_arch = "aarch64"
-)))]
-mod fast_hash_fallback;
 
 mod no_hash;
 mod signature;
+//mod fast_hash_fallback;
 
+pub use no_hash::*;
 pub use signature::*;

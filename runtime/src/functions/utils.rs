@@ -47,11 +47,6 @@ pub fn skip_trailing_nans(values: &[f64]) -> &[f64] {
     &values[0..i]
 }
 
-#[inline]
-pub fn get_last_non_nan_index(values: &[f64]) -> usize {
-    values.iter().rposition(|&v| !v.is_nan()).unwrap_or(0)
-}
-
 pub(crate) fn float_to_int_bounded(f: f64) -> i64 {
     (f as i64).clamp(i64::MIN, i64::MAX)
 }

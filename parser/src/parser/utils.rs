@@ -15,6 +15,15 @@ const fn is_ident_char(ch: char) -> bool {
     matches!(ch, 'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | ':' | '.')
 }
 
+pub fn is_valid_identifier(candidate: &str) -> bool {
+    // check if the first char is an identifier char
+    if candidate.is_empty() ||!is_first_ident_char(&candidate.chars().next().unwrap()) {
+        return false;
+    }
+    // check if the remaining chars are identifier chars
+    candidate.chars().all(is_ident_char)
+}
+
 pub fn escape_ident(s: &str) -> String {
     let mut dst = String::new();
     for (i, ch) in s.chars().enumerate() {

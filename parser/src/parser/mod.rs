@@ -38,6 +38,7 @@ mod parser_test;
 mod metric_name;
 
 pub use metric_name::parse_metric_name;
+pub use utils::{is_valid_identifier};
 
 pub fn parse(input: &str) -> ParseResult<Expr> {
     let mut parser = Parser::new(input)?;

@@ -88,6 +88,9 @@ fn op_mul(left: f64, right: f64) -> f64 {
 /// Todo: protect against div by zero
 #[inline]
 fn op_div(left: f64, right: f64) -> f64 {
+    if right == 0.0 {
+        return f64::NAN;
+    }
     left / right
 }
 
@@ -303,7 +306,7 @@ pub fn scalar_binary_operation(
             Add => lhs + rhs,
             Sub => lhs - rhs,
             Mul => lhs * rhs,
-            Div => lhs / rhs,
+            Div => op_div(lhs, rhs),
             Pow => lhs.powf(rhs),
             Mod => lhs % rhs,
             Atan2 => lhs.atan2(rhs),

@@ -5,6 +5,9 @@ extern crate lockfree_object_pool;
 extern crate rand;
 extern crate xxhash_rust;
 extern crate serde_regex;
+#[cfg(feature = "gxhash")]
+extern crate gxhash;
+
 pub mod async_runtime;
 pub mod atomic_counter;
 pub mod bytes_util;

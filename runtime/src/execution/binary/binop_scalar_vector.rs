@@ -4,7 +4,7 @@ use metricsql_parser::prelude::{get_scalar_binop_handler, Operator};
 use crate::RuntimeResult;
 use crate::types::{InstantVector, QueryValue};
 
-/// BinaryEvaluatorScalarVector
+/// Evaluates scalar op vector
 /// Ex:
 ///   2 * http_requests_total{}
 ///   42 - http_requests_total{method="GET"}

@@ -21,7 +21,7 @@ chrono-tz.workspace = true
 dynamic-lru-cache.workspace = true
 byte-pool = "0.2"
 futures.workspace = true
-gxhash.workspace = true
+gxhash = { version = "3.4", optional = true }
 get-size.workspace = true
 integer-encoding.workspace = true
 lockfree-object-pool = "0.1"
@@ -46,3 +46,4 @@ default = ["tokio"]
 tokio = ["agnostic-lite/tokio"]
 async-std = ["agnostic-lite/async-std"]
 smol = ["agnostic-lite/smol"]
+gxhash = ["dep:gxhash"]
