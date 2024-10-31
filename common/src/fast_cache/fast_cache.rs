@@ -1,4 +1,4 @@
-use gxhash::HashSetExt;
+use crate::hash::HashSetExt;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;

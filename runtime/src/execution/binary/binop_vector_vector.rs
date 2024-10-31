@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-
 use ahash::AHashMap;
 use metricsql_common::hash::Signature;
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};
@@ -313,8 +312,8 @@ fn group_join(
 
     let (join_tags, skip_tags) = if let Some(modifier) = bfa.modifier {
         let join = match &modifier.card {
-            VectorMatchCardinality::ManyToOne(labels)
-            | VectorMatchCardinality::OneToMany(labels) => labels,
+            VectorMatchCardinality::ManyToOne(labels) |
+            VectorMatchCardinality::OneToMany(labels) => labels,
             _ => &empty_labels,
         };
         let skip = if let Some(VectorMatchModifier::On(labels)) = &modifier.matching {

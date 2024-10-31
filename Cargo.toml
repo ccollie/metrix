@@ -31,7 +31,6 @@ enquote = "1.1"
 # peg this to 0.3.30 until all crate dependents are update, since 0.3.31 introduces a breaking change
 futures = "0.3.31"
 get-size = { version = "^0.1", features = ["derive"] }
-gxhash = "3.4"
 integer-encoding = "4.0"
 itertools = "0.13"
 num-traits = "0.2"

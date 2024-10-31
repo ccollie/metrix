@@ -229,6 +229,7 @@ impl Default for RollupConfig {
 }
 
 impl RollupConfig {
+    #[cfg(test)]
     pub(crate) fn ensure_timestamps(&mut self) -> RuntimeResult<()> {
         if self.timestamps.is_empty() {
             let timestamps =
