@@ -299,21 +299,24 @@ impl<T: Clone> From<&[T]> for UnitVec<T> {
 #[macro_export]
 macro_rules! unitvec {
     () => (
-        $crate::idx_vec::UnitVec::new()
+        crate::types::unit_vec::UnitVec::new()
     );
     ($elem:expr; $n:expr) => (
-        let mut new = $crate::idx_vec::UnitVec::new();
+        let mut new = crate::types::unit_vec::UnitVec::new();
+
         for _ in 0..$n {
             new.push($elem)
         }
         new
     );
     ($elem:expr) => (
-        {let mut new = $crate::idx_vec::UnitVec::new();
-        let v = $elem;
-        // SAFETY: first element always fits.
-        unsafe { new.push_unchecked(v) };
-        new}
+        {
+            let mut new = crate::types::unit_vec::UnitVec::new();
+            let v = $elem;
+            // SAFETY: first element always fits.
+            unsafe { new.push_unchecked(v) };
+            new
+        }
     );
     ($($x:expr),+ $(,)?) => (
             vec![$($x),+].into()
