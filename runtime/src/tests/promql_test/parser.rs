@@ -144,8 +144,8 @@ pub fn parse_eval(lines: &[String], mut i: usize) -> Result<(usize, TestCommand)
     let range_parts = PAT_EVAL_RANGE.captures(&lines[i]);
 
     if instant_parts.is_none() && range_parts.is_none() {
-        const msg: &str = "invalid evaluation command. Must be either 'eval[_fail|_warn|_ordered] instant [at <offset:duration>] <query>' or 'eval[_fail|_warn] range from <from> to <to> step <step> <query>'";
-        return Err(raise(i, msg.to_string()));
+        const MSG: &str = "invalid evaluation command. Must be either 'eval[_fail|_warn|_ordered] instant [at <offset:duration>] <query>' or 'eval[_fail|_warn] range from <from> to <to> step <step> <query>'";
+        return Err(raise(i, MSG.to_string()));
     }
 
     let is_instant = instant_parts.is_some();

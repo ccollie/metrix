@@ -1498,6 +1498,36 @@ mod tests {
         r.metric.set("foo", "1");
         test_query(q, vec![r]);
     }
+    
+    #[test]
+    fn limit_offset_sort_by_label() {
+        let q = r#"limit_offset(5, 0, sort_by_label_numeric_desc((
+                    label_set(3, "foo", "1:0:3"),
+                    label_set(4, "foo", "5:0:15"),
+                    label_set(1, "foo", "1:0:2"),
+                    label_set(5, "foo", "7:0:15"),
+                    label_set(7, "foo", "3:0:1"),
+                    label_set(6, "foo", "1:0:2"),
+                    label_set(8, "foo", "9:0:15")
+                ), "foo"))"#;
+        
+        let mut r1 = make_result(&[8.0, 8.0, 8.0, 8.0, 8.0, 8.0]);
+        r1.metric.set("foo", "9:0:15");
+        
+        let mut r2 = make_result(&[5.0, 5.0, 5.0, 5.0, 5.0, 5.0]);
+        r1.metric.set("foo", "7:0:15");
+        
+        let mut r3 = make_result(&[4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
+        r3.metric.set("foo", "5:0:15");
+        
+        let mut r4 = make_result(&[7.0, 7.0, 7.0, 7.0, 7.0, 7.0]);
+        r4.metric.set("foo", "3:0:1");
+        
+        let mut r5 = make_result(&[3.0, 3.0, 3.0, 3.0, 3.0, 3.0]);
+        r5.metric.set("foo", "1:0:3");
+        
+        test_query(q, vec![r1, r2, r3, r4, r5]);
+    }
 
     #[test]
     fn sum_label_graphite_group() {

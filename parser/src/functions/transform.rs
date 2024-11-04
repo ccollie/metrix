@@ -306,11 +306,13 @@ impl TransformFunction {
         use TransformFunction::*;
         matches!(
             &self,
-            Sort | SortDesc
-                | SortByLabel
-                | SortByLabelDesc
-                | SortByLabelNumeric
-                | SortByLabelNumericDesc
+            LimitOffset 
+            | Sort 
+            | SortDesc
+            | SortByLabel
+            | SortByLabelDesc
+            | SortByLabelNumeric
+            | SortByLabelNumericDesc
         )
     }
 
