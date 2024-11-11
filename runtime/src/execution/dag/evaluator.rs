@@ -50,7 +50,7 @@ impl Default for ExecResult {
 
 impl DAGEvaluator {
     pub(crate) fn new(nodes: Vec<Vec<Dependency>>, node_count: usize) -> DAGEvaluator {
-        // todo: tiny vec
+        // todo: SmallVec, chili
         // allocate scratch space for the results of the dependencies. We initialize the entire
         // vector with default values, and then we overwrite the values as we execute the
         // dependencies.

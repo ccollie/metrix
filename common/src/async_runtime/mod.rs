@@ -33,7 +33,6 @@ pub type Timeout<F> = <AsyncRuntime as RuntimeLite>::Timeout<F>;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type AsyncRuntimeResult<T> = std::result::Result<T, Error>;
 
-/// Default error implementation of table.
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
 pub enum Error {
