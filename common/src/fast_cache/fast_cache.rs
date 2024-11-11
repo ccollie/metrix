@@ -7,25 +7,15 @@ use crate::hash::{fast_hash64, FastHashSet, IntMap};
 use crate::pool::get_pooled_buffer;
 
 const U64_SIZE: usize = 8;
-
 const SIZEOF_USIZE: usize = size_of::<usize>();
-
 const METADATA_SIZE: usize = 8 /* sizeof u64 */ + SIZEOF_USIZE;
-
 const BUCKETS_COUNT: usize = 512;
-
 const BUCKETS_COUNT_SMALL: usize = 256;
-
 const CHUNK_SIZE: usize = 64 * 1024;
-
 const BUCKET_SIZE_BITS: usize = 40;
-
 const GEN_SIZE_BITS: usize = 64 - BUCKET_SIZE_BITS;
-
 const MAX_GEN: u64 = (1 << GEN_SIZE_BITS) - 1;
-
 const GEN_BIT_MASK: u64 = (1 << GEN_SIZE_BITS) - 1;
-
 const MAX_BUCKET_SIZE: usize = 1 << BUCKET_SIZE_BITS;
 
 /// MAX_SUB_VALUE_LEN is the maximum size of sub value chunk.

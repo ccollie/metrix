@@ -321,8 +321,8 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
     match exec(context, &mut ec, &params.query, true) {
         Err(err) => {
             let msg = format!(
-                "error executing query={} for (time={}, step={}): {:?}",
-                &params.query, start, step, err
+                "error executing query={} for (time={start}, step={step}): {:?}",
+                &params.query, err
             );
             Err(RuntimeError::General(msg))
         }
@@ -352,7 +352,7 @@ fn export_handler(ctx: &Context, cp: CommonParams) -> RuntimeResult<QueryResults
     ctx.search(sq, cp.deadline)
 }
 
-/// query_range processes a range vector request
+/// `query_range` processes a range vector request
 ///
 /// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 pub fn query_range(ctx: &Context, params: &QueryParams) -> RuntimeResult<Vec<QueryResult>> {

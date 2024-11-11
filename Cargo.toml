@@ -55,7 +55,7 @@ strum_macros = { version = "0.26" }
 test-case = "3"
 tracing = "0.1"
 phf = { version = "0.11", features = ["macros"] }
-thiserror = "1"
+thiserror = "2.0"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 

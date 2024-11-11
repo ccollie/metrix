@@ -476,7 +476,9 @@ pub fn is_rollup_aggregation_over_time(func: RollupFunction) -> bool {
         return true;
     }
 
-    matches!(func, |Delta| DeltaPrometheus
+    matches!(func, 
+        | Delta
+        | DeltaPrometheus
         | Deriv
         | DerivFast
         | IDelta

@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::ops::DerefMut;
 use crate::types::Timestamp;
 
-/// STALE_NAN_BITS is bit representation of Prometheus staleness mark (aka stale NaN).
+/// STALE_NAN_BITS is a bit representation of Prometheus staleness mark (aka stale NaN).
 /// This mark is put by Prometheus at the end of time series for improving staleness detection.
 /// See https://www.robustperception.io/staleness-and-promql
 /// StaleNaN is a special NaN value, which is used as Prometheus staleness mark.
@@ -104,7 +104,7 @@ pub(crate) fn stddev(values: &[f64]) -> f64 {
     std_var.sqrt()
 }
 
-/// quantiles calculates the given phis from originValues without modifying origin_values, appends
+/// quantiles calculates the given phis from origin_values without modifying origin_values, appends
 /// them to qs and returns the result.
 pub(crate) fn quantiles(qs: &mut [f64], phis: &[f64], origin_values: &[f64]) {
     if origin_values.len() <= 64 {
@@ -248,7 +248,7 @@ pub(crate) fn are_const_values(values: &[f64]) -> bool {
 
 /// rounds f to the given number of decimal digits after the point.
 ///
-/// See also RoundToSignificantFigures.
+/// See also round_to_decimal_digits.
 pub fn round_to_decimal_digits(f: f64, digits: i16) -> f64 {
     if is_stale_nan(f) {
         // Do not modify stale nan mark value.
