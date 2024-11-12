@@ -2,14 +2,14 @@ use serde::{Deserialize, Serialize};
 
 use metricsql_parser::ast::{BinModifier, BinaryExpr, Operator};
 
-use crate::execution::binary::eval_vector_scalar_binop;
+use crate::execution::binary::{eval_vector_scalar_binop, exec_vector_vector_binop};
 use crate::execution::{Context, EvalConfig};
 use crate::prelude::binary::should_reset_metric_group;
 use crate::prelude::eval_number;
 use crate::RuntimeResult;
 use crate::types::{InstantVector, QueryValue};
 
-use super::utils::{exec_vector_vector, resolve_vector};
+use super::utils::{resolve_vector};
 use super::ExecutableNode;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -50,7 +50,7 @@ impl ExecutableNode for VectorScalarBinaryNode {
             let right = eval_number(ec, self.right)?;
             // todo: can we not just execute vector-scalar binary op (for simple non-logical ops)
             // rather than allocating ?
-            return exec_vector_vector(ctx, left, right, self.op, &self.modifier);
+            return exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier);
         }
         let bool_modifier = if let Some(modifier) = &self.modifier {
             modifier.return_bool

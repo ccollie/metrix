@@ -5,12 +5,12 @@ use metricsql_parser::optimizer::{
 };
 use metricsql_parser::prelude::{BinModifier, Expr, Operator};
 
-use crate::execution::binary::get_common_label_filters;
+use crate::execution::binary::{exec_vector_vector_binop, get_common_label_filters};
 use crate::execution::{compile_expression, Context, EvalConfig};
 use crate::RuntimeResult;
 use crate::types::{InstantVector, QueryValue};
 
-use super::utils::{exec_vector_vector, resolve_vector};
+use super::utils::{resolve_vector};
 use super::ExecutableNode;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -52,7 +52,7 @@ impl ExecutableNode for VectorVectorBinaryNode {
     fn execute(&mut self, ctx: &Context, _ec: &EvalConfig) -> RuntimeResult<QueryValue> {
         let left = std::mem::take(&mut self.left);
         let right = std::mem::take(&mut self.right);
-        exec_vector_vector(ctx, left, right, self.op, &self.modifier)
+        exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier)
     }
 }
 
@@ -78,9 +78,9 @@ impl ExecutableNode for VectorVectorPushDownNode {
         let left = std::mem::take(&mut self.left);
         let right = self.fetch_right(ctx, ec)?;
         if self.is_swapped {
-            exec_vector_vector(ctx, right, left, self.op, &self.modifier)
+            exec_vector_vector_binop(ctx, right, left, self.op, &self.modifier)
         } else {
-            exec_vector_vector(ctx, left, right, self.op, &self.modifier)
+            exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier)
         }
     }
 }

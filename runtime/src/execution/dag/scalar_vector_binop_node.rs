@@ -2,12 +2,12 @@ use serde::{Deserialize, Serialize};
 
 use metricsql_parser::ast::{BinModifier, BinaryExpr, Operator};
 
-use crate::execution::binary::{eval_scalar_vector_binop, should_reset_metric_group};
+use crate::execution::binary::{eval_scalar_vector_binop, exec_vector_vector_binop, should_reset_metric_group};
 use crate::execution::{eval_number, Context, EvalConfig};
 use crate::RuntimeResult;
 use crate::types::{InstantVector, QueryValue};
 
-use super::utils::{exec_vector_vector, resolve_vector};
+use super::utils::{resolve_vector};
 use super::ExecutableNode;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ impl ExecutableNode for ScalarVectorBinaryNode {
             // convert scalar to vector and execute vector-vector binary op
             let right = std::mem::take(&mut self.right);
             let left = eval_number(ec, self.left)?;
-            return exec_vector_vector(ctx, left, right, self.op, &self.modifier);
+            return exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier);
         }
         let bool_modifier = if let Some(modifier) = &self.modifier {
             modifier.return_bool

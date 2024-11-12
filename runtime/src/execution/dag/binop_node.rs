@@ -2,12 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use metricsql_parser::prelude::{BinModifier, Operator};
 
-use crate::execution::binary::{
-    eval_scalar_vector_binop, eval_string_string_binop, eval_vector_scalar_binop,
-    scalar_binary_operation,
-};
+use crate::execution::binary::{eval_scalar_vector_binop, eval_string_string_binop, eval_vector_scalar_binop, exec_vector_vector_binop, scalar_binary_operation};
 use crate::execution::context::Context;
-use crate::execution::dag::utils::{exec_vector_vector, resolve_value};
+use crate::execution::dag::utils::{ resolve_value};
 use crate::execution::dag::ExecutableNode;
 use crate::execution::{eval_number, EvalConfig};
 use crate::{RuntimeError, RuntimeResult};
@@ -69,7 +66,7 @@ impl ExecutableNode for BinopNode {
             (InstantVector(ref mut left_vec), InstantVector(ref mut right_vec)) => {
                 let left = std::mem::take(left_vec);
                 let right = std::mem::take(right_vec);
-                exec_vector_vector(ctx, left, right, self.op, &self.modifier)
+                exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier)
             }
             (InstantVector(ref mut vector), Scalar(scalar)) => {
                 if self.op.is_logical_op() {
@@ -78,7 +75,7 @@ impl ExecutableNode for BinopNode {
                     if self.op != Operator::Unless {
                         let left = std::mem::take(vector);
                         let right = eval_number(ec, *scalar)?;
-                        return exec_vector_vector(ctx, left, right, self.op, &self.modifier);
+                        return exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier);
                     }
                 }
                 eval_vector_scalar_binop(
@@ -94,7 +91,7 @@ impl ExecutableNode for BinopNode {
                 if self.op.is_logical_op() {
                     let left = eval_number(ec, *scalar)?;
                     let right = std::mem::take(vector);
-                    return exec_vector_vector(ctx, left, right, self.op, &self.modifier);
+                    return exec_vector_vector_binop(ctx, left, right, self.op, &self.modifier);
                 };
                 eval_scalar_vector_binop(
                     *scalar,

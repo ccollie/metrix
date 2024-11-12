@@ -19,3 +19,7 @@ pub mod parser_cache;
 pub mod query;
 mod traits;
 mod utils;
+mod new_eval;
+mod aggregate;
+mod vectors;
+mod rollups;

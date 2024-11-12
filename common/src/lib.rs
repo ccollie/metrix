@@ -1,4 +1,3 @@
-#![feature(lazy_cell)]
 extern crate byte_pool;
 extern crate chrono_tz;
 extern crate core;

@@ -2,14 +2,16 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 
 use ahash::AHashMap;
+use tracing::{field, trace_span, Span};
 use metricsql_common::hash::Signature;
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};
 use metricsql_parser::binaryop::{
     get_scalar_binop_handler, get_scalar_comparison_handler, BinopFunc,
 };
 use metricsql_parser::prelude::{BinModifier, Labels};
-
-use crate::execution::utils::remove_empty_series;
+use crate::execution::Context;
+use crate::execution::utils::{remove_empty_series, series_len};
+use crate::prelude::QueryValue;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::{
     group_series_by_match_modifier,
@@ -19,7 +21,7 @@ use crate::types::{
     METRIC_NAME_LABEL
 };
 
-pub(crate) struct BinaryOpFuncArg<'a> {
+pub struct BinaryOpFuncArg<'a> {
     op: Operator,
     modifier: &'a Option<BinModifier>,
     left: InstantVector,
@@ -68,6 +70,33 @@ make_binary_func!(binary_op_pow, Operator::Pow);
 fn binary_op_comparison(bfa: &mut BinaryOpFuncArg) -> BinaryOpFuncResult {
     let bf = get_scalar_comparison_handler(bfa.op, bfa.returns_bool());
     binary_op_func_impl(bf, bfa)
+}
+
+pub fn exec_vector_vector_binop(
+    ctx: &Context,
+    left: InstantVector,
+    right: InstantVector,
+    op: Operator,
+    modifier: &Option<BinModifier>,
+) -> RuntimeResult<QueryValue> {
+    let is_tracing = ctx.trace_enabled();
+
+    let span = if is_tracing {
+        trace_span!("binary op", "op" = op.as_str(), series = field::Empty)
+    } else {
+        Span::none()
+    }.entered();
+
+    let mut bfa = BinaryOpFuncArg::new(left, op, right, modifier);
+
+    let result = exec_binop(&mut bfa).map(QueryValue::InstantVector)?;
+
+    if is_tracing {
+        let series_count = series_len(&result);
+        span.record("series", series_count);
+    }
+
+    Ok(result)
 }
 
 pub(crate) fn exec_binop(bfa: &mut BinaryOpFuncArg) -> BinaryOpFuncResult {

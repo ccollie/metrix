@@ -104,34 +104,6 @@ pub(super) fn get_at_value(value: &QueryValue) -> RuntimeResult<i64> {
     Ok((v * 1000_f64) as i64)
 }
 
-pub fn exec_vector_vector(
-    ctx: &Context,
-    left: InstantVector,
-    right: InstantVector,
-    op: Operator,
-    modifier: &Option<BinModifier>,
-) -> RuntimeResult<QueryValue> {
-    let is_tracing = ctx.trace_enabled();
-
-    let span = if is_tracing {
-        trace_span!("binary op", "op" = op.as_str(), series = field::Empty)
-    } else {
-        Span::none()
-    }
-    .entered();
-
-    let mut bfa = BinaryOpFuncArg::new(left, op, right, modifier);
-
-    let result = exec_binop(&mut bfa).map(QueryValue::InstantVector)?;
-
-    if is_tracing {
-        let series_count = series_len(&result);
-        span.record("series", series_count);
-    }
-
-    Ok(result)
-}
-
 pub fn expand_single_value(tss: &mut [Timeseries], ec: &EvalConfig) -> RuntimeResult<()> {
     // expand single-point tss to the original time range.
     let timestamps = ec.get_timestamps()?;
