@@ -553,51 +553,58 @@ impl BucketInner {
         }
     }
 
+    fn is_valid_generation(&self, v: usize) -> bool {
+        let b_gen = self.gen & GEN_BIT_MASK;
+        let gen = (v >> BUCKET_SIZE_BITS) as u64;
+        let idx = v & ((1 << BUCKET_SIZE_BITS) - 1);
+        gen == b_gen && idx < self.idx
+            || idx >= self.idx && gen + 1 == b_gen
+            || idx >= self.idx && gen == MAX_GEN && b_gen == 1
+    }
+
+
+    fn retrieve_value(&mut self, k: &[u8], v: usize) -> Option<&[u8]> {
+        let chunk_idx: usize = v / CHUNK_SIZE;
+        if chunk_idx >= self.chunks.len() {
+            self.corruptions += 1;
+            return None;
+        }
+
+        let mut idx: usize = v % CHUNK_SIZE;
+        if idx + 4 >= CHUNK_SIZE {
+            self.corruptions += 1;
+            return None;
+        }
+
+        let chunk = &self.chunks[chunk_idx];
+        let kv_len_buf = &chunk[idx..idx + 4];
+        let key_len = (((kv_len_buf[0] as u64) << 8) | kv_len_buf[1] as u64) as usize;
+        let val_len = (((kv_len_buf[2] as u64) << 8) | kv_len_buf[3] as u64) as usize;
+        idx += 4;
+
+        if idx + (key_len + val_len) >= CHUNK_SIZE {
+            self.corruptions += 1;
+            return None;
+        }
+
+        let key = &chunk[idx..idx + key_len];
+        if k == key {
+            idx += key_len;
+            let res = &chunk[idx..idx + val_len];
+            Some(res)
+        } else {
+            self.misses += 1;
+            self.collisions += 1;
+            None
+        }
+    }
+
     fn get(&mut self, k: &[u8], h: u64) -> Option<&[u8]> {
         self.get_calls += 1;
 
         if let Some(v) = self.hash_idx_map.get(&h) {
-            let b_gen = self.gen & GEN_BIT_MASK;
-            let gen = (v >> BUCKET_SIZE_BITS) as u64;
-            let idx = v & ((1 << BUCKET_SIZE_BITS) - 1);
-            if gen == b_gen && idx < self.idx
-                || idx >= self.idx && gen + 1 == b_gen
-                || idx >= self.idx && gen == MAX_GEN && b_gen == 1
-            {
-                let chunk_idx: usize = idx / CHUNK_SIZE;
-                if chunk_idx >= self.chunks.len() {
-                    // Corrupted data during the load from file. Just skip it.
-                    self.corruptions += 1;
-                    return None;
-                }
-
-                let mut idx: usize = idx % CHUNK_SIZE;
-                if idx + 4 >= CHUNK_SIZE {
-                    // Corrupted data during the load from file. Just skip it.
-                    self.corruptions += 1;
-                    return None;
-                }
-                let chunk = &self.chunks[chunk_idx];
-                let kv_len_buf = &chunk[idx..idx + 4];
-                let key_len = (((kv_len_buf[0] as u64) << 8) | kv_len_buf[1] as u64) as usize;
-                let val_len = (((kv_len_buf[2] as u64) << 8) | kv_len_buf[3] as u64) as usize;
-                idx += 4;
-                if idx + (key_len + val_len) >= CHUNK_SIZE {
-                    // Corrupted data during the load from file. Just skip it.
-                    self.corruptions += 1;
-                    return None;
-                }
-
-                let key = &chunk[idx..idx + key_len];
-                return if k == key {
-                    idx += key_len;
-                    let res = &chunk[idx..idx + val_len];
-                    Some(res)
-                } else {
-                    self.misses += 1;
-                    self.collisions += 1;
-                    None
-                };
+            if self.is_valid_generation(*v) {
+                return self.retrieve_value(k, *v);
             }
         }
 
