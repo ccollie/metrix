@@ -42,7 +42,7 @@ fn op_or(left: f64, right: f64) -> f64 {
     right
 }
 
-/// gt returns true of left > right
+/// gt returns true if left > right
 #[inline]
 fn op_gt(left: f64, right: f64) -> bool {
     left > right

@@ -194,7 +194,7 @@ pub trait TreeNode: Sized {
 ///
 /// When passed to[`TreeNode::visit`], [`TreeNodeVisitor::pre_visit`]
 /// and [`TreeNodeVisitor::post_visit`] are invoked recursively
-/// on an node tree.
+/// on a node tree.
 ///
 /// If an [`Err`] result is returned, recursion is stopped
 /// immediately.
