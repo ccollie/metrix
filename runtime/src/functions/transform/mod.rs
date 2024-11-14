@@ -28,7 +28,7 @@ use labels::{
     label_transform, label_uppercase, label_value, labels_equal,
 };
 use limit_offset::limit_offset;
-use math::{
+use crate::functions::transform::math::{
     abs, acos, acosh, asin, asinh, atan, atanh, ceil, cos, cosh, deg, exp, floor, ln, log10, log2,
     rad, sgn, sin, sinh, sqrt, tan, tanh, transform_pi,
 };
