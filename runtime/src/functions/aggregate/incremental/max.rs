@@ -11,10 +11,7 @@ impl IncrementalAggrHandler for IncrementalAggrMax {
             iac.ts.values.iter_mut(),
             iac.values.iter_mut()
         );
-        for (v, dst, dst_count) in iter {
-            if v.is_nan() {
-                continue;
-            }
+        for (v, dst, dst_count) in iter.filter(|(v, _, _)| !v.is_nan()) {
             if *dst_count == 0.0 {
                 *dst_count = 1.0;
                 *dst = *v;
@@ -33,10 +30,7 @@ impl IncrementalAggrHandler for IncrementalAggrMax {
             src.ts.values.iter(),
             dst.ts.values.iter_mut()
         );
-        for (src_count, dst_count, v, dst) in iter {
-            if *src_count == 0.0 {
-                continue;
-            }
+        for (src_count, dst_count, v, dst) in iter.filter(|(src_count, _, _, _)| **src_count == 0.0) {
             if *dst_count == 0.0 {
                 *dst_count = 1.0;
                 *dst = *v;

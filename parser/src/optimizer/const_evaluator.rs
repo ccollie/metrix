@@ -166,68 +166,82 @@ fn handle_unary_expr(ue: UnaryExpr) -> ParseResult<Expr> {
 
 fn handle_binary_expr(be: BinaryExpr) -> ParseResult<Expr> {
     let is_bool = be.returns_bool();
-    // let temp = format!("{} {} {}", be.left, be.op, be.right);
-    // println!("{}", temp);
 
     match (be.left.as_ref(), be.right.as_ref(), be.op) {
-        (Expr::Duration(ln), Expr::Duration(rn), op)
-            if op == Operator::Add || op == Operator::Sub =>
-        {
-            match (ln, rn) {
-                (DurationExpr::Millis(left_val), DurationExpr::Millis(right_val)) => {
-                    let n =
-                        scalar_binary_operation(*left_val as f64, *right_val as f64, op, is_bool)?
-                            as i64;
-                    let dur = DurationExpr::new(n);
-                    return Ok(Expr::Duration(dur));
-                }
-                (DurationExpr::StepValue(left_val), DurationExpr::StepValue(right_val)) => {
-                    let n = scalar_binary_operation(*left_val, *right_val, op, is_bool)?;
-                    let dur = DurationExpr::new_step(n);
-                    return Ok(Expr::Duration(dur));
-                }
-                _ => {}
-            }
+        (Expr::Duration(ln), Expr::Duration(rn), op) if op == Operator::Add || op == Operator::Sub => {
+            handle_duration_duration(ln, rn, op, is_bool)
         }
-        // add/subtract number as secs to duration
-        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op)
-            if !ln.requires_step() && (op == Operator::Add || op == Operator::Sub) =>
-        {
-            let secs = *value * 1e3_f64;
-            let n = scalar_binary_operation(ln.value(1) as f64, secs, op, is_bool)? as i64;
-            let dur = DurationExpr::new(n);
-            return Ok(Expr::Duration(dur));
+        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op) if !ln.requires_step() && (op == Operator::Add || op == Operator::Sub) => {
+            handle_duration_number(ln, *value, op, is_bool)
         }
-        // handle something like 2.5i * 2. Note that we don't handle + and - because meaning would be
-        // ambiguous (e.g. 2.5i + 2 could be 2.5i + 2.0 or 2.5 + 2.0 secs)
-        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op)
-            if ln.requires_step() && (op == Operator::Mul || op == Operator::Div) =>
-        {
-            if let DurationExpr::StepValue(step_value) = ln {
-                let n = scalar_binary_operation(*step_value, *value, op, is_bool)?;
-                let dur = DurationExpr::new_step(n);
-                return Ok(Expr::Duration(dur));
-            }
+        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op) if ln.requires_step() && (op == Operator::Mul || op == Operator::Div) => {
+            handle_duration_step(ln, *value, op, is_bool)
         }
         (Expr::NumberLiteral(ln), Expr::NumberLiteral(rn), op) => {
-            let n = scalar_binary_operation(ln.value, rn.value, op, is_bool)?;
-            return Ok(Expr::from(n));
+            handle_number_number(ln.value, rn.value, op, is_bool)
         }
         (Expr::StringLiteral(left), Expr::StringLiteral(right), op) => {
-            if op == Operator::Add {
-                let mut res = String::with_capacity(left.len() + right.len());
-                res += left;
-                res += right;
-                return Ok(Expr::from(res));
-            }
-            if op.is_comparison() {
-                let n = string_compare(left, right, op, is_bool)?;
-                return Ok(Expr::from(n));
-            }
+            handle_string_string(left, right, op, is_bool)
         }
-        _ => {}
+        _ => Ok(Expr::BinaryOperator(be)),
     }
-    Ok(Expr::BinaryOperator(be))
+}
+
+fn handle_duration_duration(ln: &DurationExpr, rn: &DurationExpr, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+    match (ln, rn) {
+        (DurationExpr::Millis(left_val), DurationExpr::Millis(right_val)) => {
+            let n = scalar_binary_operation(*left_val as f64, *right_val as f64, op, is_bool)? as i64;
+            Ok(Expr::Duration(DurationExpr::new(n)))
+        }
+        (DurationExpr::StepValue(left_val), DurationExpr::StepValue(right_val)) => {
+            let n = scalar_binary_operation(*left_val, *right_val, op, is_bool)?;
+            Ok(Expr::Duration(DurationExpr::new_step(n)))
+        }
+        _ => Ok(Expr::BinaryOperator(BinaryExpr { left: Box::new(Expr::Duration(ln.clone())), right: Box::new(Expr::Duration(rn.clone())), op, modifier: None })),
+    }
+}
+
+fn handle_duration_number(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+    let secs = value * 1e3_f64;
+    let n = scalar_binary_operation(ln.value(1) as f64, secs, op, is_bool)? as i64;
+    Ok(Expr::Duration(DurationExpr::new(n)))
+}
+
+fn handle_duration_step(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+    if let DurationExpr::StepValue(step_value) = ln {
+        let n = scalar_binary_operation(*step_value, value, op, is_bool)?;
+        Ok(Expr::Duration(DurationExpr::new_step(n)))
+    } else {
+        Ok(Expr::BinaryOperator(BinaryExpr { left: Box::new(Expr::Duration(ln.clone())), right: Box::new(Expr::NumberLiteral(NumberLiteral { value })), op, modifier: None }))
+    }
+}
+
+fn handle_number_number(ln: f64, rn: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+    let n = scalar_binary_operation(ln, rn, op, is_bool)?;
+    Ok(Expr::from(n))
+}
+
+fn handle_string_string(left: &str, right: &str, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+    if op == Operator::Add {
+        let mut res = String::with_capacity(left.len() + right.len());
+        res += left;
+        res += right;
+        Ok(Expr::from(res))
+    } else if op.is_comparison() {
+        let n = string_compare(left, right, op, is_bool)?;
+        Ok(Expr::from(n))
+    } else {
+        Ok(
+            Expr::BinaryOperator(
+                BinaryExpr { 
+                    left: Box::new(Expr::from(left.to_string())), 
+                    right: Box::new(Expr::from(right.to_string())), 
+                    op, 
+                    modifier: None 
+                }
+            )
+        )
+    }
 }
 
 fn get_single_scalar_arg(fe: &FunctionExpr) -> Option<f64> {

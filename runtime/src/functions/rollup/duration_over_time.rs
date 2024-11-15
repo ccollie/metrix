@@ -16,7 +16,6 @@ pub(super) fn new_rollup_duration_over_time(args: &[QueryValue]) -> RuntimeResul
     Ok(RollupHandler::FloatArg(handler))
 }
 
-#[inline]
 fn duration_over_time(timestamps: &[i64], max_interval: f64) -> f64 {
     if timestamps.is_empty() {
         return f64::NAN;

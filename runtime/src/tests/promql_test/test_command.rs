@@ -280,8 +280,8 @@ impl EvalCmd {
                         let value = &s.values[i];
 
                         if expected.timestamp != *timestamp {
-                            let msg = format!("expected float value at index {} for {} to have timestamp {}, but it had timestamp {} (result has {})",
-                                              i, self.metrics[&hash], expected.timestamp, timestamp, format_series_result(s));
+                            let msg = format!("expected float value at index {i} for {} to have timestamp {}, but it had timestamp {} (result has {})",
+                                              self.metrics[&hash], expected.timestamp, timestamp, format_series_result(s));
                             return Err(TestAssertionError::new(self.line, msg));
                         }
 

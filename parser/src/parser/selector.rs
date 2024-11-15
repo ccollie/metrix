@@ -6,7 +6,7 @@ use crate::parser::{ParseResult, Parser};
 
 use super::tokens::Token;
 
-/// parse_metric_expr parses a metric.
+/// parse_metric_expr parses a metric selector.
 ///
 ///    <label_set>
 ///    <metric_identifier> [<label_set>]

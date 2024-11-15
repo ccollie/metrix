@@ -11,10 +11,7 @@ impl IncrementalAggrHandler for IncrementalAggrMin {
             iac.ts.values.iter_mut(),
             iac.values.iter_mut()
         );
-        for (v, dst, dst_count) in iter {
-            if v.is_nan() {
-                continue;
-            }
+        for (v, dst, dst_count) in iter.filter(|(v, _, _)| !v.is_nan()) {
             if *dst_count == 0.0 {
                 *dst_count = 1.0;
                 *dst = *v;

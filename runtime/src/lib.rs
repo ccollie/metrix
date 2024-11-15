@@ -1,4 +1,3 @@
-#![feature(lazy_cell)]
 extern crate ahash;
 extern crate chrono;
 extern crate chrono_tz;

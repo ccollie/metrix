@@ -328,8 +328,8 @@ impl RollupFunction {
         )
     }
 
-    // All rollup the functions which do not rely on the previous sample
-    // before the lookbehind window (aka prev_value), do not need silence interval.
+    /// All rollup functions which do not rely on the previous sample
+    /// before the lookbehind window (aka prev_value), do not need silence interval.
     pub const fn need_silence_interval(&self) -> bool {
         use RollupFunction::*;
         !matches!(
@@ -365,17 +365,16 @@ impl RollupFunction {
                 | TLastChangeOverTime
         )
     }
-}
 
-/// We can extend lookbehind window for these functions in order to make sure it contains enough
-/// points for returning non-empty results.
-///
-/// This is needed for returning the expected non-empty graphs when zooming in the graph in Grafana,
-/// which is built with `func_name(metric)` query.
-pub const fn can_adjust_window(func: RollupFunction) -> bool {
-    use RollupFunction::*;
-    matches!(
-        func,
+    /// We can extend lookbehind window for these functions in order to make sure it contains enough
+    /// points for returning non-empty results.
+    ///
+    /// This is needed for returning the expected non-empty graphs when zooming in the graph in Grafana,
+    /// which is built with `func_name(metric)` query.
+    pub const fn can_adjust_window(&self) -> bool {
+        use RollupFunction::*;
+        matches!(
+        self,
         DefaultRollup
             | Deriv
             | DerivFast
@@ -390,7 +389,8 @@ pub const fn can_adjust_window(func: RollupFunction) -> bool {
             | RollupScrapeInterval
             | ScrapeInterval
             | Timestamp
-    )
+        )
+    }
 }
 
 impl FromStr for RollupFunction {

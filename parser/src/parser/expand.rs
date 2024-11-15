@@ -504,25 +504,6 @@ fn expand_modifier_args(
     was: &[WithArgExpr],
     args: &[String],
 ) -> ParseResult<Vec<String>> {
-    fn handle_metric_expr(expr: &Expr, arg: &String, args: &[String]) -> ParseResult<String> {
-        fn error(expr: &Expr, arg: &String, args: &[String]) -> ParseResult<String> {
-            let msg = format!("cannot use {expr} instead of {arg} in {}", args.join(", "));
-            // let err = syntax_error(&msg, &expr.token_range, "".to_string());
-            Err(ParseError::General(msg))
-        }
-
-        match expr {
-            Expr::MetricExpression(me) => {
-                if !me.is_only_metric_name() {
-                    return error(expr, arg, args);
-                }
-                let metric_name = me.metric_name().unwrap();
-                Ok(String::from(metric_name))
-            }
-            _ => error(expr, arg, args),
-        }
-    }
-
     if args.is_empty() {
         return Ok(vec![]);
     }
@@ -530,46 +511,46 @@ fn expand_modifier_args(
     let mut dst_args: Vec<String> = Vec::with_capacity(args.len());
     for arg in args {
         let wa = get_with_arg_expr(symbols, was, arg);
-        if wa.is_none() {
-            // Leave the arg as is.
-            dst_args.push(arg.clone());
-            continue;
-        }
-        let wa = wa.unwrap();
-        if !wa.args.is_empty() {
-            // Template funcs cannot be used inside modifier list. Leave the arg as is.
-            dst_args.push(arg.clone());
-            continue;
-        }
-        match &wa.expr {
-            Expr::MetricExpression(_) => {
-                let resolved = handle_metric_expr(&wa.expr, arg, args)?;
-                dst_args.push(resolved);
-                continue;
-            }
-            Expr::Parens(pe) => {
-                for p_arg in &pe.expressions {
-                    let resolved = handle_metric_expr(p_arg, arg, args)?;
-                    dst_args.push(resolved);
+        if let Some(wa) = wa {
+            if wa.args.is_empty() {
+                match &wa.expr {
+                    Expr::MetricExpression(_) => {
+                        dst_args.push(handle_metric_expr(&wa.expr, arg, args)?);
+                    }
+                    Expr::Parens(pe) => {
+                        for p_arg in &pe.expressions {
+                            dst_args.push(handle_metric_expr(p_arg, arg, args)?);
+                        }
+                    }
+                    _ => return Err(syntax_error(&format!("cannot use {} instead of {} in {}", wa.expr, arg, args.join(", ")), &wa.token_range, "".to_string())),
                 }
-                continue;
+            } else {
+                dst_args.push(arg.clone());
             }
-            _ => {
-                let msg = format!(
-                    "cannot use {} instead of {} in {}",
-                    wa.expr,
-                    arg,
-                    args.join(", ")
-                );
-                let err = syntax_error(&msg, &wa.token_range, "".to_string());
-                return Err(err);
-            }
+        } else {
+            dst_args.push(arg.clone());
         }
     }
 
     // Remove duplicate args from dst_args
     let m: AHashSet<&String> = AHashSet::from_iter(dst_args.iter());
     Ok(m.iter().map(|x| x.to_string()).collect::<Vec<String>>())
+}
+
+fn handle_metric_expr(expr: &Expr, arg: &String, args: &[String]) -> ParseResult<String> {
+    match expr {
+        Expr::MetricExpression(me) => {
+            if !me.is_only_metric_name() {
+                return error(expr, arg, args);
+            }
+            Ok(String::from(me.metric_name().unwrap()))
+        }
+        _ => error(expr, arg, args),
+    }
+}
+
+fn error(expr: &Expr, arg: &String, args: &[String]) -> ParseResult<String> {
+    Err(ParseError::General(format!("cannot use {expr} instead of {arg} in {}", args.join(", "))))
 }
 
 fn get_with_arg_expr<'a>(

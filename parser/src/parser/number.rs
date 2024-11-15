@@ -2,10 +2,9 @@ use crate::parser::ParseError::InvalidNumber;
 use crate::parser::{ParseError, ParseResult};
 
 fn from_str_radix(str: &str, radix: u32) -> Result<f64, ParseError> {
-    match u64::from_str_radix(str, radix) {
-        Ok(value) => Ok(value as f64),
-        Err(_) => Err(InvalidNumber(str.to_string())),
-    }
+    u64::from_str_radix(str, radix)
+        .map(|value| value as f64)
+        .map_err(|_| InvalidNumber(str.to_string()))
 }
 
 fn parse_basic(str: &str) -> ParseResult<f64> {

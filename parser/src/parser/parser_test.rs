@@ -317,6 +317,11 @@ mod tests {
     }
 
     #[test]
+    fn test1() {
+        another("sum(x) * (1 + sum(a))", "sum(x) * 1 + sum(a)");
+    }
+    
+    #[test]
     fn test_parse_aggr_func_expr() {
         // aggrFuncExpr
         same("sum(http_server_request) by ()");
@@ -351,7 +356,7 @@ mod tests {
 
     #[test]
     fn testing() {
-        another("((foo, bar),(baz))", "((foo, bar), baz)");
+        another("1/0", "+Inf");
     }
 
     #[test]

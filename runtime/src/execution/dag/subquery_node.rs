@@ -19,7 +19,7 @@ use crate::execution::{
     EvalConfig,
 };
 use crate::functions::rollup::{
-    eval_prefuncs, get_rollup_configs, RollupHandler, MAX_SILENCE_INTERVAL,
+    eval_pre_funcs, get_rollup_configs, RollupHandler, MAX_SILENCE_INTERVAL,
 };
 use crate::{RuntimeError, RuntimeResult};
 use crate::types::{QueryValue, Timeseries, Timestamp};
@@ -195,7 +195,7 @@ impl SubqueryNode {
                   -> RuntimeResult<(Vec<Timeseries>, u64)> {
                 let mut res = Vec::with_capacity(ts_sq.len());
 
-                eval_prefuncs(&pre_funcs, values, timestamps);
+                eval_pre_funcs(&pre_funcs, values, timestamps);
                 let mut scanned_total = 0_u64;
 
                 for rc in rcs.iter() {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use metricsql_parser::ast::Expr;
-use metricsql_parser::functions::{can_adjust_window, RollupFunction};
+use metricsql_parser::functions::{RollupFunction};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use smallvec::SmallVec;
 
@@ -25,7 +25,7 @@ pub const MAX_SILENCE_INTERVAL: i64 = 5 * 60 * 1000;
 pub(crate) type PreFunction = fn(&mut [f64], &[Timestamp]) -> ();
 
 #[inline]
-pub(crate) fn eval_prefuncs(fns: &PreFunctionVec, values: &mut [f64], timestamps: &[Timestamp]) {
+pub(crate) fn eval_pre_funcs(fns: &PreFunctionVec, values: &mut [f64], timestamps: &[Timestamp]) {
     for f in fns {
         f(values, timestamps)
     }
@@ -85,7 +85,7 @@ fn get_tag_fn_from_str(name: &str) -> Option<&RollupHandler> {
 #[derive(Clone, Debug)]
 pub struct TagFunction {
     pub tag_value: String,
-    pub(crate) func: RollupHandler,
+    pub func: RollupHandler,
 }
 
 pub type PreFunctionVec = SmallVec<PreFunction, 4>;
@@ -251,7 +251,7 @@ impl RollupConfig {
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
-        self.do_internal(dst_values, None, values, timestamps)
+        self.exec_internal(dst_values, None, values, timestamps)
     }
 
     pub(crate) fn process_rollup(
@@ -304,135 +304,85 @@ impl RollupConfig {
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
         let mut ts = get_timeseries();
-        self.do_internal(&mut ts.values, Some(tsm), values, timestamps)
+        self.exec_internal(&mut ts.values, Some(tsm), values, timestamps)
     }
 
-    fn do_internal(
+    fn exec_internal(
         &self,
         dst_values: &mut Vec<f64>,
         tsm: Option<Arc<TimeSeriesMap>>,
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
-        // Sanity checks.
         self.validate()?;
-
-        // Extend dst_values in order to remove allocations below.
         dst_values.reserve(self.timestamps.len());
 
         let scrape_interval = get_scrape_interval(timestamps);
         let mut max_prev_interval = get_max_prev_interval(scrape_interval);
         if self.lookback_delta > 0 && max_prev_interval > self.lookback_delta {
-            max_prev_interval = self.lookback_delta
+            max_prev_interval = self.lookback_delta;
         }
         if self.min_staleness_interval > 0 {
             let msi = self.min_staleness_interval as i64;
             if msi > 0 && max_prev_interval < msi {
-                max_prev_interval = msi
+                max_prev_interval = msi;
             }
         }
-        let mut window = self.window;
-        if window <= 0 {
-            window = self.step;
-            if self.may_adjust_window && window < max_prev_interval {
-                // Adjust lookbehind window only if it isn't set explicitly, e.g. rate(foo).
-                // In the case of missing lookbehind window it should be adjusted in order to return non-empty graph
-                // when the window doesn't cover at least two raw samples (this is what most users expect).
-                //
-                // If the user explicitly sets the lookbehind window to some fixed value, e.g. rate(foo[1s]),
-                // then it is expected he knows what he is doing. Do not adjust the lookbehind window then.
-                //
-                // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/3483
-                window = max_prev_interval
-            }
-            if self.is_default_rollup && self.lookback_delta > 0 && window > self.lookback_delta {
-                // Implicit window exceeds -provider.maxStalenessInterval, so limit it to
-                // -provider.maxStalenessInterval
-                // according to https://github.com/VictoriaMetrics/VictoriaMetrics/issues/784
-                window = self.lookback_delta
-            }
+        
+        let mut window = if self.window > 0 { self.window } else { self.step };
+        if self.may_adjust_window && window < max_prev_interval {
+            window = max_prev_interval;
         }
-
-        let mut i = 0;
-        let mut j = 0;
-        let mut ni = 0;
-        let mut nj = 0;
+        if self.is_default_rollup && self.lookback_delta > 0 && window > self.lookback_delta {
+            window = self.lookback_delta;
+        }
 
         let mut samples_scanned = values.len() as u64;
         let samples_scanned_per_call = self.samples_scanned_per_call as u64;
 
-        let mut func_args = SmallVec::<RollupFuncArg, 6>::new();
-
-        for (idx, t_end) in self.timestamps.iter().enumerate() {
-            let t_start = *t_end - window;
-            ni = seek_first_timestamp_idx_after(&timestamps[i..], t_start, ni);
-            i += ni;
-            if j < i {
-                j = i;
-            }
-
-            nj = seek_first_timestamp_idx_after(&timestamps[j..], *t_end, nj);
-            j += nj;
+        let func_args: Vec<_> = self.timestamps.iter().enumerate().map(|(idx, &t_end)| {
+            let t_start = t_end - window;
+            let i = seek_first_timestamp_idx_after(&timestamps, t_start, 0);
+            let j = seek_first_timestamp_idx_after(&timestamps, t_end, i);
 
             let mut rfa = RollupFuncArg::default();
-
             rfa.window = window;
-            rfa.prev_value = f64::NAN;
-            rfa.prev_timestamp = t_start - max_prev_interval;
-            if i > 0 && i < timestamps.len() {
-                let prev_ts = timestamps[i - 1];
-                if prev_ts > rfa.prev_timestamp {
-                    rfa.prev_value = values[i - 1];
-                    rfa.prev_timestamp = prev_ts;
-                }
-            }
-
-            rfa.values = &values[i..j];
-            rfa.timestamps = &timestamps[i..j];
-
-            rfa.real_prev_value = if i > 0 { values[i - 1] } else { f64::NAN };
-            rfa.real_next_value = if j < values.len() {
-                values[j]
+            rfa.prev_value = if i > 0 && timestamps[i - 1] > t_start - max_prev_interval {
+                values[i - 1]
             } else {
                 f64::NAN
             };
-
-            rfa.curr_timestamp = *t_end;
+            rfa.prev_timestamp = if i > 0 { timestamps[i - 1] } else { t_start - max_prev_interval };
+            rfa.values = &values[i..j];
+            rfa.timestamps = &timestamps[i..j];
+            rfa.real_prev_value = if i > 0 { values[i - 1] } else { f64::NAN };
+            rfa.real_next_value = if j < values.len() { values[j] } else { f64::NAN };
+            rfa.curr_timestamp = t_end;
             rfa.idx = idx;
             rfa.tsm = tsm.as_ref().map(Arc::clone);
 
             if samples_scanned_per_call > 0 {
-                samples_scanned += samples_scanned_per_call
+                samples_scanned += samples_scanned_per_call;
             } else {
                 samples_scanned += rfa.values.len() as u64;
             }
 
-            func_args.push(rfa);
-        }
+            rfa
+        }).collect();
 
         match func_args.len() {
             0 => {}
-            1 => {
-                let rfa = &func_args[0];
-                let value = self.handler.eval(rfa);
-                dst_values.push(value);
-            }
+            1 => dst_values.push(self.handler.eval(&func_args[0])),
             2 => {
-                let mut iter = func_args.iter();
-                let first = iter.next().unwrap();
-                let second = iter.next().unwrap();
-                // todo: only use join if the number of items passes a given threshold
-                let (first_val, second_val) = rayon::join(
-                    || self.handler.eval(first),
-                    || self.handler.eval(second),
+                let (first, second) = rayon::join(
+                    || self.handler.eval(&func_args[0]),
+                    || self.handler.eval(&func_args[1]),
                 );
-                dst_values.push(first_val);
-                dst_values.push(second_val);
+                dst_values.push(first);
+                dst_values.push(second);
             }
             _ => {
-                // todo: only use rayon if the number of items passes a given threshold
-                func_args
-                    .par_iter()
+                func_args.par_iter()
                     .map(|rfa| self.handler.eval(rfa))
                     .collect_into_vec(dst_values);
             }
@@ -701,7 +651,7 @@ fn get_rollup_function_handler_meta(
         }
     }
 
-    let may_adjust_window = can_adjust_window(func);
+    let may_adjust_window = func.can_adjust_window();
     let is_default_rollup = func == RollupFunction::DefaultRollup;
     let samples_scanned_per_call = rollup_samples_scanned_per_call(func);
 

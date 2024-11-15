@@ -45,20 +45,12 @@ fn parse_at_expr(p: &mut Parser) -> ParseResult<Expr> {
     p.expect(&At)?;
 
     let span = p.last_token_range().unwrap_or_default();
-    match parse_single_expr_without_rollup_suffix(p) {
-        Ok(expr) => {
-            // validate result type
-            match expr.return_type() {
-                ValueType::InstantVector | ValueType::Scalar => Ok(expr),
-                _ => Err(syntax_error(
-                    "@ modifier Expr must return a scalar or instant vector",
-                    &span,
-                    "".to_string(),
-                )), // todo: have InvalidReturnType enum variant
-            }
-        }
-        Err(e) => Err(syntax_error(
-            format!("cannot parse @ modifier Expr: {}", e).as_str(),
+    let expr = parse_single_expr_without_rollup_suffix(p)?;
+
+    match expr.return_type() {
+        ValueType::InstantVector | ValueType::Scalar => Ok(expr),
+        _ => Err(syntax_error(
+            "@ modifier Expr must return a scalar or instant vector",
             &span,
             "".to_string(),
         )),
