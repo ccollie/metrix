@@ -18,7 +18,7 @@ use crate::execution::eval_number;
 use crate::execution::utils::{adjust_eval_range, drop_stale_nans, duration_value};
 use crate::execution::{get_timestamps, EvalConfig};
 use crate::functions::aggregate::IncrementalAggrFuncContext;
-use crate::functions::rollup::{eval_prefuncs, get_rollup_configs, RollupConfigVec, RollupHandler, MAX_SILENCE_INTERVAL};
+use crate::functions::rollup::{eval_pre_funcs, get_rollup_configs, RollupConfigVec, RollupHandler, MAX_SILENCE_INTERVAL};
 use crate::prelude::{is_empty_extra_matchers, join_matchers_with_extra_filters_owned};
 use crate::provider::{QueryResults, SearchQuery};
 use crate::rayon::iter::IndexedParallelIterator;
@@ -196,8 +196,7 @@ impl RollupNode {
             ctx.rollup_result_cache.misses.inc();
         }
 
-        // Obtain rollup configs before fetching data from db,
-        // so type errors can be caught earlier.
+        // Obtain rollup configs before fetching data from db, so type errors can be caught earlier.
         let shared_timestamps = Arc::new(get_timestamps(
             start,
             ec.end,
@@ -221,7 +220,7 @@ impl RollupNode {
         )?;
 
         let pre_func = move |values: &mut [f64], timestamps: &[Timestamp]| {
-            eval_prefuncs(&pre_funcs, values, timestamps)
+            eval_pre_funcs(&pre_funcs, values, timestamps)
         };
 
         // Fetch the remaining part of the result.

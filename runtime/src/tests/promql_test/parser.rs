@@ -193,7 +193,7 @@ pub fn parse_eval(lines: &[String], mut i: usize) -> Result<(usize, TestCommand)
             .map_err(|e| raise(i, format!("invalid test definition, failed to parse end timestamp: {:?}", e)))?;
 
         if parsed_to < parsed_from {
-            return Err(raise(i,format!("invalid test definition, end timestamp ({}) is before start timestamp ({})", to, from)));
+            return Err(raise(i,format!("invalid test definition, end timestamp ({to}) is before start timestamp ({from})")));
         }
 
         let parsed_step = parse_duration(step)
@@ -228,7 +228,7 @@ pub fn parse_eval(lines: &[String], mut i: usize) -> Result<(usize, TestCommand)
         if cmd.fail && def_line.starts_with("expected_fail_regexp") {
             let pattern = def_line.trim_start_matches("expected_fail_regexp").trim();
             let regex = Regex::new(pattern)
-                .map_err(|e| raise(i, format!("invalid regex pattern in line {}: {:?}", i, e)))?;
+                .map_err(|e| raise(i, format!("invalid regex pattern in line {i}: {:?}", e)))?;
             cmd.expected_fail_regexp = Some(regex);
             break;
         }

@@ -102,10 +102,7 @@ fn parse_single_duration(s: &str, step: &i64) -> Result<f64, ParseError> {
         "y" => mp = SECONDS_PER_YEAR,
         "i" => mp = (*step as f64) / 1e3,
         _ => {
-            return Err(ParseError::General(format!(
-                "invalid duration suffix in {}",
-                s
-            )))
+            return Err(ParseError::General(format!("invalid duration suffix in {s}")))
         }
     }
     Ok(mp * f * 1e3)

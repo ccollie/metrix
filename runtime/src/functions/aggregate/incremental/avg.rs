@@ -13,10 +13,7 @@ impl IncrementalAggrHandler for IncrementalAggrAvg {
             values.iter(),
             iac.values.iter_mut(),
             iac.ts.values.iter_mut()
-        ) {
-            if v.is_nan() {
-                continue;
-            }
+        ).filter(|(v, _, _)| !v.is_nan()) {
 
             if *count == 0.0 {
                 *dst = *v;

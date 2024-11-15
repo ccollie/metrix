@@ -72,20 +72,17 @@ fn parse_label_filters(lex: &mut Lexer<Token>, labels: &mut Vec<Label>) -> Parse
 
 
 fn get_next<'a>(lex: &'a mut Lexer<Token>) -> ParseResult<(Token, &'a str)> {
-    if let Some(tok) = lex.next() {
-        match tok {
-            Ok(tok) => Ok((tok, lex.slice())),
-            Err(_) => {
-              let span = lex.span();
-              let inner = ParseErr::new(
-                  format!("unexpected token \"{}\"", lex.slice().trim()).as_str(),
-                  span,
-              );
-              Err(ParseError::Unexpected(inner))
-          }
+    match lex.next() {
+        Some(Ok(tok)) => Ok((tok, lex.slice())),
+        Some(Err(_)) => {
+            let span = lex.span();
+            let inner = ParseErr::new(
+                format!("unexpected token \"{}\"", lex.slice().trim()).as_str(),
+                span,
+            );
+            Err(ParseError::Unexpected(inner))
         }
-    } else {
-        Ok((Token::Eof, ""))
+        None => Ok((Token::Eof, "")),
     }
 }
 

@@ -906,19 +906,13 @@ impl FunctionExpr {
     }
 
     pub fn arg_idx_for_optimization(&self) -> Option<usize> {
-        match self.function {
-            BuiltinFunction::Aggregate(aggr_fn) => self.get_aggr_arg_idx_for_optimization(aggr_fn),
-            _ => self.function.get_arg_idx_for_optimization(self.args.len()),
-        }
+        self.function.get_arg_idx_for_optimization(self.args.len())
     }
 
     pub fn arg_for_optimization(&self) -> Option<&Expr> {
-        match self.arg_idx_for_optimization() {
-            None => None,
-            Some(idx) => self.args.get(idx),
-        }
+        self.arg_idx_for_optimization().and_then(|idx| self.args.get(idx))
     }
-
+    
     fn get_aggr_arg_idx_for_optimization(&self, func: AggregateFunction) -> Option<usize> {
         let arg_count = self.args.len();
         use AggregateFunction::*;
@@ -954,24 +948,15 @@ impl FunctionExpr {
     }
 
     pub fn is_rollup_function(&self, rf: RollupFunction) -> bool {
-        match self.function {
-            BuiltinFunction::Rollup(r) => r == rf,
-            _ => false,
-        }
+        matches!(self.function, BuiltinFunction::Rollup(r) if r == rf)
     }
 
     pub fn is_aggregate_function(&self, af: AggregateFunction) -> bool {
-        match self.function {
-            BuiltinFunction::Aggregate(a) => a == af,
-            _ => false,
-        }
+        matches!(self.function, BuiltinFunction::Aggregate(a) if a == af)
     }
 
     pub fn is_transform_function(&self, tf: TransformFunction) -> bool {
-        match self.function {
-            BuiltinFunction::Transform(f) => f == tf,
-            _ => false,
-        }
+        matches!(self.function, BuiltinFunction::Transform(f) if f == tf)
     }
 }
 
@@ -1082,10 +1067,7 @@ impl AggregationExpr {
     }
 
     pub fn get_arg_for_optimization(&self) -> Option<&'_ Expr> {
-        match self.arg_idx_for_optimization() {
-            None => None,
-            Some(idx) => Some(&self.args[idx]),
-        }
+        self.arg_idx_for_optimization().and_then(|idx| self.args.get(idx))
     }
 
     pub fn arg_idx_for_optimization(&self) -> Option<usize> {

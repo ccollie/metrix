@@ -33,6 +33,11 @@ impl Context {
         self.storage = storage;
         self
     }
+    
+    pub fn with_config(mut self, config: SessionConfig) -> Self {
+        self.config = config;
+        self
+    }
 
     pub fn search(&self, sq: SearchQuery, deadline: Deadline) -> RuntimeResult<QueryResults> {
         use metricsql_common::async_runtime::*;

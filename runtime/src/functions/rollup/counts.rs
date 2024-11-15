@@ -53,9 +53,7 @@ fn sum_filtered(values: &[f64], limit: f64, pred: FloatPredicate) -> f64 {
 
 fn get_limit(args: &[QueryValue], func_name: &str, param_name: &str) -> RuntimeResult<f64> {
     get_float_arg(args, 0, None).map_err(|_| {
-        RuntimeError::ArgumentError(format!(
-            "expecting scalar as {param_name} arg to {func_name}()"
-        ))
+        RuntimeError::ArgumentError(format!("expecting scalar as {param_name} arg to {func_name}()"))
     })
 }
 

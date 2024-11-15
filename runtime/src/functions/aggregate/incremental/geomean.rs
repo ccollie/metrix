@@ -4,11 +4,7 @@ pub struct IncrementalAggrGeomean {}
 
 impl IncrementalAggrHandler for IncrementalAggrGeomean {
     fn update(&self, iac: &mut IncrementalAggrContext, values: &[f64]) {
-        for (i, v) in values.iter().enumerate() {
-            if v.is_nan() {
-                continue;
-            }
-
+        for (i, v) in values.iter().enumerate().filter(|(_, v)| !v.is_nan()) {
             if iac.values[i] == 0.0 {
                 iac.ts.values[i] = *v;
                 iac.values[i] = 1.0;
