@@ -1,3 +1,5 @@
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use metricsql_parser::ast::Expr;
@@ -18,6 +20,8 @@ use crate::functions::rollup::{
 };
 use crate::types::{get_timeseries, MetricName, Timeseries, Timestamp};
 use crate::{RuntimeError, RuntimeResult};
+
+const EMPTY_STRING: &str = "";
 
 /// The maximum interval without previous rows.
 pub const MAX_SILENCE_INTERVAL: i64 = 5 * 60 * 1000;
@@ -69,22 +73,31 @@ pub(crate) const FN_LOW: RollupHandler = RollupHandler::Wrapped(rollup_low);
 pub(crate) const FN_HIGH: RollupHandler = RollupHandler::Wrapped(rollup_high);
 
 
-fn get_tag_fn_from_str(name: &str) -> Option<&RollupHandler> {
+static MAX: &str = "max";
+static MIN: &str = "min";
+static AVG: &str = "avg";
+static OPEN: &str = "open";
+static CLOSE: &str = "close";
+static LOW: &str = "low";
+static HIGH: &str = "high";
+
+fn get_tag_fn_from_str(name: &str) -> Option<(&'static str, &RollupHandler)> {
     match name {
-        op if op.eq_ignore_ascii_case("min") => Some(&FN_MIN),
-        op if op.eq_ignore_ascii_case("max") => Some(&FN_MAX),
-        op if op.eq_ignore_ascii_case("avg") => Some(&FN_AVG),
-        op if op.eq_ignore_ascii_case("open") => Some(&FN_OPEN),
-        op if op.eq_ignore_ascii_case("close") => Some(&FN_CLOSE),
-        op if op.eq_ignore_ascii_case("low") => Some(&FN_LOW),
-        op if op.eq_ignore_ascii_case("high") => Some(&FN_HIGH),
+        op if op.eq_ignore_ascii_case(MIN) => Some((MIN, &FN_MIN)),
+        op if op.eq_ignore_ascii_case(MAX) => Some((MAX, &FN_MAX)),
+        op if op.eq_ignore_ascii_case(AVG) => Some((AVG, &FN_AVG)),
+        op if op.eq_ignore_ascii_case(OPEN) => Some((OPEN, &FN_OPEN)),
+        op if op.eq_ignore_ascii_case(CLOSE) => Some((CLOSE, &FN_CLOSE)),
+        op if op.eq_ignore_ascii_case(LOW) => Some((LOW, &FN_LOW)),
+        op if op.eq_ignore_ascii_case(HIGH) => Some((HIGH, &FN_HIGH)),
         _ => None,
     }
 }
 
+
 #[derive(Clone, Debug)]
 pub struct TagFunction {
-    pub tag_value: String,
+    pub tag_value: &'static str,
     pub func: RollupHandler,
 }
 
@@ -115,9 +128,10 @@ pub(crate) fn get_rollup_configs(
     shared_timestamps: &Arc<Vec<i64>>,
 ) -> RuntimeResult<(RollupConfigVec, PreFunctionVec)> {
 
-    let meta = get_rollup_function_handler_meta(expr, func, Some(rf))?;
+    let mut meta = get_rollup_function_handler_meta(expr, func, rf)?;
+    let pre_funcs = std::mem::take(&mut meta.pre_funcs);
     let rcs = get_rollup_configs_from_meta(
-        &meta,
+        meta,
         start,
         end,
         step,
@@ -128,11 +142,11 @@ pub(crate) fn get_rollup_configs(
         shared_timestamps,
     )?;
 
-    Ok((rcs, meta.pre_funcs))
+    Ok((rcs, pre_funcs))
 }
 
 pub(crate) fn get_rollup_configs_from_meta(
-    meta: &RollupFunctionHandlerMeta,
+    meta: RollupFunctionHandlerMeta,
     start: Timestamp,
     end: Timestamp,
     step: i64,
@@ -143,10 +157,10 @@ pub(crate) fn get_rollup_configs_from_meta(
     shared_timestamps: &Arc<Vec<i64>>,
 ) -> RuntimeResult<RollupConfigVec> {
 
-    let new_rollup_config = |rf: &RollupHandler, tag_value: String| -> RollupConfig {
+    let new_rollup_config = |rf: RollupHandler, tag_value: &'static str| -> RollupConfig {
         RollupConfig {
             tag_value,
-            handler: rf.clone(),
+            handler: rf,
             start,
             end,
             step,
@@ -163,8 +177,8 @@ pub(crate) fn get_rollup_configs_from_meta(
 
     let rcs = meta
         .functions
-        .iter()
-        .map(|nf| new_rollup_config(&nf.func, nf.tag_value.clone()))
+        .into_iter()
+        .map(|nf| new_rollup_config(nf.func, nf.tag_value))
         .collect::<RollupConfigVec>();
 
     Ok(rcs)
@@ -173,7 +187,7 @@ pub(crate) fn get_rollup_configs_from_meta(
 #[derive(Clone)]
 pub(crate) struct RollupConfig {
     /// This tag value must be added to "rollup" tag if non-empty.
-    pub tag_value: String,
+    pub tag_value: &'static str,
     pub handler: RollupHandler,
     pub start: Timestamp,
     pub end: Timestamp,
@@ -211,7 +225,7 @@ pub(crate) struct RollupConfig {
 impl Default for RollupConfig {
     fn default() -> Self {
         Self {
-            tag_value: "".to_string(),
+            tag_value: EMPTY_STRING,
             handler: RollupHandler::Fake("uninitialized"),
             start: 0,
             end: 0,
@@ -225,6 +239,16 @@ impl Default for RollupConfig {
             min_staleness_interval: 0,
             samples_scanned_per_call: 0,
         }
+    }
+}
+
+impl Display for RollupConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "RollupConfig(start={}, end={}, step={}, window={}, points={}, max_points_per_series={})",
+            self.start, self.end, self.step, self.window, self.timestamps.len(), self.max_points_per_series
+        )
     }
 }
 
@@ -297,7 +321,7 @@ impl RollupConfig {
 
     /// calculates rollup for the given timestamps and values and puts them to tsm.
     /// returns the number of samples scanned
-    pub(crate) fn do_timeseries_map(
+    fn do_timeseries_map(
         &self,
         tsm: Arc<TimeSeriesMap>,
         values: &[f64],
@@ -555,7 +579,7 @@ const fn get_max_prev_interval(scrape_interval: i64) -> i64 {
 fn get_rollup_function_handler_meta(
     expr: &Expr,
     func: RollupFunction,
-    rf: Option<&RollupHandler>,
+    rf: &RollupHandler,
 ) -> RuntimeResult<RollupFunctionHandlerMeta> {
     let mut pre_funcs: PreFunctionVec = PreFunctionVec::new();
 
@@ -563,17 +587,17 @@ fn get_rollup_function_handler_meta(
         pre_funcs.push(remove_counter_resets_pre_func);
     }
 
-    let new_function_config = |func: &RollupHandler, tag_value: &str| -> TagFunction {
+    let new_function_config = |func: &RollupHandler, tag_value: &'static str| -> TagFunction {
         TagFunction {
-            tag_value: tag_value.to_string(),
+            tag_value,
             func: func.clone(),
         }
     };
 
     let new_function_configs =
-        |dst: &mut TagFunctionVec, tag: Option<&String>, valid: &[&str]| -> RuntimeResult<()> {
+        |dst: &mut TagFunctionVec, tag: Option<&String>, valid: &'static [&str]| -> RuntimeResult<()> {
             if let Some(tag_value) = tag {
-                let func = get_tag_fn_from_str(tag_value).ok_or_else(|| {
+                let (name, func) = get_tag_fn_from_str(tag_value).ok_or_else(|| {
                     RuntimeError::ArgumentError(format!(
                         "unexpected rollup tag value {tag_value}; wanted {}",
                         valid
@@ -583,12 +607,12 @@ fn get_rollup_function_handler_meta(
                             .join(", ")
                     ))
                 })?;
-                dst.push(new_function_config(func, tag_value));
+                dst.push(new_function_config(func, name));
             } else {
                 for tag_value in valid {
-                    let func = get_tag_fn_from_str(tag_value).unwrap();
+                    let (name, func) = get_tag_fn_from_str(tag_value).unwrap();
                     dst.push(TagFunction {
-                        tag_value: tag_value.to_string(),
+                        tag_value: name,
                         func: func.clone(),
                     });
                 }
@@ -598,7 +622,7 @@ fn get_rollup_function_handler_meta(
         };
 
     let append_stats_function = |dst: &mut TagFunctionVec, expr: &Expr| -> RuntimeResult<()> {
-        static VALID: [&str; 3] = ["min", "max", "avg"];
+        static VALID: [&str; 3] = [MIN, MAX, AVG];
         let tag = get_rollup_tag(expr)?;
         new_function_configs(dst, tag, &VALID)
     };
@@ -617,7 +641,7 @@ fn get_rollup_function_handler_meta(
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupCandlestick => {
-            static VALID: [&str; 4] = ["open", "close", "low", "high"];
+            static VALID: [&str; 4] = [OPEN, CLOSE, LOW, HIGH];
             let tag = get_rollup_tag(expr)?;
             new_function_configs(&mut funcs, tag, &VALID)?;
         }
@@ -636,18 +660,16 @@ fn get_rollup_function_handler_meta(
                 let rollup_fn = get_rollup_fn(&rf)?;
                 let handler = RollupHandler::wrap(rollup_fn);
                 funcs.push(TagFunction {
-                    tag_value: rf.name().to_string(),
+                    tag_value: &*rf.name(),
                     func: handler,
                 });
             }
         }
         _ => {
-            if let Some(rf) = rf {
-                funcs.push(TagFunction {
-                    tag_value: String::from(""),
-                    func: rf.clone(),
-                });
-            }
+            funcs.push(TagFunction {
+                tag_value: EMPTY_STRING,
+                func: rf.clone(),
+            });
         }
     }
 
@@ -680,9 +702,7 @@ fn get_rollup_tag(expr: &Expr) -> RuntimeResult<Option<&String>> {
         let arg = &fe.args[1];
         if let Expr::StringLiteral(se) = arg {
             if se.is_empty() {
-                return Err(RuntimeError::ArgumentError(
-                    "unexpected empty rollup tag value".to_string(),
-                ));
+                return Err(RuntimeError::ArgumentError("unexpected empty rollup tag value".to_string()));
             }
             Ok(Some(se))
         } else {
