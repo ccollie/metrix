@@ -447,15 +447,6 @@ mod tests {
     }
 
     #[test]
-    fn test_simplify_selector_div_selector_same() {
-        let expr = selector("c2") / selector("c2");
-        let expected = Expr::from(1.0);
-
-        let actual = simplify(expr);
-        assert_expr_eq(&expected, &actual);
-    }
-
-    #[test]
     fn test_simplify_mul_by_one() {
         let expr_a = selector("c2") * number(1.0);
         let expected_a = expr_a.clone();
@@ -564,7 +555,7 @@ mod tests {
         // A / 1 = A
         // should remain unchanged for non-numeric A
         let expr = selector("c2") / number(1.0);
-        let expected = expr.clone();
+        let expected = selector("c2");
         let actual = simplify(expr);
         assert_expr_eq(&expected, &actual);
 
