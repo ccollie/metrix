@@ -189,10 +189,7 @@ impl SubqueryNode {
 
         let (mut res, samples_scanned_total) = process_series_in_parallel(
             &tss_sq,
-            move |ts_sq: &Timeseries,
-                  values: &mut [f64],
-                  timestamps: &[i64]|
-                  -> RuntimeResult<(Vec<Timeseries>, u64)> {
+            move |ts_sq: &Timeseries, values: &mut [f64], timestamps: &[i64]| -> RuntimeResult<(Vec<Timeseries>, u64)> {
                 let mut res = Vec::with_capacity(ts_sq.len());
 
                 eval_pre_funcs(&pre_funcs, values, timestamps);

@@ -110,8 +110,8 @@ pub struct EvalConfig {
     pub disable_cache: bool,
 
     /// Whether to return an error for queries that rely on implicit subquery conversions,
-    // 	see https://docs.victoriametrics.com/metricsql/#subqueries for details.
-    // 		"See also -search.logImplicitConversion.")
+    /// see https://docs.victoriametrics.com/metricsql/#subqueries for details.
+    /// 		"See also -search.logImplicitConversion.")
     pub disable_implicit_conversion: bool,
 
     /// The timestamps for the query.
