@@ -431,17 +431,20 @@ fn query_range_handler(
 /// with the previous point values, since these points may contain incomplete values.
 fn adjust_last_points(tss: &mut [QueryResult], start: Timestamp, end: Timestamp) {
     for ts in tss.iter_mut() {
-        let n = ts.timestamps.len();
-        if n <= 1 {
+        if ts.timestamps.len() <= 1 {
             continue;
         }
-        let mut j = n - 1;
-        if ts.timestamps[j] > end {
-            // It looks like the `offset` is used in the query, which shifts time range beyond the `end`.
-            // Leave such a time series as is, since it is unclear which points may be incomplete in it.
-            // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/625
-            continue;
+
+        if let Some(&last_timestamp) = ts.timestamps.last() {
+            if last_timestamp > end {
+                // It looks like the `offset` is used in the query, which shifts time range beyond the `end`.
+                // Leave such a time series as is, since it is unclear which points may be incomplete in it.
+                // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/625
+                continue;
+            }
         }
+        
+        let mut j = ts.timestamps.len() - 1;
 
         for v in ts.timestamps.iter().rev() {
             if *v > start {
