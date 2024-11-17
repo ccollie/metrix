@@ -2,6 +2,7 @@ use std::sync::RwLock;
 
 use ahash::AHashMap;
 use chrono::Utc;
+use std::time::Duration;
 
 use crate::execution::EvalConfig;
 use crate::types::{Timestamp, TimestampTrait};
@@ -21,7 +22,7 @@ pub struct ActiveQueries {
 pub struct ActiveQueryEntry {
     pub start: Timestamp,
     pub end: Timestamp,
-    pub step: i64,
+    pub step: Duration,
     pub qid: u64,
     pub quoted_remote_addr: String,
     pub q: String,

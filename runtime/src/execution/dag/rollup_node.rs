@@ -1,4 +1,3 @@
-use rayon::iter::IntoParallelRefMutIterator;
 use std::sync::{Arc, Mutex};
 use tracing::{field, trace_span, Span};
 
@@ -21,10 +20,9 @@ use crate::functions::aggregate::IncrementalAggrFuncContext;
 use crate::functions::rollup::{eval_pre_funcs, get_rollup_configs, RollupConfigVec, RollupHandler, MAX_SILENCE_INTERVAL};
 use crate::prelude::{is_empty_extra_matchers, join_matchers_with_extra_filters_owned};
 use crate::provider::{QueryResults, SearchQuery};
-use crate::rayon::iter::IndexedParallelIterator;
-use crate::rayon::iter::ParallelIterator;
+use crate::rayon::iter::{IndexedParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use crate::types::{QueryValue, Timeseries, Timestamp};
+use crate::types::{QueryValue, Timeseries, Timestamp, TimestampTrait};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RollupNode {
@@ -155,11 +153,13 @@ impl RollupNode {
 
         let span = {
             if ctx.trace_enabled() {
+                let window = window.as_millis() as u64;
+                let step = ec.step.as_millis() as u64;
                 trace_span!(
                     "rollup",
                     start = ec.start,
                     end = ec.end,
-                    step = ec.step,
+                    step,
                     window,
                     function = self.func.name(),
                     needed_memory_bytes = field::Empty
@@ -203,8 +203,7 @@ impl RollupNode {
             ec.step,
             ec.max_points_per_series,
         )?);
-
-        let min_staleness_interval = ctx.config.min_staleness_interval.num_milliseconds() as usize;
+        
         let (rcs, pre_funcs) = get_rollup_configs(
             self.func,
             &self.func_handler,
@@ -214,7 +213,7 @@ impl RollupNode {
             ec.step,
             window,
             ec.max_points_per_series,
-            min_staleness_interval,
+            ctx.config.min_staleness_interval,
             ec.lookback_delta,
             &shared_timestamps,
         )?;
@@ -227,13 +226,13 @@ impl RollupNode {
         let mut min_timestamp = start;
 
         if self.func.need_silence_interval() {
-            min_timestamp -= MAX_SILENCE_INTERVAL;
+            min_timestamp = min_timestamp.sub(MAX_SILENCE_INTERVAL);
         }
 
         if window > ec.step {
-            min_timestamp -= &window
+            min_timestamp = min_timestamp.sub(window);
         } else {
-            min_timestamp -= ec.step
+            min_timestamp = min_timestamp.sub(ec.step);
         }
 
         // if we don't have additional filters, borrow the existing matchers instead of cloning
@@ -478,7 +477,7 @@ impl RollupNode {
     ) -> RuntimeResult<usize> {
         // Verify timeseries fit available memory after the rollup.
         // Take into account points from tss_cached.
-        let points_per_timeseries = 1 + (ec.end - ec.start) / ec.step;
+        let points_per_timeseries = 1 + (ec.end - ec.start) / ec.step.as_millis() as i64;
 
         let rss_len = rss.len();
         let timeseries_len = if timeseries_limit > 0 {
@@ -508,7 +507,7 @@ impl RollupNode {
                               points_per_timeseries,
                               memory_limit,
                               rollup_memory_size as u64,
-                              ec.step as f64 / 1e3
+                              ec.step.as_secs_f64()
             );
 
             return Err(RuntimeError::ResourcesExhausted(msg));

@@ -1,9 +1,10 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-
+use std::time::Duration;
 use ahash::AHashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use metricsql_common::hash::Signature;
+use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::ast::VectorMatchModifier;
 
 use crate::runtime_error::{RuntimeError, RuntimeResult};
@@ -101,7 +102,7 @@ impl<'a> SeriesSlice<'a> {
     }
 }
 
-pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: i64) -> RuntimeResult<()> {
+pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: Duration) -> RuntimeResult<()> {
     if tss.is_empty() {
         return Ok(());
     }
@@ -116,12 +117,13 @@ pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: i64) -> Runt
     }
     if ts_golden.timestamps.len() > 0 {
         let mut prev_timestamp = ts_golden.timestamps[0];
+        let step_ms = step.as_millis() as i64;
         for timestamp in ts_golden.timestamps.iter().skip(1) {
-            if timestamp - prev_timestamp != step {
+            if timestamp - prev_timestamp != step_ms {
                 let msg = format!(
                     "BUG: invalid step between timestamps; got {}; want {};",
                     timestamp - prev_timestamp,
-                    step
+                    humanize_duration(&step)
                 );
                 return Err(RuntimeError::from(msg));
             }

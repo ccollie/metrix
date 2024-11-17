@@ -7,7 +7,7 @@ mod tests {
     use crate::functions::parse_timezone;
     use crate::functions::transform::get_timezone_offset;
     use crate::{test_results_equal, Deadline, QueryResult};
-    use chrono::Duration;
+    use std::time::Duration;
     use metricsql_common::label::Label;
     use metricsql_parser::parser::parse;
     use metricsql_parser::prelude::utils::is_likely_invalid;
@@ -19,7 +19,7 @@ mod tests {
 
     const START: Timestamp = 1000000_i64;
     const END: Timestamp = 2000000_i64;
-    const STEP: i64 = 200000_i64;
+    const STEP: Duration = Duration::from_millis(200000_u64);
 
     const TIMESTAMPS_EXPECTED: [Timestamp; 6] = [1000000, 1200000, 1400000, 1600000, 1800000, 2000000];
 
@@ -46,7 +46,8 @@ mod tests {
         ec.max_series = 1000;
         ec.max_points_per_series = 15000;
         ec.round_digits = 100;
-        ec.deadline = Deadline::new(Duration::minutes(1)).unwrap();
+        let timeout = Duration::from_millis(1000);
+        ec.deadline = Deadline::new(timeout).unwrap();
         let context = Context::default(); // todo: have a test gated default;
         for _ in 0..TEST_ITERATIONS {
             match exec(&context, &mut ec, q, false) {
@@ -1514,7 +1515,7 @@ mod tests {
         let mut r1 = make_result(&[8.0, 8.0, 8.0, 8.0, 8.0, 8.0]);
         r1.metric.set("foo", "9:0:15");
         
-        let mut r2 = make_result(&[5.0, 5.0, 5.0, 5.0, 5.0, 5.0]);
+        let r2 = make_result(&[5.0, 5.0, 5.0, 5.0, 5.0, 5.0]);
         r1.metric.set("foo", "7:0:15");
         
         let mut r3 = make_result(&[4.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
@@ -4988,7 +4989,7 @@ mod tests {
     #[test]
     fn test_exec_error() {
         fn f(q: &str) {
-            let mut ec = EvalConfig::new(1000, 2000, 100);
+            let mut ec = EvalConfig::new(1000, 2000, Duration::from_millis(100));
             ec.max_points_per_series = 100000;
             ec.max_series = 1000;
             let context = Arc::new(Context::default());

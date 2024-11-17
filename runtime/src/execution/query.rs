@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use chrono::Duration;
-
+use std::time::Duration;
+use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::prelude::{DurationExpr, Expr, Matchers};
 
 use crate::execution::{
@@ -16,8 +16,9 @@ use crate::{
 };
 
 /// Default step used if not set.
-const DEFAULT_STEP: i64 = 5 * 60 * 1000;
-const TWO_DAYS_MSECS: i64 = 2 * 24 * 3600 * 1000;
+const DEFAULT_STEP: Duration = Duration::from_millis( 5 * 60 * 1000);
+const TWO_DAYS_MSECS: u64 = 2 * 24 * 3600 * 1000;
+const TWO_DAYS: Duration = Duration::from_millis(TWO_DAYS_MSECS);
 
 #[derive(Clone, Debug)]
 pub struct QueryParams {
@@ -38,7 +39,7 @@ impl Default for QueryParams {
             may_cache: true,
             start: 0,
             end: 0,
-            step: Duration::milliseconds(DEFAULT_STEP),
+            step: DEFAULT_STEP,
             deadline: Default::default(),
             round_digits: 100,
             required_tag_filters: None,
@@ -70,8 +71,8 @@ impl QueryParams {
             return Err(RuntimeError::from(msg));
         }
 
-        if self.step.num_milliseconds() <= 0 {
-            let msg = format!("BUG: step must be greater than 0; got {}", self.step);
+        if self.step.is_zero() {
+            let msg = format!("BUG: step must be greater than 0; got {}", humanize_duration(&self.step));
             return Err(RuntimeError::from(msg));
         }
 
@@ -157,7 +158,7 @@ impl QueryBuilder {
         let mut end = self.end.unwrap_or(start);
 
         // Limit the `end` arg to the current time +2 days to prevent possible timestamp overflow
-        let max_ts = start + TWO_DAYS_MSECS;
+        let max_ts = start.add(TWO_DAYS);
         if end > max_ts {
             end = max_ts
         }
@@ -167,15 +168,13 @@ impl QueryBuilder {
 
         let timeout = self
             .timeout
-            .unwrap_or_else(|| Duration::milliseconds(TWO_DAYS_MSECS));
+            .unwrap_or(TWO_DAYS);
 
         q.query.clone_from(&self.query);
         q.start = start;
         q.end = end;
         q.may_cache = !self.no_cache;
-        q.step = self
-            .step
-            .unwrap_or_else(|| Duration::milliseconds(DEFAULT_STEP));
+        q.step = self.step.unwrap_or(DEFAULT_STEP);
         q.required_tag_filters.clone_from(&self.extra_tag_filters);
         q.round_digits = self.round_digits;
         q.deadline = get_deadline_for_query(context, q.start, Some(timeout))?;
@@ -206,15 +205,14 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
     let ct = Timestamp::now();
     let mut start = params.start;
     let mut end = params.end;
-    let step_millis = params.step.num_milliseconds();
 
-    let lookback_delta = get_max_lookback(context, step_millis, Some(TWO_DAYS_MSECS));
-    let mut step = if step_millis == 0 {
+    let lookback_delta = get_max_lookback(context, params.step, Some(TWO_DAYS));
+    let mut step = if params.step.is_zero() {
         lookback_delta
     } else {
-        step_millis
+        params.step
     };
-    if step <= 0 {
+    if step.is_zero() {
         step = DEFAULT_STEP
     }
 
@@ -239,7 +237,6 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
             }
 
             // Fetch the remaining part of the result.
-
             let cp = if is_empty_extra_matchers(&params.required_tag_filters) {
                 CommonParams {
                     deadline: params.deadline,
@@ -271,8 +268,8 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
         }
 
         // we have a rollup with a non-empty window
-        let new_step = rollup.step.value(step);
-        if new_step > 0 {
+        let new_step = rollup.step.as_duration(step);
+        if !new_step.is_zero() {
             step = new_step
         }
         let window = rollup.window.value(step);
@@ -289,14 +286,14 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
         return match query_range_handler(context, ct, params) {
             Err(err) => {
                 let msg = format!("error when executing query={} on the time range (start={}, end={}, step={}): {:?}",
-                                  &params_copy.query, start, end, step, err);
+                                  &params_copy.query, start, end, humanize_duration(&step), err);
                 return Err(RuntimeError::General(msg));
             }
             Ok(v) => Ok(v),
         };
     }
 
-    let mut query_offset = get_latency_offset_milliseconds(context);
+    let mut query_offset = get_latency_offset_milliseconds(context) as i64;
     if params.may_cache && ct - start < query_offset && start - ct < query_offset {
         // Adjust start time only if `nocache` arg isn't set.
         // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/241
@@ -321,8 +318,8 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
     match exec(context, &mut ec, &params.query, true) {
         Err(err) => {
             let msg = format!(
-                "error executing query={} for (time={start}, step={step}): {:?}",
-                &params.query, err
+                "error executing query={} for (time={start}, step={}): {:?}",
+                &params.query, humanize_duration(&step), err
             );
             Err(RuntimeError::General(msg))
         }
@@ -357,8 +354,8 @@ fn export_handler(ctx: &Context, cp: CommonParams) -> RuntimeResult<QueryResults
 /// See https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
 pub fn query_range(ctx: &Context, params: &QueryParams) -> RuntimeResult<Vec<QueryResult>> {
     let ct = Timestamp::now();
-    let mut step = params.step.num_milliseconds();
-    if step <= 0 {
+    let mut step = params.step;
+    if step.is_zero() {
         step = DEFAULT_STEP;
     }
 
@@ -366,7 +363,7 @@ pub fn query_range(ctx: &Context, params: &QueryParams) -> RuntimeResult<Vec<Que
         Err(err) => {
             let msg = format!(
                 "error executing query={} on the time range (start={}, end={} step={}): {:?}",
-                &params.query, params.start, params.end, step, err
+                &params.query, params.start, params.end, humanize_duration(&step), err
             );
             Err(RuntimeError::General(msg))
         }
@@ -381,9 +378,9 @@ fn query_range_handler(
 ) -> RuntimeResult<Vec<QueryResult>> {
     let config = &ctx.config;
 
-    let (mut start, mut end, mut step) = (params.start, params.end, params.step.num_milliseconds());
+    let (mut start, mut end, mut step) = (params.start, params.end, params.step);
 
-    if step <= 0 {
+    if step.is_zero() {
         step = DEFAULT_STEP
     }
 
@@ -391,7 +388,7 @@ fn query_range_handler(
 
     // Validate input args.
     if start > end {
-        end = start + DEFAULT_STEP
+        end = start.add(DEFAULT_STEP);
     }
 
     let max_points = ctx.config.max_points_subquery_per_timeseries;
@@ -413,10 +410,10 @@ fn query_range_handler(
     ec.update_from_context(ctx);
 
     let mut result = exec(ctx, &mut ec, &params.query, false)?;
-    if step < config.max_step_for_points_adjustment.num_milliseconds() {
-        let query_offset = get_latency_offset_milliseconds(ctx);
+    if step < config.max_step_for_points_adjustment {
+        let query_offset = get_latency_offset_milliseconds(ctx) as i64; // suspicious cast
         if ct - query_offset < end {
-            adjust_last_points(&mut result, ct - query_offset, ct + step)
+            adjust_last_points(&mut result, ct - query_offset, ct.add(step))
         }
     }
 
@@ -444,15 +441,7 @@ fn adjust_last_points(tss: &mut [QueryResult], start: Timestamp, end: Timestamp)
             }
         }
         
-        let mut j = ts.timestamps.len() - 1;
-
-        for v in ts.timestamps.iter().rev() {
-            if *v > start {
-                j -= 1;
-            } else {
-                break;
-            }
-        }
+        let mut j = ts.timestamps.iter().rposition(|&v| v <= start).unwrap_or(0);
 
         let mut last_value = f64::NAN;
         if j > 0 {
@@ -466,17 +455,21 @@ fn adjust_last_points(tss: &mut [QueryResult], start: Timestamp, end: Timestamp)
     }
 }
 
-fn get_max_lookback(ctx: &Context, step: i64, max: Option<i64>) -> i64 {
+fn get_max_lookback(ctx: &Context, step: Duration, max: Option<Duration>) -> Duration {
     let config = &ctx.config;
-    let mut d = config.max_lookback.num_milliseconds();
-    if d == 0 {
-        d = config.max_staleness_interval.num_milliseconds()
+    let d = if config.max_lookback.is_zero() {
+        config.max_staleness_interval
+    } else {
+        config.max_lookback
+    };
+
+    let d = max.unwrap_or(d);
+
+    if config.set_lookback_to_step && !step.is_zero() {
+        step
+    } else {
+        d
     }
-    d = max.unwrap_or(d);
-    if config.set_lookback_to_step && step > 0 {
-        d = step;
-    }
-    d
 }
 
 struct DeconstructedRollup<'a> {
@@ -524,12 +517,12 @@ fn get_duration_expr(offset: &Option<DurationExpr>) -> Cow<DurationExpr> {
     }
 }
 
-fn get_latency_offset_milliseconds(ctx: &Context) -> i64 {
-    std::cmp::min(ctx.config.latency_offset.num_milliseconds(), 1000)
+fn get_latency_offset_milliseconds(ctx: &Context) -> u64 {
+    std::cmp::min(ctx.config.latency_offset.as_millis() as u64, 1000)
 }
 
-fn validate_duration(arg_key: &str, duration: Duration, default_value: i64) -> RuntimeResult<()> {
-    let mut msecs = duration.num_milliseconds();
+fn validate_duration(arg_key: &str, duration: Duration, default_value: u64) -> RuntimeResult<()> {
+    let mut msecs = duration.as_millis() as u64;
     if msecs == 0 {
         msecs = default_value
     }
@@ -553,26 +546,26 @@ where
     T: Into<Timestamp>,
     D: Into<Duration>,
 {
-    let d_max = ctx.config.max_query_duration.num_milliseconds();
+    let d_max = ctx.config.max_query_duration.as_millis() as u64;
     get_deadline_with_max_duration(duration, start_time, d_max)
 }
 
 fn get_deadline_with_max_duration<D, T>(
     candidate: Option<D>,
     start_time: T,
-    d_max: i64,
+    d_max: u64,
 ) -> RuntimeResult<Deadline>
 where
     T: Into<Timestamp>,
     D: Into<Duration>,
 {
     let mut d = if let Some(val) = candidate {
-        val.into().num_milliseconds()
+        val.into().as_millis() as u64
     } else {
         0
     };
     if d == 0 || d > d_max {
         d = d_max
     }
-    Deadline::with_start_time(start_time, Duration::milliseconds(d))
+    Deadline::with_start_time(start_time, Duration::from_millis(d))
 }

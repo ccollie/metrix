@@ -117,7 +117,7 @@ pub fn parse_load(lines: &[String], i: usize) -> Result<(usize, TestCommand), Pa
         .map(|m| m.unwrap().as_str())
         .collect();
 
-    let with_nhcb = parts[1] == "with_nhcb";
+    //let with_nhcb = parts[1] == "with_nhcb";
     let step = parts[2];
     let gap_millis = parse_duration_value(step, 1)
         .map_err(|e| raise(i, format!("invalid test definition, failed to parse step: {:?}", e)))?;

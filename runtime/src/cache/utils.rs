@@ -85,9 +85,10 @@ pub fn merge_series(
         } else {
             if a_nans.is_empty() {
                 let mut t_start = ec.start;
+                let step = ec.step.as_millis() as i64;
                 while t_start < b_start {
                     a_nans.push(f64::NAN);
-                    t_start += ec.step;
+                    t_start += step;
                 }
             }
             tmp.values.extend_from_slice(&a_nans);
@@ -108,9 +109,10 @@ pub fn merge_series(
 
         if b_nans.is_empty() {
             let mut t_start = b_start;
+            let step = ec.step.as_millis() as i64;
             while t_start <= ec.end {
                 b_nans.push(f64::NAN);
-                t_start += ec.step;
+                t_start += step;
             }
         }
         tmp.values.extend_from_slice(&b_nans);
@@ -124,6 +126,7 @@ pub fn merge_series(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
     use super::*;
     use crate::types::MetricName;
 
@@ -135,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_merge_series() {
-        let mut ec = EvalConfig::new(1000, 2000, 200);
+        let mut ec = EvalConfig::new(1000, 2000, Duration::from_millis(200));
         ec.max_points_per_series = 10000;
 
         // Test case: bStart=ec.Start

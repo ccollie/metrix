@@ -571,23 +571,24 @@ impl DurationExpr {
     }
 
     /// Duration returns the duration from de in milliseconds.
-    pub fn value(&self, step: i64) -> i64 {
+    pub fn value(&self, step: Duration) -> i64 {
         match self {
             DurationExpr::Millis(v) => *v,
-            DurationExpr::StepValue(v) => (*v * step as f64) as i64,
+            DurationExpr::StepValue(v) => (*v * (step.as_millis() as f64)) as i64,
         }
     }
 
-    pub fn value_as_secs(&self, step: i64) -> i64 {
+    pub fn as_duration(&self, step: Duration) -> Duration {
+        match self {
+            DurationExpr::Millis(v) => Duration::from_millis(*v as u64),
+            DurationExpr::StepValue(v) => { 
+                let millis = *v * step.as_millis() as f64;
+                Duration::from_millis(millis as u64)
+            },
+        }
+    }
+    pub fn value_as_secs(&self, step: Duration) -> i64 {
         self.value(step) / 1000
-    }
-
-    pub fn non_negative_value(&self, step: i64) -> Result<i64, String> {
-        let v = self.value(step);
-        if v < 0 {
-            return Err(format!("unexpected negative duration {v}dms").to_string());
-        }
-        Ok(v)
     }
 
     pub fn return_type(&self) -> ValueType {

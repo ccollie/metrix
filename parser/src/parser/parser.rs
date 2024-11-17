@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 use std::sync::Arc;
-
+use std::time::Duration;
 use logos::{Logos, Span};
 
 use crate::ast::{DurationExpr, Expr, ParensExpr, StringExpr, WithArgExpr};
@@ -108,9 +108,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn prev_token(&mut self) -> Option<&TokenWithLocation<'a>> {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-        }
+        self.cursor = self.cursor.saturating_sub(1);
         self.tokens.get(self.cursor)
     }
 
@@ -236,7 +234,7 @@ impl<'a> Parser<'a> {
     pub fn parse_positive_duration(&mut self) -> ParseResult<DurationExpr> {
         // Verify the duration in seconds without explicit suffix.
         let duration = self.parse_duration()?;
-        let val = duration.value(1);
+        let val = duration.value(Duration::from_millis(1));
         if val < 0 {
             Err(ParseError::InvalidDuration(duration.to_string()))
         } else {
@@ -391,9 +389,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn back(&mut self) {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-        }
+        self.cursor = self.cursor.saturating_sub(1);
     }
 
     pub(super) fn at(&self, kind: &Token) -> bool {

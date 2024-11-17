@@ -1,6 +1,6 @@
 use std::hash::Hasher;
 use std::sync::{Arc, Mutex, OnceLock};
-
+use std::time::Duration;
 use ahash::AHashMap;
 /// import commonly used items from the prelude:
 use rand::prelude::*;
@@ -28,7 +28,7 @@ use crate::types::{assert_identical_timestamps, SeriesSlice, Timestamp, Timeseri
 /// due to time synchronization issues between this library and data sources. See also
 /// -provider.disableAutoCacheReset
 /// TODO: move to EvalConfig
-static CACHE_TIMESTAMP_OFFSET: i64 = 5000;
+static CACHE_TIMESTAMP_OFFSET: Duration = Duration::from_secs(5);
 static ROLLUP_RESULT_CACHE_KEY_PREFIX: OnceLock<u64> = OnceLock::new();
 
 fn get_rollup_result_cache_key_prefix() -> u64 {
@@ -126,19 +126,21 @@ impl RollupResultCache {
         &self,
         ec: &EvalConfig,
         expr: &Expr,
-        window: i64,
+        window: Duration,
     ) -> RuntimeResult<(Option<Vec<Timeseries>>, i64)> {
         let is_tracing = span_enabled!(Level::TRACE);
 
         let span = if is_tracing {
             let mut query = expr.to_string();
             query.truncate(300);
+            let window = window.as_millis() as u64;
+            let step = ec.step.as_millis() as u64;
             trace_span!(
                 "rollup_cache::get",
                 query,
                 start = ec.start,
                 end = ec.end,
-                step = ec.step,
+                step,
                 series = field::Empty,
                 window
             )
@@ -229,12 +231,13 @@ impl RollupResultCache {
             info!("cached series don't cover the given timeRange");
             return Ok((None, ec.start));
         }
+        let last = timestamps[timestamps.len() - 1];
 
-        let new_start = timestamps[timestamps.len() - 1] + ec.step;
+        let new_start = last.add(ec.step);
 
         if is_tracing {
             let start_string = ec.start.to_rfc3339();
-            let end_string = (new_start - ec.step).to_rfc3339();
+            let end_string = new_start.sub(ec.step).to_rfc3339();
             span.record("series", tss.len());
 
             // todo: store as properties
@@ -253,19 +256,23 @@ impl RollupResultCache {
         &self,
         ec: &EvalConfig,
         expr: &Expr,
-        window: i64,
+        window: Duration,
         tss: &[Timeseries],
     ) -> RuntimeResult<()> {
         let is_tracing = span_enabled!(Level::TRACE);
         let span = if is_tracing {
             let mut query = expr.to_string();
             query.truncate(300);
+            
+            let window = window.as_millis() as u64;
+            let step = ec.step.as_millis() as u64;
+            
             trace_span!(
                 "rollup_cache::put",
                 query,
                 start = ec.start,
                 end = ec.end,
-                step = ec.step,
+                step,
                 series = field::Empty,
                 window
             )
@@ -287,8 +294,7 @@ impl RollupResultCache {
         // Remove values up to currentTime - step - CACHE_TIMESTAMP_OFFSET,
         // since these values may be added later.
         let timestamps = tss[0].timestamps.as_slice();
-        let deadline =
-            (Timestamp::now() as f64 / 1e6_f64) as i64 - ec.step - CACHE_TIMESTAMP_OFFSET;
+        let deadline = Timestamp::now() - (ec.step - CACHE_TIMESTAMP_OFFSET).as_millis() as i64;
         let mut i = timestamps.len() - 1;
         // todo: use binary search
         while i > 0 && timestamps[i] > deadline {
@@ -325,7 +331,7 @@ impl RollupResultCache {
         tss: &[SeriesSlice],
         ec: &EvalConfig,
         expr: &Expr,
-        window: i64,
+        window: Duration,
         span: &EnteredSpan,
     ) -> RuntimeResult<()> {
         let is_tracing = span_enabled!(Level::TRACE);
@@ -412,7 +418,7 @@ impl RollupResultCache {
         inner: &mut Inner,
         ec: &EvalConfig,
         expr: &Expr,
-        window: i64,
+        window: Duration,
     ) -> RuntimeResult<Option<(RollupResultCacheMetaInfo, u64)>> {
         let hash = marshal_rollup_result_cache_key(
             &mut inner.hasher,
@@ -458,8 +464,8 @@ const ROLLUP_TYPE_TIMESERIES: u8 = 0;
 fn marshal_rollup_result_cache_key_internal(
     hasher: &mut Xxh3,
     expr: &Expr,
-    window: i64,
-    step: i64,
+    window: Duration,
+    step: Duration,
     etfs: &Option<Matchers>,
     cache_type: u8,
 ) -> u64 {
@@ -469,8 +475,8 @@ fn marshal_rollup_result_cache_key_internal(
     hasher.write_u8(ROLLUP_RESULT_CACHE_VERSION);
     hasher.write_u64(prefix);
     hasher.write_u8(cache_type);
-    hasher.write_i64(window);
-    hasher.write_i64(step);
+    hasher.write_u128(window.as_millis());
+    hasher.write_u128(step.as_millis());
     hasher.write(format!("{}", expr).as_bytes());
 
     if let Some(etfs) = etfs {
@@ -489,8 +495,8 @@ fn marshal_rollup_result_cache_key_internal(
 fn marshal_rollup_result_cache_key(
     hasher: &mut Xxh3,
     expr: &Expr,
-    window: i64,
-    step: i64,
+    window: Duration,
+    step: Duration,
     etfs: &Option<Matchers>,
 ) -> u64 {
     marshal_rollup_result_cache_key_internal(
@@ -552,9 +558,10 @@ pub fn merge_timeseries(
         match map.get_mut(&key) {
             None => {
                 let mut t_start = ec.start;
+                let step = ec.step.as_millis() as i64;
                 while t_start < b_start {
                     tmp.values.push(f64::NAN);
-                    t_start += ec.step;
+                    t_start = t_start + step;
                 }
             }
             Some(ts_a) => {
@@ -572,10 +579,10 @@ pub fn merge_timeseries(
     // todo: collect() then rvs.extend()
     // Copy the remaining timeseries from m.
     for ts_a in map.values_mut() {
-        let mut t_start = b_start;
+        let t_start = b_start;
         while t_start <= ec.end {
             ts_a.values.push(f64::NAN);
-            t_start += ec.step;
+            t_start.add(ec.step);
         }
 
         validate_timeseries_length(ts_a)?;

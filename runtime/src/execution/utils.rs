@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-
+use std::time::Duration;
 use rayon::iter::IntoParallelRefIterator;
 
 use metricsql_common::pool::{get_pooled_vec_f64, get_pooled_vec_i64};
@@ -29,13 +29,14 @@ pub(crate) fn adjust_eval_range<'a>(
     func: &RollupFunction,
     offset: &Option<DurationExpr>,
     ec: &'a EvalConfig,
-) -> RuntimeResult<(i64, Cow<'a, EvalConfig>)> {
+) -> RuntimeResult<(Duration, Cow<'a, EvalConfig>)> {
     let mut ec_new = Cow::Borrowed(ec);
-    let mut offset: i64 = duration_value(offset, ec.step);
-    if offset != 0 {
+    let mut offset = duration_value(offset, ec.step);
+    if !offset.is_zero() {
         let mut result = ec.copy_no_timestamps();
-        result.start -= offset;
-        result.end -= offset;
+        let ofs_ms = offset.as_millis() as i64;
+        result.start -= ofs_ms;
+        result.end -= ofs_ms;
         ec_new = Cow::Owned(result);
         // There is no need in calling adjust_start_end() on ec_new if ecNew.may_cache is set to true,
         // since the time range alignment has been already performed by the caller,
@@ -47,28 +48,24 @@ pub(crate) fn adjust_eval_range<'a>(
         // Automatically apply `offset -step` to `rollup_candlestick` function
         // in order to obtain expected OHLC results.
         // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/309#issuecomment-582113462
-        let step = ec_new.step;
+        let step = ec_new.step.as_millis() as i64;
         let mut result = ec_new.copy_no_timestamps();
         result.start += step;
         result.end += step;
-        offset -= step;
+        offset -= ec_new.step;
         ec_new = Cow::Owned(result);
     }
 
     Ok((offset, ec_new))
 }
 
-pub(crate) fn duration_value(dur: &Option<DurationExpr>, step: i64) -> i64 {
-    if let Some(ofs) = dur {
-        ofs.value(step)
-    } else {
-        0
-    }
+pub(crate) fn duration_value(dur: &Option<DurationExpr>, step: Duration) -> Duration {
+    dur.as_ref().map_or(Duration::ZERO, |ofs| ofs.as_duration(step))
 }
 
-pub(crate) fn get_step(expr: &Option<DurationExpr>, step: i64) -> i64 {
+pub(crate) fn get_step(expr: &Option<DurationExpr>, step: Duration) -> Duration {
     let res = duration_value(expr, step);
-    if res == 0 {
+    if res.is_zero() {
         step
     } else {
         res

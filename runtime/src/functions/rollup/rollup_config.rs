@@ -1,7 +1,8 @@
+use metricsql_common::prelude::humanize_duration;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-
+use std::time::Duration;
 use metricsql_parser::ast::Expr;
 use metricsql_parser::functions::{RollupFunction};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -24,7 +25,7 @@ use crate::{RuntimeError, RuntimeResult};
 const EMPTY_STRING: &str = "";
 
 /// The maximum interval without previous rows.
-pub const MAX_SILENCE_INTERVAL: i64 = 5 * 60 * 1000;
+pub const MAX_SILENCE_INTERVAL: Duration = Duration::from_secs(5);
 
 pub(crate) type PreFunction = fn(&mut [f64], &[Timestamp]) -> ();
 
@@ -120,11 +121,11 @@ pub(crate) fn get_rollup_configs(
     expr: &Expr,
     start: Timestamp,
     end: Timestamp,
-    step: i64,
-    window: i64,
+    step: Duration,
+    window: Duration,
     max_points_per_series: usize,
-    min_staleness_interval: usize,
-    lookback_delta: i64,
+    min_staleness_interval: Duration,
+    lookback_delta: Duration,
     shared_timestamps: &Arc<Vec<i64>>,
 ) -> RuntimeResult<(RollupConfigVec, PreFunctionVec)> {
 
@@ -149,11 +150,11 @@ pub(crate) fn get_rollup_configs_from_meta(
     meta: RollupFunctionHandlerMeta,
     start: Timestamp,
     end: Timestamp,
-    step: i64,
-    window: i64,
+    step: Duration,
+    window: Duration,
     max_points_per_series: usize,
-    min_staleness_interval: usize,
-    lookback_delta: i64,
+    min_staleness_interval: Duration,
+    lookback_delta: Duration,
     shared_timestamps: &Arc<Vec<i64>>,
 ) -> RuntimeResult<RollupConfigVec> {
 
@@ -191,8 +192,8 @@ pub(crate) struct RollupConfig {
     pub handler: RollupHandler,
     pub start: Timestamp,
     pub end: Timestamp,
-    pub step: i64,
-    pub window: i64,
+    pub step: Duration,
+    pub window: Duration,
 
     /// Whether window may be adjusted to 2 x interval between data points.
     /// This is needed for functions which have dt in the denominator
@@ -204,7 +205,7 @@ pub(crate) struct RollupConfig {
     pub timestamps: Arc<Vec<i64>>,
 
     /// lookback_delta is the analog to `-query.lookback-delta` from Prometheus world.
-    pub lookback_delta: i64,
+    pub lookback_delta: Duration,
 
     /// Whether default_rollup is used.
     pub is_default_rollup: bool,
@@ -214,7 +215,7 @@ pub(crate) struct RollupConfig {
 
     /// The minimum interval for staleness calculations. This could be useful for removing gaps on
     /// graphs generated from time series with irregular intervals between samples.
-    pub min_staleness_interval: usize,
+    pub min_staleness_interval: Duration,
 
     /// The estimated number of samples scanned per Func call.
     ///
@@ -229,14 +230,14 @@ impl Default for RollupConfig {
             handler: RollupHandler::Fake("uninitialized"),
             start: 0,
             end: 0,
-            step: 0,
-            window: 0,
+            step: Duration::ZERO,
+            window: Duration::ZERO,
             may_adjust_window: false,
             timestamps: Arc::new(vec![]),
-            lookback_delta: 0,
+            lookback_delta: Duration::ZERO,
             is_default_rollup: false,
             max_points_per_series: 0,
-            min_staleness_interval: 0,
+            min_staleness_interval: Duration::ZERO,
             samples_scanned_per_call: 0,
         }
     }
@@ -247,7 +248,8 @@ impl Display for RollupConfig {
         write!(
             f,
             "RollupConfig(start={}, end={}, step={}, window={}, points={}, max_points_per_series={})",
-            self.start, self.end, self.step, self.window, self.timestamps.len(), self.max_points_per_series
+            self.start, self.end, humanize_duration(&self.step), humanize_duration(&self.window), 
+            self.timestamps.len(), self.max_points_per_series
         )
     }
 }
@@ -343,34 +345,36 @@ impl RollupConfig {
 
         let scrape_interval = get_scrape_interval(timestamps);
         let mut max_prev_interval = get_max_prev_interval(scrape_interval);
-        if self.lookback_delta > 0 && max_prev_interval > self.lookback_delta {
+        if !self.lookback_delta.is_zero() && max_prev_interval > self.lookback_delta {
             max_prev_interval = self.lookback_delta;
         }
-        if self.min_staleness_interval > 0 {
-            let msi = self.min_staleness_interval as i64;
-            if msi > 0 && max_prev_interval < msi {
+        if !self.min_staleness_interval.is_zero() {
+            let msi = self.min_staleness_interval;
+            if !msi.is_zero() && max_prev_interval < msi {
                 max_prev_interval = msi;
             }
         }
         
-        let mut window = if self.window > 0 { self.window } else { self.step };
+        let mut window = if !self.window.is_zero() { self.window } else { self.step };
         if self.may_adjust_window && window < max_prev_interval {
             window = max_prev_interval;
         }
-        if self.is_default_rollup && self.lookback_delta > 0 && window > self.lookback_delta {
+        if self.is_default_rollup && !self.lookback_delta.is_zero() && window > self.lookback_delta {
             window = self.lookback_delta;
         }
 
         let mut samples_scanned = values.len() as u64;
         let samples_scanned_per_call = self.samples_scanned_per_call as u64;
+        let window_ms = window.as_millis() as i64;
+        let max_prev_interval = max_prev_interval.as_millis() as i64;
 
         let func_args: Vec<_> = self.timestamps.iter().enumerate().map(|(idx, &t_end)| {
-            let t_start = t_end - window;
+            let t_start = t_end - window_ms;
             let i = seek_first_timestamp_idx_after(&timestamps, t_start, 0);
             let j = seek_first_timestamp_idx_after(&timestamps, t_end, i);
 
             let mut rfa = RollupFuncArg::default();
-            rfa.window = window;
+            rfa.window = window_ms;
             rfa.prev_value = if i > 0 && timestamps[i - 1] > t_start - max_prev_interval {
                 values[i - 1]
             } else {
@@ -417,8 +421,8 @@ impl RollupConfig {
 
     fn validate(&self) -> RuntimeResult<()> {
         // Sanity checks.
-        if self.step <= 0 {
-            let msg = format!("BUG: step must be bigger than 0; got {}", self.step);
+        if self.step.is_zero() {
+            let msg = format!("BUG: step must be bigger than 0; got {}", humanize_duration(&self.step));
             return Err(RuntimeError::from(msg));
         }
         if self.start > self.end {
@@ -426,10 +430,6 @@ impl RollupConfig {
                 "BUG: start cannot exceed end; got {} vs {}",
                 self.start, self.end
             );
-            return Err(RuntimeError::from(msg));
-        }
-        if self.window < 0 {
-            let msg = format!("BUG: window must be non-negative; got {}", self.window);
             return Err(RuntimeError::from(msg));
         }
         match validate_max_points_per_timeseries(
@@ -531,7 +531,7 @@ fn seek_first_timestamp_idx_after(
     }
 }
 
-fn get_scrape_interval(timestamps: &[Timestamp]) -> i64 {
+fn get_scrape_interval(timestamps: &[Timestamp]) -> Duration {
     if timestamps.len() < 2 {
         return MAX_SILENCE_INTERVAL;
     }
@@ -550,29 +550,33 @@ fn get_scrape_interval(timestamps: &[Timestamp]) -> i64 {
     if scrape_interval <= 0 {
         return MAX_SILENCE_INTERVAL;
     }
-    scrape_interval
+    Duration::from_millis(scrape_interval as u64)
 }
 
-const fn get_max_prev_interval(scrape_interval: i64) -> i64 {
+const fn get_max_prev_interval(scrape_interval: Duration) -> Duration {
+    let scrape_interval = scrape_interval.as_millis() as i64;
     // Increase scrape_interval more for smaller scrape intervals in order to hide possible gaps
     // when high jitter is present.
     // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/139 .
-    if scrape_interval <= 2_000i64 {
-        return scrape_interval + 4 * scrape_interval;
+    let interval = if scrape_interval <= 2_000i64 {
+        scrape_interval + 4 * scrape_interval
+    } else if scrape_interval <= 4_000i64 {
+        scrape_interval + 2 * scrape_interval
+    } else if scrape_interval <= 8_000i64 {
+        scrape_interval + scrape_interval
+    } else if scrape_interval <= 16_000i64 {
+        scrape_interval + scrape_interval / 2
+    } else if scrape_interval <= 32_000i64 {
+        scrape_interval + scrape_interval / 4
+    } else {
+        scrape_interval + scrape_interval / 8
+    };
+
+    if interval < 0 {
+        Duration::from_secs(0)
+    } else {
+        Duration::from_millis(interval as u64)
     }
-    if scrape_interval <= 4_000i64 {
-        return scrape_interval + 2 * scrape_interval;
-    }
-    if scrape_interval <= 8_000i64 {
-        return scrape_interval + scrape_interval;
-    }
-    if scrape_interval <= 16_000i64 {
-        return scrape_interval + scrape_interval / 2;
-    }
-    if scrape_interval <= 32_000i64 {
-        return scrape_interval + scrape_interval / 4;
-    }
-    scrape_interval + scrape_interval / 8
 }
 
 
