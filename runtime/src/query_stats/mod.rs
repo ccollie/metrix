@@ -2,10 +2,9 @@ use std::cmp::Ordering;
 use std::ops::Sub;
 use std::sync::RwLock;
 
+use crate::prelude::Timestamp;
 use ahash::AHashMap;
-use chrono::prelude::DateTime;
-use chrono::prelude::Utc;
-use chrono::Duration;
+use std::time::{Duration, SystemTime};
 
 const QUERY_STATS_DEFAULT_CAPACITY: usize = 250;
 
@@ -18,18 +17,19 @@ pub struct QueryStatKey {
 #[derive(Hash, Clone, Debug)]
 pub struct QueryStatRecord {
     pub key: QueryStatKey,
-    pub register_time: DateTime<Utc>,
+    pub register_time: SystemTime,
     pub duration: Duration,
 }
 
 impl QueryStatRecord {
-    pub(crate) fn matches(&self, current_time: DateTime<Utc>, max_lifetime: Duration) -> bool {
+    pub(crate) fn matches(&self, current_time: SystemTime, max_lifetime: Duration) -> bool {
         if self.key.query.is_empty() {
             return false;
         }
-        let elapsed = current_time.sub(self.register_time);
-        if elapsed.cmp(&max_lifetime) == Ordering::Greater {
-            return false;
+        if let Ok(elapsed) = self.register_time.duration_since(current_time) {
+            if elapsed > max_lifetime {
+                return false;
+            }
         }
         true
     }
@@ -55,7 +55,7 @@ impl Default for QueryStatByDuration {
         Self {
             query: "".to_string(),
             time_range_secs: 0,
-            duration: Duration::seconds(0),
+            duration: Duration::ZERO,
             count: 0,
         }
     }
@@ -75,7 +75,7 @@ impl QueryStatsConfig {
     pub fn new() -> Self {
         Self {
             last_queries_count: 1000,
-            min_query_duration: Duration::milliseconds(1),
+            min_query_duration: Duration::from_millis(1),
         }
     }
 }
@@ -138,9 +138,9 @@ impl QueryStatsTracker {
         &self,
         query: &str,
         time_range_msecs: i64,
-        start_time: DateTime<Utc>,
+        start_time: Timestamp,
     ) {
-        let register_time = Utc::now();
+        let register_time = SystemTime::now();
         let duration = register_time.sub(start_time);
         if duration.cmp(&self.config.min_query_duration) == Ordering::Less {
             return;
@@ -170,7 +170,7 @@ impl QueryStatsTracker {
     }
 
     pub fn get_top_by_count(&self, top_n: usize, max_lifetime: Duration) -> Vec<QueryStatByCount> {
-        let current_time = Utc::now();
+        let current_time = SystemTime::now();
 
         let mut m: AHashMap<&QueryStatKey, u64> = AHashMap::new();
         let qst = self.inner.read().unwrap();
@@ -202,7 +202,7 @@ impl QueryStatsTracker {
         top_n: usize,
         max_lifetime: Duration,
     ) -> Vec<QueryStatByDuration> {
-        let current_time = Utc::now();
+        let current_time = SystemTime::now();
 
         #[derive(Hash, Copy, Clone)]
         struct CountSum {
@@ -219,7 +219,7 @@ impl QueryStatsTracker {
                 let k = &r.key;
                 let ks = m.entry(k).or_insert(CountSum {
                     count: 0,
-                    sum: Duration::milliseconds(0),
+                    sum: Duration::ZERO,
                 });
 
                 ks.count += 1;
@@ -232,7 +232,7 @@ impl QueryStatsTracker {
             a.push(QueryStatByDuration {
                 query: k.query.clone(),
                 time_range_secs: k.time_range_secs,
-                duration: Duration::milliseconds(ks.sum.num_milliseconds() / ks.count as i64),
+                duration: Duration::from_millis(ks.sum.as_millis() as u64 / ks.count as u64),
                 count: ks.count as u64,
             })
         }
@@ -249,7 +249,7 @@ impl QueryStatsTracker {
         top_n: usize,
         max_lifetime: Duration,
     ) -> Vec<QueryStatByDuration> {
-        let current_time = Utc::now();
+        let current_time = SystemTime::now();
 
         #[derive(Hash, Clone)]
         struct CountDuration {
@@ -264,7 +264,7 @@ impl QueryStatsTracker {
             if r.matches(current_time, max_lifetime) {
                 let kd = m.entry(&r.key).or_insert(CountDuration {
                     count: 0,
-                    sum: Duration::milliseconds(0),
+                    sum: Duration::ZERO,
                 });
                 kd.count += 1;
                 kd.sum += r.duration;

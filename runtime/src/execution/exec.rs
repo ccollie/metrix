@@ -12,6 +12,7 @@ use ahash::AHashSet;
 use chrono::Utc;
 use tracing::{field, info, trace_span, Span};
 use metricsql_common::hash::Signature;
+use metricsql_common::time::current_time_millis;
 
 pub(crate) fn parse_promql_internal(
     context: &Context,
@@ -28,7 +29,7 @@ pub(crate) fn exec_internal(
     ec: &mut EvalConfig,
     q: &str,
 ) -> RuntimeResult<(QueryValue, Arc<ParseCacheValue>)> {
-    let start_time = Utc::now();
+    let start_time = current_time_millis();
     if context.stats_enabled() {
         defer! {
             context.query_stats.register_query(q, ec.end - ec.start, start_time)
@@ -47,7 +48,7 @@ pub(crate) fn exec_internal(
 
             let qid = context
                 .active_queries
-                .register(ec, q, Some(start_time.timestamp()));
+                .register(ec, q, Some(start_time));
 
             defer! {
                 context.active_queries.remove(qid);
