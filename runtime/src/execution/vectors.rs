@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use tracing::{field, trace, trace_span, Span};
-use metricsql_parser::ast::{BinaryExpr, Expr, Operator};
+use metricsql_parser::ast::{BinModifier, BinaryExpr, Expr, Operator};
+use metricsql_parser::label::LabelFilter;
 use metricsql_parser::optimizer::{push_down_binary_op_filters_in_place, trim_filters_by_match_modifier};
 use crate::execution::{Context, EvalConfig};
 use crate::execution::binary::{can_push_down_common_filters, get_common_label_filters};
@@ -131,13 +132,24 @@ fn push_down_filters<'a>(
     let tss_first = first.as_instant_vec(ec)?;
     let mut common_filters = get_common_label_filters(&tss_first[0..]);
     if !common_filters.is_empty() {
-        trim_filters_by_match_modifier(&mut common_filters, &expr.modifier);
-        trim_filters_by_group_modifier(&mut common_filters, expr);
+        trim_filters_by_group_modifier(&mut common_filters, &expr.modifier);
         let mut copy = dest.clone();
         push_down_binary_op_filters_in_place(&mut copy, &mut common_filters);
         return Ok(Cow::Owned(copy));
     }
     Ok(Cow::Borrowed(dest))
+}
+
+/// trims lfs by the specified be.group_modifier.op (e.g. on() or ignoring()).
+///
+/// The following cases are possible:
+/// - It returns lfs as is if be doesn't contain any group modifier
+/// - It returns only filters specified in on()
+/// - It drops filters specified inside ignoring()
+fn trim_filters_by_group_modifier(lfs: &mut Vec<LabelFilter>, modifier: &Option<BinModifier>) {
+    if let Some(modifier) = modifier {
+        trim_filters_by_match_modifier(lfs, &modifier.matching);
+    }
 }
 
 fn to_vector(value: QueryValue) -> RuntimeResult<Vec<Timeseries>> {

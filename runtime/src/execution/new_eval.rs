@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Display;
 
 use rayon::join;
@@ -133,6 +132,7 @@ fn eval_parens_op(ctx: &Context, ec: &EvalConfig, pe: &ParensExpr) -> RuntimeRes
 
 fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeResult<QueryValue> {
     let is_tracing = ctx.trace_enabled();
+    // first are cheap binary ops that can be handled without invoking rayon overhead
     let res = match (&be.left.as_ref(), &be.right.as_ref()) {
         // vector op vector needs special handling where both vectors contain selectors
         (Expr::MetricExpression(_), Expr::MetricExpression(_))
@@ -215,23 +215,11 @@ fn eval_args(ctx: &Context, ec: &EvalConfig, args: &[Expr]) -> RuntimeResult<Vec
     // see if we can evaluate all args in parallel
     // todo: if rayon in cheap enough, we can avoid the check and always go parallel
     // todo: see https://docs.rs/rayon/1.0.3/rayon/iter/trait.IndexedParallelIterator.html#method.with_min_len
-    let mut count = 0;
-    for (i, arg) in args.iter().enumerate() {
-        match arg {
-            Expr::StringLiteral(_) | Expr::Duration(_) | Expr::NumberLiteral(_) => {
-                if i > 4 {
-                    break;
-                }
-                continue;
-            }
-            _ => {
-                count += 1;
-                if count > 1 {
-                    break;
-                }
-            }
-        }
-    }
+    let count = args.iter()
+        .skip(5)
+        .filter(|arg| !matches!(arg, Expr::StringLiteral(_) | Expr::Duration(_) | Expr::NumberLiteral(_)))
+        .count();
+    
     if count > 1 {
         eval_exprs_in_parallel(ctx, ec, args)
     } else {
@@ -324,7 +312,7 @@ fn get_rollup_expr_arg(arg: &Expr) -> RuntimeResult<RollupExpr> {
                     let arg = Expr::Rollup(RollupExpr::new(*re.expr.clone()));
 
                     match FunctionExpr::default_rollup(arg) {
-                        Err(e) => return Err(RuntimeError::General(format!("{:?}", e))),
+                        Err(e) => Err(RuntimeError::General(format!("{:?}", e))),
                         Ok(fe) => {
                             re.expr = Box::new(Expr::Function(fe));
                             Ok(re)

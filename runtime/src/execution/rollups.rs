@@ -14,11 +14,15 @@ use crate::execution::{align_start_end, eval_number, get_timestamps, validate_ma
 use crate::execution::new_eval::exec_expr;
 use crate::functions::aggregate::IncrementalAggrFuncContext;
 use crate::functions::rollup::{
-    eval_prefuncs, get_rollup_configs, RollupConfig, RollupHandler,
+    eval_prefuncs,
+    get_rollup_configs, 
+    RollupConfig,
+    RollupHandler,
     MAX_SILENCE_INTERVAL,
+    TimeSeriesMap
 };
 use crate::prelude::{get_timeseries, MetricName};
-use crate::provider::{join_tag_filter_list, QueryResult, QueryResults, SearchQuery};
+use crate::provider::{QueryResult, QueryResults, SearchQuery};
 use crate::rayon::iter::ParallelIterator;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::{QueryValue, Timeseries, Timestamp};
@@ -204,7 +208,7 @@ impl<'a> RollupExecutor<'a> {
         )?);
         let min_staleness_interval = ctx.config.min_staleness_interval.num_milliseconds() as usize;
         let (rcs, pre_funcs) = get_rollup_configs(
-            &self.func,
+            self.func,
             &self.func_handler,
             self.expr,
             ec.start,
@@ -641,15 +645,15 @@ impl<'a> RollupExecutor<'a> {
 
 #[inline]
 fn new_timeseries_map(
-    func: &RollupFunction,
+    func: RollupFunction,
     keep_metric_names: bool,
     shared_timestamps: &Arc<Vec<Timestamp>>,
     mn: &MetricName,
-) -> Option<Rc<RefCell<TimeseriesMap>>> {
-    if !TimeseriesMap::is_valid_function(func) {
+) -> Option<Rc<RefCell<TimeSeriesMap>>> {
+    if !TimeSeriesMap::is_valid_function(func) {
         return None;
     }
-    let map = TimeseriesMap::new(keep_metric_names, shared_timestamps, mn);
+    let map = TimeSeriesMap::new(keep_metric_names, shared_timestamps, mn);
     Some(Rc::new(RefCell::new(map)))
 }
 
@@ -740,6 +744,20 @@ fn aggregate_absent_over_time(
     }
     Ok(rvs)
 }
+fn get_absent_timeseries(ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Vec<Timeseries>> {
+    // Copy tags from arg
+    let mut rvs = eval_number(ec, 1.0)?;
+    if let Expr::MetricExpression(me) = expr {
+
+    }
+    if let Some(labels) = &self.labels {
+        for label in labels {
+            rvs[0].metric_name.set_tag(&label.name, &label.value);
+        }
+    }
+    Ok(rvs)
+}
+
 
 /// Executes `f` for each `Timeseries` in `tss` in parallel.
 pub(super) fn do_parallel<F>(tss: &Vec<Timeseries>, f: F) -> RuntimeResult<(Vec<Timeseries>, u64)>

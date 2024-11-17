@@ -19,3 +19,5 @@ mod rollup_fns;
 mod rollup_test;
 mod timeseries_map;
 mod types;
+
+pub use timeseries_map::*;
