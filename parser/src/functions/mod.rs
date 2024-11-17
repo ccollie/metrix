@@ -293,7 +293,7 @@ impl BuiltinFunction {
         }
     }
 
-     pub fn get_arg_for_optimization<'a>(&'a self, args: &'a [Expr]) -> Option<&Expr> {
+     pub fn get_arg_for_optimization<'a>(&'a self, args: &'a [Expr]) -> Option<&'a Expr> {
         self.get_arg_idx_for_optimization(args.len()).and_then(|idx| args.get(idx))
     }
 
