@@ -295,11 +295,8 @@ impl RollupResultCache {
         // since these values may be added later.
         let timestamps = tss[0].timestamps.as_slice();
         let deadline = Timestamp::now() - (ec.step - CACHE_TIMESTAMP_OFFSET).as_millis() as i64;
-        let mut i = timestamps.len() - 1;
-        // todo: use binary search
-        while i > 0 && timestamps[i] > deadline {
-            i -= 1;
-        }
+        
+        let i = timestamps.partition_point(|&t| t <= deadline);
         if i == 0 {
             // Nothing to store in the cache.
             info!("nothing to store in the cache, since all the points have timestamps bigger than {}", deadline);

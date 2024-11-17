@@ -1,10 +1,10 @@
 use std::mem::size_of;
 use std::sync::Arc;
 
-use pco::data_types::NumberLike;
+use pco::data_types::Number;
 use pco::errors::PcoError;
 use pco::standalone::{simple_compress, simple_decompress_into};
-use pco::{ChunkConfig, PagingSpec};
+use pco::{ChunkConfig, DeltaSpec, PagingSpec};
 
 use crate::common::encoding::marshal_var_i64;
 use crate::types::{MetricName, SeriesSlice, Timeseries, Timestamp};
@@ -59,7 +59,7 @@ pub(crate) fn compress_series_slice(
         ChunkConfig::default().with_paging_spec(PagingSpec::Exact(data_page_sizes.clone()));
 
     // the caller ensures that timestamps are equally spaced, so we can use delta encoding
-    let ts_config = ChunkConfig::default().with_delta_encoding_order(Some(2));
+    let ts_config = ChunkConfig::default().with_delta_spec(DeltaSpec::TryConsecutive(2));
 
     // write out value chunk metadata
 
@@ -256,7 +256,7 @@ pub(crate) fn get_timestamp_index_bounds(
 }
 
 // todo: simple_compress_into
-fn write_data<T: NumberLike>(
+fn write_data<T: Number>(
     dest: &mut Vec<u8>,
     values: &[T],
     config: &ChunkConfig,
