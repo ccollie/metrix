@@ -1,3 +1,4 @@
+use std::time::Duration;
 use num_traits::FloatConst;
 
 use metricsql_common::prelude::{datetime_part, timestamp_secs_to_utc_datetime, DateTimePart};
@@ -203,7 +204,7 @@ fn handle_duration_duration(ln: &DurationExpr, rn: &DurationExpr, op: Operator, 
 
 fn handle_duration_number(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
     let secs = value * 1e3_f64;
-    let n = scalar_binary_operation(ln.value(1) as f64, secs, op, is_bool)? as i64;
+    let n = scalar_binary_operation(ln.value(Duration::from_millis(1)) as f64, secs, op, is_bool)? as i64;
     Ok(Expr::Duration(DurationExpr::new(n)))
 }
 

@@ -6,7 +6,7 @@ pub use signature::*;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 use strum::IntoEnumIterator;
 pub use transform::*;
 
@@ -76,9 +76,9 @@ pub struct FunctionMeta {
 
 impl FunctionMeta {
     pub fn lookup(name: &str) -> Option<&'static FunctionMeta> {
-        get_registry()
+        FUNCTION_REGISTRY
             .get(name)
-            .or_else(|| get_registry().get(name.to_lowercase().as_str()))
+            .or_else(|| FUNCTION_REGISTRY.get(name.to_lowercase().as_str()))
     }
 
     pub fn get_rollup_function(name: &str) -> ParseResult<&'static FunctionMeta> {
@@ -91,12 +91,9 @@ impl FunctionMeta {
     }
 
     pub fn get_aggregate_function(name: &str) -> ParseResult<&'static FunctionMeta> {
-        if let Some(meta) = FunctionMeta::lookup(name) {
-            if let BuiltinFunction::Aggregate(_) = &meta.function {
-                return Ok(meta);
-            }
-        }
-        Err(ParseError::InvalidFunction(format!("aggregate::{name}")))
+        FunctionMeta::lookup(name)
+            .filter(|meta| matches!(meta.function, BuiltinFunction::Aggregate(_)))
+            .ok_or_else(|| ParseError::InvalidFunction(format!("aggregate::{name}")))
     }
 
     pub fn get_type(&self) -> BuiltinFunctionType {
@@ -116,17 +113,11 @@ impl FunctionMeta {
     }
 
     pub fn is_scalar(&self) -> bool {
-        match self.function {
-            BuiltinFunction::Transform(func) => func.return_type() == ValueType::Scalar,
-            _ => false,
-        }
+        matches!(self.function, BuiltinFunction::Transform(func) if func.return_type() == ValueType::Scalar)
     }
 
     pub fn is_rollup_function(&self, func: RollupFunction) -> bool {
-        match &self.function {
-            BuiltinFunction::Rollup(rf) => rf == &func,
-            _ => false,
-        }
+        matches!(self.function, BuiltinFunction::Rollup(rf) if rf == func)
     }
 
     pub fn is_variadic(&self) -> bool {
@@ -173,12 +164,10 @@ impl Display for FunctionMeta {
 }
 
 // TODO: use blart
-type FunctionRegistry = FastHashMap<&'static str, FunctionMeta>;
-static REGISTRY: OnceLock<FunctionRegistry> = OnceLock::new();
+pub type FunctionRegistry = FastHashMap<&'static str, FunctionMeta>;
 
-pub fn get_registry() -> &'static FunctionRegistry {
-    REGISTRY.get_or_init(init_registry)
-}
+pub static FUNCTION_REGISTRY: LazyLock<FunctionRegistry> = LazyLock::new(init_registry);
+
 
 fn init_registry() -> FunctionRegistry {
     let mut registry = FunctionRegistry::default();
@@ -280,10 +269,7 @@ impl BuiltinFunction {
     }
 
     pub fn is_aggregate_func(name: &str) -> bool {
-        if let Some(meta) = FunctionMeta::lookup(name) {
-            return meta.is_aggregation();
-        }
-        false
+        matches!(FunctionMeta::lookup(name), Some(meta) if meta.is_aggregation())
     }
 
     pub fn is_aggregation(&self) -> bool {
@@ -291,17 +277,11 @@ impl BuiltinFunction {
     }
 
     pub fn is_scalar(&self) -> bool {
-        match self {
-            BuiltinFunction::Transform(func) => func.return_type() == ValueType::Scalar,
-            _ => false,
-        }
+        matches!(self, BuiltinFunction::Transform(func) if func.return_type() == ValueType::Scalar)
     }
 
     pub fn is_rollup_function(&self, func: RollupFunction) -> bool {
-        match self {
-            BuiltinFunction::Rollup(rf) => rf == &func,
-            _ => false,
-        }
+        matches!(self, BuiltinFunction::Rollup(rf) if rf == &func)
     }
 
     pub fn may_sort_results(&self) -> bool {
@@ -313,11 +293,8 @@ impl BuiltinFunction {
         }
     }
 
-    pub fn get_arg_for_optimization<'a>(&'a self, args: &'a [Expr]) -> Option<&Expr> {
-        match self.get_arg_idx_for_optimization(args.len()) {
-            Some(idx) => args.get(idx),
-            None => None,
-        }
+     pub fn get_arg_for_optimization<'a>(&'a self, args: &'a [Expr]) -> Option<&Expr> {
+        self.get_arg_idx_for_optimization(args.len()).and_then(|idx| args.get(idx))
     }
 
     pub fn get_arg_idx_for_optimization(&self, args_len: usize) -> Option<usize> {

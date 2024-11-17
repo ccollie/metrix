@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::RwLock;
-
+use std::time::Duration;
+use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::label::Matchers;
 
 use crate::execution::context::Context;
@@ -15,14 +16,14 @@ use crate::types::{Timeseries, Timestamp, TimestampTrait};
 pub(crate) fn validate_max_points_per_timeseries(
     start: Timestamp,
     end: Timestamp,
-    step: i64,
+    step: Duration,
     max_points_per_timeseries: usize,
 ) -> RuntimeResult<()> {
-    let points = (end - start).saturating_div(step + 1);
+    let points = calc_points(start, end, &step);
     if (max_points_per_timeseries > 0) && points > max_points_per_timeseries as i64 {
         let msg = format!(
-            "too many points for the given step={}, start={} and end={}: {}; cannot exceed {}",
-            step, start, end, points, max_points_per_timeseries
+            "too many points for the given step={}, start={start} and end={end}: {points}; cannot exceed {}",
+            step.as_millis(), max_points_per_timeseries
         );
         Err(RuntimeError::from(msg))
     } else {
@@ -30,18 +31,24 @@ pub(crate) fn validate_max_points_per_timeseries(
     }
 }
 
+
+#[inline]
+fn calc_points(start: Timestamp, end: Timestamp, step: &Duration) -> i64 {
+    (end - start).saturating_div((step.as_millis() + 1) as i64)
+}
+
 /// The minimum number of points per timeseries for enabling time rounding.
 /// This improves cache hit ratio for frequently requested queries over
 /// big time ranges.
 const MIN_TIMESERIES_POINTS_FOR_TIME_ROUNDING: i64 = 50;
 
-pub fn adjust_start_end(start: Timestamp, end: Timestamp, step: i64) -> (Timestamp, Timestamp) {
+pub fn adjust_start_end(start: Timestamp, end: Timestamp, step: Duration) -> (Timestamp, Timestamp) {
     // if disableCache {
     //     // do not adjust start and end values when cache is disabled.
     //     // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/563
     //     return (start, end);
     // }
-    let points = (end - start) / step + 1;
+    let points = calc_points(start, end, &step);
     if points < MIN_TIMESERIES_POINTS_FOR_TIME_ROUNDING {
         // Too small number of points for rounding.
         return (start, end);
@@ -49,20 +56,21 @@ pub fn adjust_start_end(start: Timestamp, end: Timestamp, step: i64) -> (Timesta
 
     // Round start and end to values divisible by step in order
     // to enable response caching (see EvalConfig.mayCache).
-    let (start, end) = align_start_end(start, end, step);
+    let (start, end) = align_start_end(start, end, &step);
 
     // Make sure that the new number of points is the same as the initial number of points.
-    let mut new_points = (end - start) / step + 1;
+    let mut new_points = calc_points(start, end, &step);
     let mut _end = end;
     while new_points > points {
-        _end = end - step;
+        _end = end.sub(step);
         new_points -= 1;
     }
 
     (start, _end)
 }
 
-pub fn align_start_end(start: Timestamp, end: Timestamp, step: i64) -> (Timestamp, Timestamp) {
+pub fn align_start_end(start: Timestamp, end: Timestamp, step: &Duration) -> (Timestamp, Timestamp) {
+    let step = step.as_millis() as i64;
     // Round start to the nearest smaller value divisible by step.
     let new_start = start - start % step;
     // Round end to the nearest bigger value divisible by step.
@@ -77,7 +85,7 @@ pub fn align_start_end(start: Timestamp, end: Timestamp, step: i64) -> (Timestam
 pub struct EvalConfig {
     pub start: Timestamp,
     pub end: Timestamp,
-    pub step: i64, // todo: Duration
+    pub step: Duration, 
 
     /// `max_series` is the maximum number of time series which can be scanned by the query.
     /// Zero means 'no limit'
@@ -89,8 +97,7 @@ pub struct EvalConfig {
     pub deadline: Deadline,
 
     /// lookback_delta is analog to `-query.lookback-delta` from Prometheus.
-    /// todo: change type to Duration
-    pub lookback_delta: i64,
+    pub lookback_delta: Duration,
 
     /// How many decimal digits after the point to leave in response.
     pub round_digits: u8,
@@ -123,7 +130,7 @@ pub struct EvalConfig {
 }
 
 impl EvalConfig {
-    pub fn new(start: Timestamp, end: Timestamp, step: i64) -> Self {
+    pub fn new(start: Timestamp, end: Timestamp, step: Duration) -> Self {
         EvalConfig {
             start,
             end,
@@ -162,8 +169,8 @@ impl EvalConfig {
             );
             return Err(RuntimeError::from(msg));
         }
-        if self.step <= 0 {
-            let msg = format!("BUG: step must be greater than 0; got {}", self.step);
+        if self.step.is_zero() {
+            let msg = format!("BUG: step must be greater than 0; got {}", self.step.as_millis());
             return Err(RuntimeError::from(msg));
         }
         Ok(())
@@ -176,10 +183,11 @@ impl EvalConfig {
         if self._may_cache {
             return true;
         }
-        if self.start % self.step != 0 {
+        let step = self.step.as_millis() as i64;
+        if self.start % step != 0 {
             return false;
         }
-        if self.end % self.step != 0 {
+        if self.end % step != 0 {
             return false;
         }
 
@@ -198,7 +206,7 @@ impl EvalConfig {
         self.disable_cache = state_config.disable_cache;
         self.max_points_per_series = state_config.max_points_subquery_per_timeseries;
         self.no_stale_markers = state_config.no_stale_markers;
-        self.lookback_delta = state_config.max_lookback.num_milliseconds();
+        self.lookback_delta = state_config.max_lookback;
         self.max_series = state_config.max_unique_timeseries;
     }
 
@@ -226,7 +234,8 @@ impl EvalConfig {
     }
 
     pub fn data_points(&self) -> usize {
-        let n: usize = (1 + (self.end - self.start) / self.step) as usize;
+        let step = self.step.as_millis() as i64;
+        let n: usize = (1 + (self.end - self.start) / step) as usize;
         n
     }
 }
@@ -236,12 +245,12 @@ impl Default for EvalConfig {
         Self {
             start: 0,
             end: 0,
-            step: 0,
+            step: Duration::ZERO,
             max_series: 0,
             quoted_remote_addr: None,
             deadline: Deadline::default(),
             _may_cache: false,
-            lookback_delta: 0,
+            lookback_delta: Duration::ZERO,
             round_digits: 100,
             enforced_tag_filters: None,
             no_stale_markers: true,
@@ -287,12 +296,12 @@ impl From<&Context> for EvalConfig {
 pub fn get_timestamps(
     start: Timestamp,
     end: Timestamp,
-    step: i64,
+    step: Duration,
     max_timestamps_per_timeseries: usize,
 ) -> RuntimeResult<Vec<i64>> {
     // Sanity checks.
-    if step <= 0 {
-        let msg = format!("Step must be bigger than 0; got {step}");
+    if step.is_zero() {
+        let msg = format!("Step must be bigger than 0; got {}", humanize_duration(&step));
         return Err(RuntimeError::from(msg));
     }
 
@@ -310,8 +319,9 @@ pub fn get_timestamps(
         );
         return Err(RuntimeError::from(msg));
     }
-
+    
     // Prepare timestamps.
+    let step = step.as_millis() as i64;
     let n: usize = (1 + (end - start) / step) as usize;
     // todo: use a pool
     let mut timestamps: Vec<i64> = Vec::with_capacity(n);

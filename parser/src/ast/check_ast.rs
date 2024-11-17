@@ -205,15 +205,19 @@ fn check_ast_for_vector_selector(ex: MetricExpr) -> Result<Expr, String> {
             // with OR matching, __name__ can appear multiple times]
             // ex: {__name__="foo" OR __name__="bar"}
             // {__name__="a",bar="baz" or __name__="a"}
-            let mut du = ex.find_matchers(NAME_LABEL);
-            if du.len() >= 2 {
-                // this is to ensure that the err information can be predicted with fixed order
-                du.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-                return Err(format!(
-                    "metric name must not be set twice: '{}' or '{}'",
-                    du[0].label, du[1].label
-                ));
+            let mut is_duplicate = ex.matchers.matchers.iter().filter(|m| m.name() == NAME_LABEL).count() > 0;
+            if !is_duplicate {
+                // try the arms of the OR matchers
+                let or_matchers = &ex.matchers.or_matchers;
+                for m in or_matchers.iter() {
+                    if m.iter().filter(|m| m.name() == NAME_LABEL).count() > 1 {
+                        is_duplicate = true;
+                        break;
+                    }
+                }
+            }
+            if is_duplicate {
+                return Err("metric name must not be set twice".to_string());
             }
             Ok(Expr::MetricExpression(ex))
         }

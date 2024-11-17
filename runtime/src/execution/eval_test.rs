@@ -1,13 +1,17 @@
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+    use metricsql_common::prelude::humanize_duration;
     use crate::execution::validate_max_points_per_timeseries;
 
     #[test]
     fn test_validate_max_points_per_series_failure() {
-        let f = |start: i64, end: i64, step: i64, max_points: usize| {
+        let f = |start: i64, end: i64, step: u64, max_points: usize| {
+            let step = Duration::from_millis(step);
             match validate_max_points_per_timeseries(start, end, step, max_points) {
                 Err(_) => {
-                    panic!("expecting non-nil error for validate_max_points_per_series(start={}, end={}, step={}, max_points={})", start, end, step, max_points)
+                    panic!("expecting non-nil error for validate_max_points_per_series(start={}, end={}, step={}, max_points={})", 
+                           start, end, humanize_duration(&step), max_points)
                 }
                 _ => {}
             }
@@ -23,10 +27,11 @@ mod tests {
 
     #[test]
     fn test_validate_max_points_per_series_success() {
-        let f = |start: i64, end: i64, step: i64, max_points: usize| {
+        let f = |start: i64, end: i64, step: u64, max_points: usize| {
+            let step = Duration::from_millis(step);
             match validate_max_points_per_timeseries(start, end, step, max_points) {
                 Err(err) => panic!("unexpected error in validate_max_points_per_series(start={}, end={}, step={}, maxPoints={}): {:?}",
-                                 start, end, step, max_points, err),
+                                 start, end, humanize_duration(&step), max_points, err),
                 _ => {}
             }
         };

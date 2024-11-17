@@ -26,7 +26,7 @@ use metricsql_parser::ast::Expr::Rollup;
 use regex::Regex;
 use std::fs;
 use std::sync::{Arc, LazyLock};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use crate::types::QueryValue;
 
 const ONE_MINUTE_AS_MILLIS: i64 = 60 * 1000;
@@ -181,7 +181,7 @@ impl Test {
 
     fn run_instant_query(&mut self, iq: &AtModifierTestCase, cmd: &EvalCmd) -> Result<(), TestAssertionError> {
         let start = timestamp_from_system_time(&iq.eval_time);
-        let mut ec = EvalConfig::new(start, start, 0);
+        let mut ec = EvalConfig::new(start, start, Duration::ZERO);
 
         let res = self.exec_internal(&mut ec, &cmd.expr);
         if let Err(e) = &res {
@@ -202,7 +202,7 @@ impl Test {
         // by checking against the middle step.
         let start = eval_time - ONE_MINUTE_AS_MILLIS;
         let end = eval_time + ONE_MINUTE_AS_MILLIS;
-        let mut ec = EvalConfig::new(start, end, ONE_MINUTE_AS_MILLIS);
+        let mut ec = EvalConfig::new(start, end, Duration::from_millis(ONE_MINUTE_AS_MILLIS as u64));
 
         let range_res = self.exec_internal(&mut ec, &cmd.expr)
             .map_err(|err| {
@@ -267,7 +267,7 @@ impl Test {
         let step = cmd.step.as_millis() as i64;
         let start = timestamp_from_system_time(&cmd.start);
         let end = timestamp_from_system_time(&cmd.end);
-        let mut ec = EvalConfig::new(start, end, step);
+        let mut ec = EvalConfig::new(start, end, cmd.step);
 
         let res = self.exec_internal(&mut ec, &cmd.expr);
         let value = match &res {
@@ -298,13 +298,13 @@ impl Test {
 fn new_range_query(start: &SystemTime, end: &SystemTime, step: i64) -> RuntimeResult<EvalConfig> {
     let start = timestamp_from_system_time(start);
     let end = timestamp_from_system_time(&end);
-    let config = EvalConfig::new(start, end, step);
+    let config = EvalConfig::new(start, end, Duration::from_millis(step as u64));
     Ok(config)
 }
 
 fn new_instant_query(eval_time: &SystemTime) -> RuntimeResult<EvalConfig> {
     let eval_time = timestamp_from_system_time(&eval_time);
-    let config = EvalConfig::new(eval_time, eval_time, 0);
+    let config = EvalConfig::new(eval_time, eval_time, Duration::ZERO);
     Ok(config)
 }
 

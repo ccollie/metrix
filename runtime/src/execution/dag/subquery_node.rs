@@ -137,13 +137,12 @@ impl SubqueryNode {
         let (offset, ec_new) = adjust_eval_range(&self.func, &self.offset, ec)?;
 
         let ec = ec_new;
-        // todo: validate that step and window are non negative
         let step = get_step(&self.step, ec.step);
         let window = duration_value(&self.window, ec.step);
 
         let mut ec_sq = ec.copy_no_timestamps();
-        ec_sq.start -= window + MAX_SILENCE_INTERVAL + step;
-        ec_sq.end += step;
+        ec_sq.start -= (window + MAX_SILENCE_INTERVAL + step).as_millis() as i64;
+        ec_sq.end += step.as_millis() as i64;
         ec_sq.step = step;
         validate_max_points_per_timeseries(
             ec_sq.start,
@@ -153,7 +152,7 @@ impl SubqueryNode {
         )?;
 
         // unconditionally align start and end args to step for subquery as Prometheus does.
-        let (start, end) = align_start_end(ec_sq.start, ec_sq.end, ec_sq.step);
+        let (start, end) = align_start_end(ec_sq.start, ec_sq.end, &ec_sq.step);
         ec_sq.start = start;
         ec_sq.end = end;
 
@@ -171,8 +170,7 @@ impl SubqueryNode {
 
         // avoid issues later with borrow checker
         let is_absent_over_time = self.func == RollupFunction::AbsentOverTime;
-
-        let min_staleness_interval = ctx.config.min_staleness_interval.num_milliseconds() as usize;
+        
         let (rcs, pre_funcs) = get_rollup_configs(
             self.func,
             &self.func_handler,
@@ -182,7 +180,7 @@ impl SubqueryNode {
             ec.step,
             window,
             ec.max_points_per_series,
-            min_staleness_interval,
+            ctx.config.min_staleness_interval,
             ec.lookback_delta,
             &shared_timestamps,
         )?;

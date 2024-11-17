@@ -2,7 +2,7 @@
 mod tests {
     use std::sync::Arc;
 
-    use chrono::Duration;
+    use std::time::Duration;
 
     use crate::execution::{compile_expression, Context, EvalConfig};
     use crate::{test_query_values_equal, Deadline};
@@ -11,7 +11,7 @@ mod tests {
     const NAN: f64 = f64::NAN;
     const START: i64 = 1000000_i64;
     const END: i64 = 2000000_i64;
-    const STEP: i64 = 200000_i64;
+    const STEP: Duration = Duration::from_millis(200000_u64);
     const TEST_ITERATIONS: usize = 3;
 
     fn run_query(q: &str) -> QueryValue {
@@ -19,7 +19,8 @@ mod tests {
         ec.max_series = 1000;
         ec.max_points_per_series = 15000;
         ec.round_digits = 100;
-        ec.deadline = Deadline::new(Duration::minutes(1)).unwrap();
+        let timeout = Duration::from_secs(60);
+        ec.deadline = Deadline::new(timeout).unwrap();
         let context = Context::default();
         let expr = metricsql_parser::prelude::parse(q).unwrap();
         let mut node = compile_expression(&expr).unwrap();

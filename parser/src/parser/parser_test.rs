@@ -197,6 +197,14 @@ mod tests {
     }
 
     #[test]
+    fn test_1() {
+        another(
+            r#"{__name__="a",bar="baz" or __name__="a"}"#,
+            r#"a{bar="baz"}"#,
+        ); 
+    }
+    
+    #[test]
     fn test_parse_metric_expr_with_or() {
         // metricExpr with 'or'
         same(r#"metric{foo="bar" or baz="a"}"#);

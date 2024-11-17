@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::default::Default;
 use std::str::FromStr;
 
@@ -218,7 +219,7 @@ impl From<DurationExpr> for DAGNode {
 impl From<&DurationExpr> for DAGNode {
     fn from(de: &DurationExpr) -> Self {
         if !de.requires_step() {
-            let val = de.value(1);
+            let val = de.value(Duration::from_millis(1));
             let d_sec = val as f64 / 1000_f64;
             DAGNode::from(d_sec)
         } else {

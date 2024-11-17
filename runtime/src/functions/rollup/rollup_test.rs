@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use crate::common::math::linear_regression;
     use crate::functions::rollup::delta::*;
     use crate::functions::rollup::deriv::*;
@@ -696,7 +697,7 @@ mod tests {
         let f = |func_name: &str, args: &[QueryValue]| {
             let nrf = get_rollup_function_factory_by_name(func_name).unwrap();
             let args = Vec::from(args);
-            let _rf = (nrf)(&args);
+            let _rf = nrf(&args);
             assert!(
                 _rf.is_err(),
                 "expecting err for {}({})",
@@ -754,8 +755,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 0;
         rc.end = 4;
-        rc.step = 1;
-        rc.window = 0;
+        rc.step = Duration::from_millis(1);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, NAN, NAN, NAN, NAN], &[0, 1, 2, 3, 4]);
     }
@@ -766,8 +767,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_delta);
         rc.start = 120;
         rc.end = 148;
-        rc.step = 4;
-        rc.window = 0;
+        rc.step = Duration::from_millis(4);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -782,8 +783,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 0;
         rc.end = 4;
-        rc.step = 1;
-        rc.window = 3;
+        rc.step = Duration::from_millis(1);
+        rc.window = Duration::from_millis(3);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, NAN, NAN, NAN, NAN], &[0, 1, 2, 3, 4]);
     }
@@ -794,8 +795,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 161;
         rc.end = 191;
-        rc.step = 10;
-        rc.window = 3;
+        rc.step = Duration::from_millis(10);
+        rc.window = Duration::from_millis(3);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, NAN, NAN, NAN], &[161, 171, 181, 191]);
     }
@@ -806,8 +807,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 0;
         rc.end = 25;
-        rc.step = 5;
-        rc.window = 0;
+        rc.step = Duration::from_millis(5);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -822,8 +823,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 100;
         rc.end = 160;
-        rc.step = 20;
-        rc.window = 0;
+        rc.step = Duration::from_millis(20);
+        rc.window = Duration::ZERO;
         rc.max_points_per_series = 10000;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[44_f64, 32.0, 34.0, NAN], &[100, 120, 140, 160]);
@@ -835,8 +836,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = -50;
         rc.end = 150;
-        rc.step = 50;
-        rc.window = 0;
+        rc.step = Duration::from_millis(50);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -851,8 +852,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(ROLLUP_LAST);
         rc.start = 0;
         rc.end = 20;
-        rc.step = 5;
-        rc.window = 8;
+        rc.step = Duration::from_millis(5);
+        rc.window = Duration::from_millis(8);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -867,8 +868,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(ROLLUP_LAST);
         rc.start = 100;
         rc.end = 160;
-        rc.step = 20;
-        rc.window = 18;
+        rc.step = Duration::from_millis(20);
+        rc.window = Duration::from_millis(18);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -883,8 +884,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(ROLLUP_LAST);
         rc.start = 0;
         rc.end = 150;
-        rc.step = 50;
-        rc.window = 19;
+        rc.step = Duration::from_millis(50);
+        rc.window = Duration::from_millis(19);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 54_f64, 44_f64, NAN], &[0, 50, 100, 150]);
     }
@@ -895,8 +896,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 80;
         rc.end = 140;
-        rc.step = 10;
-        rc.lookback_delta = 1;
+        rc.step = Duration::from_millis(10);
+        rc.lookback_delta = Duration::from_millis(1); // secs
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -911,8 +912,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 80;
         rc.end = 140;
-        rc.step = 10;
-        rc.lookback_delta = 7;
+        rc.step = Duration::from_millis(10);
+        rc.lookback_delta = Duration::from_millis(7);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -927,8 +928,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_first);
         rc.start = 80;
         rc.end = 140;
-        rc.step = 10;
-        rc.lookback_delta = 0;
+        rc.step = Duration::from_millis(10);
+        rc.lookback_delta = Duration::from_millis(0);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -943,8 +944,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_count);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 4.0, 4.0, 3.0, 1.0], &[0, 40, 80, 120, 160]);
     }
@@ -955,8 +956,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_min);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -971,8 +972,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_max);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -987,8 +988,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_sum);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.max_points_per_series = 10000;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
@@ -1004,8 +1005,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_delta);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1020,8 +1021,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_delta_prometheus);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1036,8 +1037,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_idelta);
         rc.start = 10;
         rc.end = 130;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[123_f64, 33.0, -87.0, 0.0], &[10, 50, 90, 130]);
     }
@@ -1048,8 +1049,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_lag);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1064,8 +1065,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_lifetime);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1080,8 +1081,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_lifetime);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 200;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(200);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1096,8 +1097,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_scrape_interval);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1112,8 +1113,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_scrape_interval);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 80;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(80);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1134,8 +1135,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_changes);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 4.0, 4.0, 3.0, 0.0], &[0, 40, 80, 120, 160]);
     }
@@ -1146,8 +1147,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_changes_prometheus);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 3.0, 3.0, 2.0, 0.0], &[0, 40, 80, 120, 160]);
     }
@@ -1158,8 +1159,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_changes);
         rc.start = 0;
         rc.end = 45;
-        rc.step = 9;
-        rc.window = 9;
+        rc.step = Duration::from_millis(9);
+        rc.window = Duration::from_millis(9);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1174,8 +1175,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_resets);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 2.0, 2.0, 1.0, 0.0], &[0, 40, 80, 120, 160]);
     }
@@ -1186,8 +1187,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_avg);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1202,8 +1202,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_deriv_slow);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1224,8 +1223,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_deriv_fast);
         rc.start = 0;
         rc.end = 20;
-        rc.step = 4;
-        rc.window = 0;
+        rc.step = Duration::from_millis(4);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1240,8 +1238,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_ideriv);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1256,8 +1253,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_stddev);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
         rc.max_points_per_series = 10000;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
@@ -1279,8 +1275,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_integrate);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::ZERO;
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1295,8 +1291,7 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_distinct);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 0;
+        rc.step = Duration::from_millis(40);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 4.0, 4.0, 3.0, 1.0], &[0, 40, 80, 120, 160]);
     }
@@ -1307,8 +1302,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_distinct);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 80;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(80);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(&mut rc, &[NAN, 4.0, 7.0, 6.0, 3.0], &[0, 40, 80, 120, 160]);
     }
@@ -1319,8 +1314,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_mode_over_time);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 80;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(80);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1335,8 +1330,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_rate_over_sum);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 80;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(80);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1351,8 +1346,8 @@ mod tests {
         rc.handler = RollupHandler::Wrapped(rollup_zscore_over_time);
         rc.start = 0;
         rc.end = 160;
-        rc.step = 40;
-        rc.window = 80;
+        rc.step = Duration::from_millis(40);
+        rc.window = Duration::from_millis(80);
         rc.ensure_timestamps().expect("failed to ensure timestamps");
         test_rollup(
             &mut rc,
@@ -1373,8 +1368,8 @@ mod tests {
         let mut rc = RollupConfig::default();
         rc.handler = RollupHandler::Wrapped(rollup_default);
         rc.end = SRC_VALUES_COUNT;
-        rc.step = SRC_VALUES_COUNT / 5;
-        rc.window = SRC_VALUES_COUNT / 4;
+        rc.step = Duration::from_millis((SRC_VALUES_COUNT / 5) as u64);
+        rc.window = Duration::from_millis((SRC_VALUES_COUNT / 4) as u64);
         rc.max_points_per_series = 10000;
         // rc.ensure_timestamps().unwrap();
         let mut src_values: Vec<f64> = Vec::with_capacity(SRC_VALUES_COUNT as usize);

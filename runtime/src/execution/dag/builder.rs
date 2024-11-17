@@ -1,6 +1,6 @@
 use std::default::Default;
 use std::ops::Deref;
-
+use std::time::Duration;
 use ahash::HashMapExt;
 use metricsql_common::hash::IntMap;
 use metricsql_parser::ast::{
@@ -155,7 +155,7 @@ impl DAGBuilder {
             Expr::NumberLiteral(value) => Ok(NodeArg::from(value.value)),
             Expr::StringLiteral(value) => Ok(NodeArg::from(value.as_str())),
             Expr::Duration(d) if !d.requires_step() => {
-                let val = d.value_as_secs(1) as f64;
+                let val = d.value_as_secs(Duration::from_millis(1)) as f64;
                 Ok(NodeArg::from(val))
             }
             _ => {
@@ -348,7 +348,7 @@ impl DAGBuilder {
                     Some(NodeArg::Value(QueryValue::from(n.value)))
                 }
                 Expr::Duration(d) if !d.requires_step() => {
-                    let val = d.value(1);
+                    let val = d.value(Duration::ZERO); // ZERO is ok because of the check above
                     let d_sec = val as f64 / 1000_f64;
                     at_value = Some(val);
                     Some(NodeArg::Value(QueryValue::from(d_sec)))
@@ -756,7 +756,7 @@ mod tests {
 
     const START: Timestamp = 1000000_i64;
     const END: Timestamp = 2000000_i64;
-    const STEP: i64 = 200000_i64;
+    const STEP: Duration = Duration::from_millis(200000_u64);
 
     #[test]
     fn test_create_node_from_number() {

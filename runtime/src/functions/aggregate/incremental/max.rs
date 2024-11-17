@@ -30,7 +30,7 @@ impl IncrementalAggrHandler for IncrementalAggrMax {
             src.ts.values.iter(),
             dst.ts.values.iter_mut()
         );
-        for (src_count, dst_count, v, dst) in iter.filter(|(src_count, _, _, _)| **src_count == 0.0) {
+        for (_src_count, dst_count, v, dst) in iter.filter(|(src_count, _, _, _)| **src_count == 0.0) {
             if *dst_count == 0.0 {
                 *dst_count = 1.0;
                 *dst = *v;

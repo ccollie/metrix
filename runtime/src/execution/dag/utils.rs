@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use smallvec::SmallVec;
 use tracing::{field, trace_span, Span};
 
@@ -114,11 +115,12 @@ pub fn expand_single_value(tss: &mut [Timeseries], ec: &EvalConfig) -> RuntimeRe
     Ok(())
 }
 
-pub fn adjust_series_by_offset(rvs: &mut [Timeseries], offset: i64) {
-    if offset != 0 && !rvs.is_empty() {
+pub fn adjust_series_by_offset(rvs: &mut [Timeseries], offset: Duration) {
+    if offset.is_zero() && !rvs.is_empty() {
         // Make a copy of timestamps, since they may be used in other values.
         let src_timestamps = &rvs[0].timestamps;
-        let dst_timestamps = src_timestamps.iter().map(|x| x + offset).collect();
+        let ofs = offset.as_millis() as i64;
+        let dst_timestamps = src_timestamps.iter().map(|x| x + ofs).collect();
         let shared = Arc::new(dst_timestamps);
         for ts in rvs.iter_mut() {
             ts.timestamps = Arc::clone(&shared);

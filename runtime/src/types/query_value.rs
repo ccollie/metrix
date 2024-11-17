@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::time::Duration;
 use crate::common::format::format_number;
 use crate::execution::{eval_number, EvalConfig};
 use crate::functions::types::get_single_timeseries;
@@ -141,8 +142,8 @@ impl QueryValue {
             QueryValue::InstantVector(_) => ValueType::InstantVector,
         }
     }
-    pub fn from_duration(dur: &DurationExpr, step: i64) -> Self {
-        let d = dur.value(step);
+    pub fn from_duration_ms(dur: &DurationExpr, step: i64) -> Self {
+        let d = dur.value(Duration::from_millis(step as u64));
         let d_sec = d as f64 / 1000_f64;
         QueryValue::Scalar(d_sec)
     }
@@ -344,6 +345,12 @@ impl From<f64> for QueryValue {
 impl From<i64> for QueryValue {
     fn from(v: i64) -> Self {
         QueryValue::Scalar(v as f64)
+    }
+}
+
+impl From<Duration> for QueryValue {
+    fn from(d: Duration) -> Self {
+        QueryValue::Scalar(d.as_secs_f64())
     }
 }
 

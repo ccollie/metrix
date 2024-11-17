@@ -1,4 +1,4 @@
-use chrono::Duration;
+use std::time::Duration;
 use std::sync::Arc;
 use tracing::{span_enabled, Level};
 
@@ -44,8 +44,8 @@ impl Context {
 
         let storage = self.storage.clone();
         // todo: use std::time::Duration for deadline
-        let timeout_ms = deadline.timeout.num_milliseconds() as u64;
-        let duration = std::time::Duration::from_millis(timeout_ms);
+        let timeout_ms = deadline.timeout.as_millis() as u64;
+        let duration = Duration::from_millis(timeout_ms);
 
         fn handle_error(err: Error) -> RuntimeError {
             match err {
@@ -219,17 +219,17 @@ impl Default for SessionConfig {
             disable_cache: false,
             trace_enabled: false,
             max_query_len: DEFAULT_MAX_QUERY_LEN,
-            latency_offset: Duration::milliseconds(DEFAULT_LATENCY_OFFSET as i64),
+            latency_offset: Duration::from_millis(DEFAULT_LATENCY_OFFSET as u64),
             max_memory_per_query: 0,
             no_stale_markers: true,
             max_points_subquery_per_timeseries: 0,
-            max_staleness_interval: Duration::milliseconds(0),
-            min_staleness_interval: Duration::milliseconds(0),
+            max_staleness_interval: Duration::ZERO,
+            min_staleness_interval: Duration::ZERO,
             max_unique_timeseries: DEFAULT_MAX_UNIQUE_TIMESERIES,
-            max_lookback: Duration::milliseconds(0),
+            max_lookback: Duration::ZERO,
             set_lookback_to_step: false,
-            max_step_for_points_adjustment: Duration::minutes(1),
-            max_query_duration: Duration::seconds(30),
+            max_step_for_points_adjustment: Duration::from_millis(1000),
+            max_query_duration: Duration::from_secs(30),
         }
     }
 }

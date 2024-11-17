@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-
+    use std::time::Duration;
     use metricsql_parser::ast::{AggregationExpr, Expr, FunctionExpr, MetricExpr};
     use metricsql_parser::functions::AggregateFunction;
     use metricsql_parser::label::{LabelFilter, LabelFilterOp};
@@ -18,15 +18,15 @@ mod tests {
         ae: Expr,
         ec: EvalConfig,
         cache: RollupResultCache,
-        window: i64,
+        window: Duration,
     }
 
     fn setup() -> TestContext {
-        let window = 456_i64;
+        let window = Duration::from_millis(456_u64);
         let mut ec = EvalConfig::default();
         ec.start = 1000;
         ec.end = 2000;
-        ec.step = 200;
+        ec.step = Duration::from_millis(200);
         ec.max_points_per_series = 1e4 as usize;
         ec.set_caching(true);
 
@@ -403,7 +403,7 @@ mod tests {
         let mut ec = EvalConfig::default();
         ec.start = 1000;
         ec.end = 2000;
-        ec.step = 200;
+        ec.step = Duration::from_millis(200);
         ec.max_points_per_series = 1e4 as usize;
 
         MergeTestContext {
