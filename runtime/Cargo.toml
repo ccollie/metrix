@@ -24,7 +24,7 @@ async-trait = "0.1"
 enquote.workspace = true
 byte-slice-cast = "1.2"
 byte-pool.workspace = true
-clone_dyn = "0.25"
+clone_dyn = "0.29"
 chrono.workspace = true
 chrono-tz.workspace = true
 effective-limits = "0.5"
@@ -53,8 +53,6 @@ xxhash-rust.workspace = true
 metricsql_common={ path = "../common" }
 metricsql_parser={ path = "../parser" }
 static_assertions = "1.1.0"
-prometheus = "0.13.4"
-lazy_static = "1.5"
 
 [features]
 default = ["tokio"]

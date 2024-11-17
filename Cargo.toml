@@ -34,7 +34,7 @@ get-size = { version = "^0.1", features = ["derive"] }
 integer-encoding = "4.0"
 itertools = "0.13"
 num-traits = "0.2"
-pco = "0.3"
+pco = "0.4"
 pretty_assertions = "1.4"
 rand = "0.8"
 rand_distr = "0.4.3"

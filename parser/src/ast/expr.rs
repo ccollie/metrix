@@ -913,27 +913,6 @@ impl FunctionExpr {
     pub fn arg_for_optimization(&self) -> Option<&Expr> {
         self.arg_idx_for_optimization().and_then(|idx| self.args.get(idx))
     }
-    
-    fn get_aggr_arg_idx_for_optimization(&self, func: AggregateFunction) -> Option<usize> {
-        let arg_count = self.args.len();
-        use AggregateFunction::*;
-        // todo: just examine the signature and return the position containing a vector
-        match func {
-            Bottomk | BottomkAvg | BottomkMax | BottomkMedian | BottomkLast | BottomkMin
-            | Limitk | Outliersk | OutliersMAD | Quantile | Topk | TopkAvg | TopkMax
-            | TopkMedian | TopkLast | TopkMin => Some(1),
-            CountValues => None,
-            Quantiles => Some(arg_count - 1),
-            _ => {
-                for e in &self.args {
-                    if let Expr::Aggregation(_) = e {
-                        return None;
-                    }
-                }
-                Some(0)
-            }
-        }
-    }
 
     pub fn default_rollup(arg: Expr) -> ParseResult<Self> {
         Self::from_single_arg("default_rollup", arg)
