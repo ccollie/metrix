@@ -9,7 +9,6 @@ use crate::provider::QueryResult;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::{QueryValue, Timeseries};
 use ahash::AHashSet;
-use chrono::Utc;
 use tracing::{field, info, trace_span, Span};
 use metricsql_common::hash::Signature;
 use metricsql_common::time::current_time_millis;

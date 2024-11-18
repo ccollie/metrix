@@ -4,9 +4,6 @@ use ahash::{AHashMap, AHashSet};
 use tracing::{error, info, warn};
 use metricsql_common::hash::Signature;
 
-fn equal_timestamps(a: &[i64], b: &[i64]) -> bool {
-    a == b
-}
 
 pub fn merge_series(
     // qt: &Arc<Mutex<QueryTracer>>,
@@ -35,7 +32,7 @@ pub fn merge_series(
     let mut b = b;
     if b_timestamps.len() == shared_timestamps.len() {
         for ts_b in b.iter_mut() {
-            if !equal_timestamps(&ts_b.timestamps, b_timestamps) {
+            if *ts_b.timestamps != b_timestamps {
                 error!("BUG: invalid timestamps in b series {}; got {:?}; want {:?}", ts_b.metric_name, ts_b.timestamps, b_timestamps);
                 panic!("BUG: invalid timestamps in b series");
             }
@@ -46,7 +43,7 @@ pub fn merge_series(
 
     let mut m_a: AHashMap<Signature, Timeseries> = AHashMap::with_capacity(a.len());
     for ts in a.into_iter() {
-        if !equal_timestamps(&ts.timestamps, a_timestamps) {
+        if *ts.timestamps != a_timestamps {
             error!("BUG: invalid timestamps in a series {}; got {:?}; want {:?}", ts.metric_name, ts.timestamps, a_timestamps);
             panic!("BUG: invalid timestamps in a series");
         }
@@ -62,7 +59,7 @@ pub fn merge_series(
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(len_a);
     let mut a_nans = Vec::new();
     for ts_b in b.into_iter() {
-        if !equal_timestamps(&ts_b.timestamps, b_timestamps) {
+        if *ts_b.timestamps != b_timestamps {
             error!("BUG: invalid timestamps for b series {}; got {:?}; want {:?}", ts_b.metric_name, ts_b.timestamps, b_timestamps);
             panic!("BUG: invalid timestamps for b series");
         }
