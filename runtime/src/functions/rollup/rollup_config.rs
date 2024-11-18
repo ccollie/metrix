@@ -65,14 +65,13 @@ fn calc_sample_intervals_pre_fn(values: &mut [f64], timestamps: &[Timestamp]) {
 }
 
 // Pre-allocated handlers for closure to save allocations at runtime
-pub(crate) const FN_OPEN: RollupHandler = RollupHandler::Wrapped(rollup_open);
-pub(crate) const FN_CLOSE: RollupHandler = RollupHandler::Wrapped(rollup_close);
-pub(crate) const FN_MIN: RollupHandler = RollupHandler::Wrapped(rollup_min);
-pub(crate) const FN_MAX: RollupHandler = RollupHandler::Wrapped(rollup_max);
-pub(crate) const FN_AVG: RollupHandler = RollupHandler::Wrapped(rollup_avg);
-pub(crate) const FN_LOW: RollupHandler = RollupHandler::Wrapped(rollup_low);
-pub(crate) const FN_HIGH: RollupHandler = RollupHandler::Wrapped(rollup_high);
-
+const FN_OPEN: RollupHandler = RollupHandler::Wrapped(rollup_open);
+const FN_CLOSE: RollupHandler = RollupHandler::Wrapped(rollup_close);
+const FN_MIN: RollupHandler = RollupHandler::Wrapped(rollup_min);
+const FN_MAX: RollupHandler = RollupHandler::Wrapped(rollup_max);
+const FN_AVG: RollupHandler = RollupHandler::Wrapped(rollup_avg);
+const FN_LOW: RollupHandler = RollupHandler::Wrapped(rollup_low);
+const FN_HIGH: RollupHandler = RollupHandler::Wrapped(rollup_high);
 
 static MAX: &str = "max";
 static MIN: &str = "min";
@@ -368,10 +367,22 @@ impl RollupConfig {
         let window_ms = window.as_millis() as i64;
         let max_prev_interval = max_prev_interval.as_millis() as i64;
 
+        let mut i = 0;
+        let mut j = 0;
+        let mut ni = 0;
+        let mut nj = 0;
+
         let func_args: Vec<_> = self.timestamps.iter().enumerate().map(|(idx, &t_end)| {
             let t_start = t_end - window_ms;
-            let i = seek_first_timestamp_idx_after(&timestamps, t_start, 0);
-            let j = seek_first_timestamp_idx_after(&timestamps, t_end, i);
+
+            ni = seek_first_timestamp_idx_after(&timestamps[i..], t_start, ni);
+            i += ni;
+            if j < i {
+                j = i;
+            }
+
+            nj = seek_first_timestamp_idx_after(&timestamps[j..], t_end, nj);
+            j += nj;
 
             let mut rfa = RollupFuncArg::default();
             rfa.window = window_ms;
@@ -495,45 +506,29 @@ fn seek_first_timestamp_idx_after(
     seek_timestamp: Timestamp,
     n_hint: usize,
 ) -> usize {
-    let mut timestamps = timestamps;
     let count = timestamps.len();
-
     if count == 0 || timestamps[0] > seek_timestamp {
         return 0;
     }
-    let mut start_idx = if n_hint >= 2 { n_hint - 2 } else { 0 };
-    if start_idx >= count {
-        start_idx = count - 1
-    }
 
-    let mut end_idx = n_hint + 2;
-    if end_idx > count {
-        end_idx = count
-    }
-    if start_idx > 0 && timestamps[start_idx] <= seek_timestamp {
-        timestamps = &timestamps[start_idx..];
-        end_idx -= start_idx
+    let start_idx = (n_hint.saturating_sub(2)).min(count - 1);
+    let end_idx = (n_hint + 2).min(count);
+
+    let slice_start = if timestamps[start_idx] <= seek_timestamp { start_idx } else { 0 };
+    let slice_end = if end_idx < count && timestamps[end_idx] > seek_timestamp { end_idx } else { count };
+
+    let slice = &timestamps[slice_start..slice_end];
+
+    if slice.len() < 32 {
+        slice.iter()
+            .position(|&t| t > seek_timestamp)
+            .map_or(slice.len(), |pos| pos)
     } else {
-        start_idx = 0
-    }
-    if end_idx < timestamps.len() && timestamps[end_idx] > seek_timestamp {
-        timestamps = &timestamps[0..end_idx];
-    }
-    if timestamps.len() < 32 {
-        // Fast path: the number of timestamps to provider is small, so scan them all.
-        for (i, timestamp) in timestamps.iter().enumerate() {
-            if *timestamp > seek_timestamp {
-                return start_idx + i;
-            }
+        match slice.binary_search(&(seek_timestamp + 1)) {
+            Ok(pos) | Err(pos) => pos,
         }
-        return start_idx + timestamps.len();
     }
-    // Slow path: too big timestamps.len(), so use binary search.
-    let requested = seek_timestamp + 1;
-    match timestamps.binary_search(&requested) {
-        Ok(pos) => start_idx + pos,
-        Err(suggested) => start_idx + suggested,
-    }
+    .saturating_add(slice_start)
 }
 
 fn get_scrape_interval(timestamps: &[Timestamp]) -> Duration {
@@ -578,7 +573,7 @@ const fn get_max_prev_interval(scrape_interval: Duration) -> Duration {
     };
 
     if interval < 0 {
-        Duration::from_secs(0)
+        Duration::ZERO
     } else {
         Duration::from_millis(interval as u64)
     }
