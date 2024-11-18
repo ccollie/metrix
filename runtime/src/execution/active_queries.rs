@@ -31,6 +31,7 @@ pub struct ActiveQueryEntry {
 
 impl ActiveQueries {
     pub(crate) fn new() -> Self {
+        // TODO: use uuid or some other unique id
         let id = Utc::now().timestamp_nanos_opt().unwrap() as u64; // todo: uuid
         let inner = Inner {
             id,

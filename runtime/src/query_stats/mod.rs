@@ -1,10 +1,9 @@
-use std::cmp::Ordering;
-use std::ops::Sub;
 use std::sync::RwLock;
 
 use crate::prelude::Timestamp;
 use ahash::AHashMap;
-use std::time::{Duration, SystemTime};
+use metricsql_common::time::current_time_millis;
+use std::time::Duration;
 
 const QUERY_STATS_DEFAULT_CAPACITY: usize = 250;
 
@@ -17,21 +16,17 @@ pub struct QueryStatKey {
 #[derive(Hash, Clone, Debug)]
 pub struct QueryStatRecord {
     pub key: QueryStatKey,
-    pub register_time: SystemTime,
+    pub register_time: Timestamp,
     pub duration: Duration,
 }
 
 impl QueryStatRecord {
-    pub(crate) fn matches(&self, current_time: SystemTime, max_lifetime: Duration) -> bool {
+    pub(crate) fn matches(&self, current_time: Timestamp, max_lifetime: Duration) -> bool {
         if self.key.query.is_empty() {
             return false;
         }
-        if let Ok(elapsed) = self.register_time.duration_since(current_time) {
-            if elapsed > max_lifetime {
-                return false;
-            }
-        }
-        true
+        let elapsed = Duration::from_millis((current_time - self.register_time) as u64);
+        elapsed <= max_lifetime
     }
 }
 
@@ -140,9 +135,9 @@ impl QueryStatsTracker {
         time_range_msecs: i64,
         start_time: Timestamp,
     ) {
-        let register_time = SystemTime::now();
-        let duration = register_time.sub(start_time);
-        if duration.cmp(&self.config.min_query_duration) == Ordering::Less {
+        let register_time = current_time_millis();
+        let duration = Duration::from_millis((register_time - start_time).abs() as u64);
+        if duration < self.config.min_query_duration {
             return;
         }
 
@@ -170,7 +165,7 @@ impl QueryStatsTracker {
     }
 
     pub fn get_top_by_count(&self, top_n: usize, max_lifetime: Duration) -> Vec<QueryStatByCount> {
-        let current_time = SystemTime::now();
+        let current_time = current_time_millis();
 
         let mut m: AHashMap<&QueryStatKey, u64> = AHashMap::new();
         let qst = self.inner.read().unwrap();
@@ -202,7 +197,7 @@ impl QueryStatsTracker {
         top_n: usize,
         max_lifetime: Duration,
     ) -> Vec<QueryStatByDuration> {
-        let current_time = SystemTime::now();
+        let current_time = current_time_millis();
 
         #[derive(Hash, Copy, Clone)]
         struct CountSum {
@@ -249,7 +244,7 @@ impl QueryStatsTracker {
         top_n: usize,
         max_lifetime: Duration,
     ) -> Vec<QueryStatByDuration> {
-        let current_time = SystemTime::now();
+        let current_time = current_time_millis();
 
         #[derive(Hash, Clone)]
         struct CountDuration {
