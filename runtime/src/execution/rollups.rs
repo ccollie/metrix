@@ -1,6 +1,4 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use rayon::prelude::*;
 use tracing::{field, trace_span, Span};
@@ -21,6 +19,7 @@ use crate::functions::rollup::{
     MAX_SILENCE_INTERVAL,
     TimeSeriesMap
 };
+use crate::functions::transform::extract_labels_from_expr;
 use crate::prelude::{get_timeseries, MetricName};
 use crate::provider::{QueryResult, QueryResults, SearchQuery};
 use crate::rayon::iter::ParallelIterator;
@@ -126,29 +125,25 @@ impl<'a> RollupExecutor<'a> {
     fn eval_without_at(&self, ctx: &Context, ec: &EvalConfig) -> RuntimeResult<Vec<Timeseries>> {
         let (offset, ec_new) = self.adjust_eval_range(ec)?;
 
-        let mut rvs = match &*self.re.expr {
-            Expr::MetricExpression(me) => self.eval_with_metric_expr(ctx, &ec_new, me)?,
-            _ => {
-                if self.is_incr_aggregate {
-                    let msg = format!(
-                        "BUG:is_incr_aggregate must be false for rollup {} over subquery {}",
-                        self.func, self.re
-                    );
-                    return Err(RuntimeError::from(msg));
-                }
-                self.eval_with_subquery(ctx, &ec_new)?
+        let mut rvs = if let Expr::MetricExpression(me) = &*self.re.expr {
+            self.eval_with_metric_expr(ctx, &ec_new, me)?
+        } else {
+            if self.is_incr_aggregate {
+                return Err(RuntimeError::from(format!(
+                    "BUG:is_incr_aggregate must be false for rollup {} over subquery {}",
+                    self.func, self.re
+                )));
             }
+            self.eval_with_subquery(ctx, &ec_new)?
         };
 
         if self.func == RollupFunction::AbsentOverTime {
-            rvs = aggregate_absent_over_time(ec, &self.re.expr, &rvs)?
+            rvs = aggregate_absent_over_time(ec, &self.re.expr, &rvs)?;
         }
 
         if offset != 0 && !rvs.is_empty() {
-            // Make a copy of timestamps, since they may be used in other values.
             let src_timestamps = &rvs[0].timestamps;
-            let dst_timestamps = src_timestamps.iter().map(|x| x + offset).collect();
-            let shared = Arc::new(dst_timestamps);
+            let shared = Arc::new(src_timestamps.iter().map(|&x| x + offset).collect::<Vec<_>>());
             for ts in rvs.iter_mut() {
                 ts.timestamps = Arc::clone(&shared);
             }
@@ -206,6 +201,7 @@ impl<'a> RollupExecutor<'a> {
             ec.step,
             ec.max_points_per_series,
         )?);
+
         let min_staleness_interval = ctx.config.min_staleness_interval.num_milliseconds() as usize;
         let (rcs, pre_funcs) = get_rollup_configs(
             self.func,
@@ -234,13 +230,13 @@ impl<'a> RollupExecutor<'a> {
 
                 for rc in rcs.iter() {
                     if let Some(tsm) = new_timeseries_map(
-                        &self.func,
+                        self.func,
                         self.keep_metric_names,
                         &shared_timestamps,
                         &ts_sq.metric_name,
                     ) {
-                        rc.do_timeseries_map(&tsm, values, timestamps)?;
-                        tsm.as_ref().borrow_mut().append_timeseries_to(&mut res);
+                        let scanned = rc.do_timeseries_map(tsm.clone(), values, timestamps)?;
+                        tsm.as_ref().append_timeseries_to(&mut res);
                         continue;
                     }
 
@@ -336,7 +332,7 @@ impl<'a> RollupExecutor<'a> {
 
         let min_staleness_interval = ctx.config.min_staleness_interval.num_milliseconds() as usize;
         let (rcs, pre_funcs) = get_rollup_configs(
-            &self.func,
+            self.func,
             &self.func_handler,
             self.expr,
             start,
@@ -466,14 +462,14 @@ impl<'a> RollupExecutor<'a> {
 
                 for rc in ctx.rcs.iter() {
                     if let Some(tsm) = new_timeseries_map(
-                        ctx.func,
+                        *ctx.func,
                         ctx.keep_metric_names,
                         &ctx.timestamps,
-                        &rs.metric_name,
+                        &rs.metric,
                     ) {
-                        rc.do_timeseries_map(&tsm, &rs.values, &rs.timestamps)?;
-                        for ts in tsm.as_ref().borrow_mut().values_mut() {
-                            ctx.iafc.update_timeseries(ts, worker_id)?;
+                        rc.do_timeseries_map(tsm.clone(), &rs.values, &rs.timestamps)?;
+                        for ts in tsm.as_ref() {
+                            ctx.iafc.update_timeseries(ts, worker_id);
                         }
                         continue;
                     }
@@ -483,7 +479,7 @@ impl<'a> RollupExecutor<'a> {
                         ctx.keep_metric_names,
                         rc,
                         &mut ts,
-                        &rs.metric_name,
+                        &rs.metric,
                         &rs.values,
                         &rs.timestamps,
                         &ctx.timestamps,
@@ -491,7 +487,7 @@ impl<'a> RollupExecutor<'a> {
 
                     ctx.samples_scanned_total.add(samples_scanned);
                     // todo: return result rather than unwrap
-                    ctx.iafc.update_timeseries(&mut ts, worker_id)?;
+                    ctx.iafc.update_timeseries(&mut ts, worker_id);
                 }
                 Ok(())
             },
@@ -623,7 +619,6 @@ impl<'a> RollupExecutor<'a> {
         let memory_limit = ctx.rollup_result_cache.memory_limit();
 
         if !ctx.rollup_result_cache.reserve_memory(rollup_memory_size) {
-            rss.cancel();
             let msg = format!("not enough memory for processing {} data points across {} time series with {} points in each time series; \n
                                   total available memory for concurrent requests: {} bytes; requested memory: {} bytes; \n
                                   possible solutions are: reducing the number of matching time series; switching to node with more RAM; \n
@@ -649,12 +644,12 @@ fn new_timeseries_map(
     keep_metric_names: bool,
     shared_timestamps: &Arc<Vec<Timestamp>>,
     mn: &MetricName,
-) -> Option<Rc<RefCell<TimeSeriesMap>>> {
+) -> Option<Arc<TimeSeriesMap>> {
     if !TimeSeriesMap::is_valid_function(func) {
         return None;
     }
     let map = TimeSeriesMap::new(keep_metric_names, shared_timestamps, mn);
-    Some(Rc::new(RefCell::new(map)))
+    Some(Arc::new(map))
 }
 
 fn process_result(
@@ -666,11 +661,11 @@ fn process_result(
     keep_metric_names: bool,
 ) -> RuntimeResult<u64> {
     if let Some(tsm) =
-        new_timeseries_map(&func, keep_metric_names, timestamps, &rs.metric_name)
+        new_timeseries_map(func, keep_metric_names, timestamps, &rs.metric)
     {
-        rc.do_timeseries_map(&tsm, &rs.values, &rs.timestamps)?;
+        rc.do_timeseries_map(tsm.clone(), &rs.values, &rs.timestamps)?;
         let mut tss = series.lock().unwrap();
-        tsm.as_ref().borrow_mut().append_timeseries_to(&mut tss);
+        tsm.as_ref().append_timeseries_to(&mut tss);
         Ok(0_u64)
     } else {
         let mut ts: Timeseries = Timeseries::default();
@@ -678,7 +673,7 @@ fn process_result(
             keep_metric_names,
             rc,
             &mut ts,
-            &rs.metric_name,
+            &rs.metric,
             &rs.values,
             &rs.timestamps,
             timestamps,
@@ -735,11 +730,8 @@ fn aggregate_absent_over_time(
         return Ok(rvs);
     }
     for i in 0..tss[0].values.len() {
-        for ts in tss {
-            if ts.values[i].is_nan() {
-                rvs[0].values[i] = f64::NAN;
-                break;
-            }
+        if tss.iter().any(|ts| ts.values[i].is_nan()) {
+            rvs[0].values[i] = f64::NAN;
         }
     }
     Ok(rvs)
@@ -747,12 +739,9 @@ fn aggregate_absent_over_time(
 fn get_absent_timeseries(ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Vec<Timeseries>> {
     // Copy tags from arg
     let mut rvs = eval_number(ec, 1.0)?;
-    if let Expr::MetricExpression(me) = expr {
-
-    }
-    if let Some(labels) = &self.labels {
+    if let Some(labels) = extract_labels_from_expr(expr) {
         for label in labels {
-            rvs[0].metric_name.set_tag(&label.name, &label.value);
+            rvs[0].metric_name.set_label_value(&label.name, &label.value);
         }
     }
     Ok(rvs)
