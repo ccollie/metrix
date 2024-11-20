@@ -1,3 +1,4 @@
+use chrono::DateTime;
 pub use duration::parse_duration_value;
 pub use function::validate_function_args;
 pub use number::{get_number_suffix, parse_number};
@@ -57,4 +58,20 @@ pub fn parse(input: &str) -> ParseResult<Expr> {
 pub fn expand_with_exprs(q: &str) -> Result<String, ParseError> {
     let e = parse(q)?;
     Ok(format!("{}", e))
+}
+
+/// Parses a string into a unix timestamp (milliseconds). Accepts a positive integer or an RFC3339 timestamp.
+/// Included here only to avoid having to include chrono in the public API
+pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
+    let value = if let Ok(dt) = s.parse::<i64>() {
+        dt
+    } else {
+        let value = DateTime::parse_from_rfc3339(s)
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        value.timestamp_millis()
+    };
+    if value < 0 {
+        return Err(ParseError::InvalidTimestamp(s.to_string()));
+    }
+    Ok(value)
 }
