@@ -23,6 +23,8 @@ pub enum ParseError {
     InvalidAggregateFunction(String),
     #[error("Expected positive duration: found `{0}`")]
     InvalidDuration(String),
+    #[error("Expected positive unix millis or rfc3339 timestamp: found `{0}`")]
+    InvalidTimestamp(String),
     #[error("Expected number: found `{0}`")]
     InvalidNumber(String),
     #[error(transparent)]
