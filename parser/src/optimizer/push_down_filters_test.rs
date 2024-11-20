@@ -454,10 +454,6 @@ mod tests {
             r#"a{b="c"} + quantiles("foo", 0.1, 0.2, bar{x="y"}) by (b, x, y)"#,
             r#"a{b="c", x="y"} + quantiles("foo", 0.1, 0.2, bar{b="c", x="y"}) by (b, x, y)"#,
         );
-        validate_optimized(
-            r#"count_values("foo", bar{baz="a"}) by (bar,b) + a{b="c"}"#,
-            r#"count_values("foo", bar{baz="a"}) by (bar, b) + a{b="c"}"#,
-        );
 
         // count_values
         validate_optimized(
@@ -489,6 +485,11 @@ mod tests {
             ) by(bar)
                 + avg(foo{bar="three"}) by(bar)"#,
             r#"sum(foo{bar="one",bar="three"}, avg(foo{bar="three",bar="two"}[1i]) by(bar)) by(bar) + avg(foo{bar="three"}) by(bar)"#,
+        );
+
+        validate_optimized(
+            r#"count_values("foo", bar{baz="a"}) by (bar,b) + a{b="c"}"#,
+            r#"count_values("foo", bar{baz="a"}) by (bar, b) + a{b="c"}"#,
         );
     }
 

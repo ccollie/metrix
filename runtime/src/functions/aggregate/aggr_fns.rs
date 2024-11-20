@@ -970,7 +970,7 @@ fn aggr_func_quantiles(afa: &mut AggrFuncArg) -> RuntimeResult<Vec<Timeseries>> 
         ));
     }
 
-    // tinyvec ??
+    // smallvec ??
     let mut phis: Vec<f64> = Vec::with_capacity(phi_count);
 
     for arg in afa.args[1..afa.args.len() - 1].iter() {
