@@ -8,13 +8,20 @@ fn from_str_radix(str: &str, radix: u32) -> Result<f64, ParseError> {
 }
 
 fn parse_basic(str: &str) -> ParseResult<f64> {
-    let mut multiplier = 1;
-    let mut str = str;
-    if let Some((ending, mult)) = get_number_suffix(str) {
-        str = &str[0..str.len() - ending.len()];
-        multiplier = *mult;
-    }
-    match str.parse::<f64>() {
+    let (str, multiplier) = if let Some((ending, mult)) = get_number_suffix(str) {
+        (&str[0..str.len() - ending.len()], *mult)
+    } else {
+        (str, 1)
+    };
+    
+    // this initial check is to avoid the cost of an allocation if not necessary
+    let res = if str.contains('_') {
+        let str = str.replace('_', "");
+        str.parse::<f64>()
+    } else {
+        str.parse::<f64>()
+    };
+    match res {
         Ok(value) => Ok(if multiplier > 1 {
             value * multiplier as f64
         } else {
