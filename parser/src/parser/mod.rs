@@ -60,25 +60,15 @@ pub fn expand_with_exprs(q: &str) -> Result<String, ParseError> {
     Ok(format!("{}", e))
 }
 
-/// Parses a string into a unix timestamp (milliseconds). Supports
-/// - Unix timestamps in seconds with optional milliseconds after the point. For example, 1562529662.678.
-/// - Unix timestamps in milliseconds. For example, 1562529662678.
-/// - RFC3339. For example, 2022-03-29T01:02:03Z or 2022-03-29T01:02:03+02:30.
-/// 
+/// Parses a string into a unix timestamp (milliseconds). Accepts a positive integer or an RFC3339 timestamp.
 /// Included here only to avoid having to include chrono in the public API
 pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
-    let value = if s.contains('.') {
-        let value = s.parse::<f64>().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
-        // split into whole seconds and milliseconds
-        let secs = value.trunc() as i64;
-        let ms = value.fract() as i64;
-        secs * 1000 + ms
-    } else if let Ok(dt) = s.parse::<i64>() {
+    let value = if let Ok(dt) = s.parse::<i64>() {
         dt
     } else {
-        DateTime::parse_from_rfc3339(s)
-            .map(|value| value.timestamp_millis())
-            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?
+        let value = DateTime::parse_from_rfc3339(s)
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        value.timestamp_millis()
     };
     if value < 0 {
         return Err(ParseError::InvalidTimestamp(s.to_string()));
