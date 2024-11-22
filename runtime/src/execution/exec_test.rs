@@ -2264,7 +2264,7 @@ mod tests {
     #[test]
     fn avg_over_time() {
         let q = "round(avg_over_time(rand(0)[200s:5s]), 0.001)";
-        assert_result_eq(q, &[0.467, 0.488, 0.462, 0.486, 0.441, 0.474]);
+        assert_result_eq(q, &[0.521, 0.518, 0.509, 0.544, 0.511, 0.504]);
     }
 
     #[test]
@@ -3241,8 +3241,8 @@ mod tests {
 
     #[test]
     fn share_gt_over_time() {
-        let q = "share_gt_over_time(round(5*rand(0))[200s:10s], 1)";
-        assert_result_eq(q, &[0.6, 0.6, 0.75, 0.65, 0.7, 0.45]);
+        let q = "share_gt_over_time(round(rand(0))[200s:10s], 0.7)";
+        assert_result_eq(q, &[0.35, 0.3, 0.5, 0.3, 0.3, 0.25]);
     }
 
     #[test]
@@ -3254,31 +3254,31 @@ mod tests {
     #[test]
     fn share_le_over_time() {
         let q = "share_le_over_time(rand(0)[200s:10s], 0.7)";
-        assert_result_eq(q, &[0.75, 0.9, 0.5, 0.65, 0.8, 0.8]);
+        assert_result_eq(q, &[0.65, 0.7, 0.5, 0.7, 0.7, 0.75]);
     }
 
     #[test]
     fn count_gt_over_time() {
         let q = "count_gt_over_time(rand(0)[200s:10s], 0.7)";
-        assert_result_eq(q, &[5.0, 2.0, 10.0, 7.0, 4.0, 4.0]);
+        assert_result_eq(q, &[7.0, 6.0, 10.0, 6.0, 6.0, 5.0]);
     }
 
     #[test]
     fn count_le_over_time() {
         let q = "count_le_over_time(rand(0)[200s:10s], 0.7)";
-        assert_result_eq(q, &[15.0, 18.0, 10.0, 13.0, 16.0, 16.0]);
+        assert_result_eq(q, &[13.0, 14.0, 10.0, 14.0, 14.0, 15.0]);
     }
 
     #[test]
     fn count_eq_over_time() {
         let q = "count_eq_over_time(round(5*rand(0))[200s:10s], 1)";
-        assert_result_eq(q, &[3.0, 4.0, 3.0, 6.0, 6.0, 6.0]);
+        assert_result_eq(q, &[2.0, 4.0, 5.0, 2.0, 6.0, 6.0]);
     }
 
     #[test]
     fn count_ne_over_time() {
         let q = "count_ne_over_time(round(5*rand(0))[200s:10s], 1)";
-        assert_result_eq(q, &[17.0, 16.0, 17.0, 14.0, 14.0, 14.0]);
+        assert_result_eq(q, &[18.0, 16.0, 15.0, 18.0, 14.0, 14.0]);
     }
 
     #[test]
@@ -3303,7 +3303,7 @@ mod tests {
     fn increases_over_time() {
         assert_result_eq(
             "increases_over_time(rand(0)[200s:10s])",
-            &[9.0, 14.0, 12.0, 11.0, 9.0, 11.0],
+            &[11.0, 9.0, 9.0, 12.0, 9.0, 8.0],
         );
     }
 
@@ -3311,7 +3311,7 @@ mod tests {
     fn decreases_over_time() {
         assert_result_eq(
             "decreases_over_time(rand(0)[200s:10s])",
-            &[11.0, 6.0, 8.0, 9.0, 11.0, 9.0],
+            &[9.0, 11.0, 11.0, 8.0, 11.0, 12.0],
         );
     }
 

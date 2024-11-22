@@ -685,6 +685,11 @@ fn get_rollup_function_handler_meta(
     })
 }
 
+/// get_rollup_tag returns the possible second arg from the expr.
+///
+/// The expr can have the following forms:
+/// - rollup_func(q, tag)
+/// - aggr_func(rollup_func(q, tag)) - this form is used during incremental aggregate calculations
 fn get_rollup_tag(expr: &Expr) -> RuntimeResult<Option<&String>> {
     if let Expr::Function(fe) = expr {
         if fe.args.len() < 2 {
