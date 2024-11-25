@@ -145,4 +145,14 @@ impl TimeSeriesMap {
         let ts = inner.get_or_create_series(label_name, label_value);
         cb(ts);
     }
+
+    pub fn with_all_series<F>(&self, cb: F)
+    where
+        F: Fn(&mut Timeseries),
+    {
+        let mut inner = self.inner.write().unwrap();
+        for (_, ts) in inner.series.iter_mut() {
+            cb(ts);
+        }
+    }
 }

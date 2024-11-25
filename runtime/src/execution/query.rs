@@ -188,14 +188,7 @@ struct CommonParams {
     deadline: Deadline,
     start: Timestamp,
     end: Timestamp,
-    current_timestamp: i64,
     filters: Matchers,
-}
-
-impl CommonParams {
-    pub fn is_default_time_range(&self) -> bool {
-        self.start == 0 && self.current_timestamp - self.end < 1000
-    }
 }
 
 /// Query handler for `Instant Queries`
@@ -242,7 +235,6 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
                     deadline: params.deadline,
                     start,
                     end,
-                    current_timestamp: ct,
                     filters: filters.clone(),
                 }
             } else {
@@ -252,7 +244,6 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
                     deadline: params.deadline,
                     start,
                     end,
-                    current_timestamp: ct,
                     filters: tfs_list,
                 }
             };

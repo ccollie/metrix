@@ -1,58 +1,60 @@
 pub(crate) use histogram::vmrange_buckets_to_le;
 use metricsql_parser::functions::TransformFunction;
-pub(crate) use utils::{extract_labels, extract_labels_from_expr, get_timezone_offset};
+pub(crate) use utils::{extract_labels_from_expr, get_timezone_offset};
 
 use crate::execution::EvalConfig;
 use crate::functions::arg_parse::get_series_arg;
-use crate::functions::transform::absent::transform_absent;
-use crate::functions::transform::bitmap::{
+use absent::transform_absent;
+use bitmap::{
     transform_bitmap_and, transform_bitmap_or, transform_bitmap_xor,
 };
-use crate::functions::transform::clamp::{clamp, clamp_max, clamp_min};
-use crate::functions::transform::datetime::{
+use clamp::{clamp, clamp_max, clamp_min};
+use datetime::{
     day_of_month, day_of_week, day_of_year, days_in_month, hour, minute, month, now, time,
     timezone_offset, year,
 };
-use crate::functions::transform::drop_empty_series::transform_drop_empty_series;
-use crate::functions::transform::end::transform_end;
-use crate::functions::transform::histogram::{
+use drop_empty_series::transform_drop_empty_series;
+use end::transform_end;
+use histogram::{
     buckets_limit, histogram_avg, histogram_quantile, histogram_quantiles, histogram_share,
     histogram_stddev, histogram_stdvar, prometheus_buckets,
 };
-use crate::functions::transform::interpolate::interpolate;
-use crate::functions::transform::keep_last_value::keep_last_value;
-use crate::functions::transform::keep_next_value::keep_next_value;
-use crate::functions::transform::labels::{
+use interpolate::interpolate;
+use keep_last_value::keep_last_value;
+use keep_next_value::keep_next_value;
+use labels::{
     alias, drop_common_labels, label_copy, label_del, label_graphite_group, label_join, label_keep,
     label_lowercase, label_map, label_match, label_mismatch, label_move, label_replace, label_set,
     label_transform, label_uppercase, label_value, labels_equal,
 };
-use crate::functions::transform::limit_offset::limit_offset;
+use limit_offset::limit_offset;
 use crate::functions::transform::math::{
     abs, acos, acosh, asin, asinh, atan, atanh, ceil, cos, cosh, deg, exp, floor, ln, log10, log2,
     rad, sgn, sin, sinh, sqrt, tan, tanh, transform_pi,
 };
-use crate::functions::transform::rand::{rand, rand_exp, rand_norm};
-use crate::functions::transform::range::{
-    range_mad, range_avg, range_first, range_last, range_linear_regression, range_max, range_median,
+use rand::{rand, rand_exp, rand_norm};
+use range::{
+    range_avg, range_first, range_last, range_linear_regression, range_mad, range_max, range_median,
     range_min, range_normalize, range_stddev, range_stdvar, range_sum, range_trim_outliers,
     range_trim_spikes, range_trim_zscore, range_zscore, transform_range_quantile
 };
-use crate::functions::transform::remove_resets::remove_resets;
-use crate::functions::transform::round::round;
-use crate::functions::transform::ru::transform_ru;
-use crate::functions::transform::running::{running_avg, running_max, running_min, running_sum};
-use crate::functions::transform::scalar::scalar;
-use crate::functions::transform::smooth_exponential::smooth_exponential;
-use crate::functions::transform::sort::{
+use remove_resets::remove_resets;
+use round::round;
+use running::{running_avg, running_max, running_min, running_sum};
+use scalar::scalar;
+use smooth_exponential::smooth_exponential;
+use sort::{
     sort, sort_alpha_numeric, sort_alpha_numeric_desc, sort_by_label, sort_by_label_desc, sort_desc,
 };
-use crate::functions::transform::start::transform_start;
-use crate::functions::transform::step::step;
-use crate::functions::transform::union::union;
-use crate::functions::transform::vector::vector;
+use start::transform_start;
+use step::step;
+use union::{union};
+pub(crate) use union::handle_union;
+use vector::vector;
+use crate::functions::transform::ru::transform_ru;
 use crate::runtime_error::RuntimeResult;
 use crate::types::{QueryValue, Timeseries};
+
 
 mod absent;
 mod bitmap;

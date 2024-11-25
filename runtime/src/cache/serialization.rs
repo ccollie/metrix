@@ -45,7 +45,7 @@ pub(crate) fn compress_series_slice(
     let q_timestamps = &series[0].timestamps;
     let mut count = q_timestamps.len();
 
-    // todo: tinyvec
+    // todo: smallvec
     let mut data_page_sizes = Vec::with_capacity(count / DATA_PAGE_SIZE + 1);
 
     while count > 0 {

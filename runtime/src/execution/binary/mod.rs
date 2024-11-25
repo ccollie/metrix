@@ -1,3 +1,4 @@
+pub(crate) use binop_duration::*;
 pub(crate) use binop_scalar_scalar::*;
 pub(crate) use binop_scalar_vector::*;
 pub(crate) use binop_string_string::*;
@@ -11,3 +12,4 @@ mod binop_string_string;
 mod binop_vector_scalar;
 mod binop_vector_vector;
 mod common;
+mod binop_duration;

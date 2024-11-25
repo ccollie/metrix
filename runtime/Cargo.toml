@@ -25,6 +25,7 @@ enquote.workspace = true
 byte-slice-cast = "1.2"
 byte-pool.workspace = true
 clone_dyn = "0.29"
+chili.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 effective-limits = "0.5"

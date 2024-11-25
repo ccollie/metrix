@@ -409,7 +409,8 @@ impl RollupConfig {
             rfa
         }).collect();
 
-        match func_args.len() {
+        let len = func_args.len();
+        match len {
             0 => {}
             1 => dst_values.push(self.handler.eval(&func_args[0])),
             2 => {
@@ -429,6 +430,7 @@ impl RollupConfig {
 
         Ok(samples_scanned)
     }
+
 
     fn validate(&self) -> RuntimeResult<()> {
         // Sanity checks.

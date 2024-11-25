@@ -7,14 +7,12 @@ use metricsql_parser::ast::{Expr, Operator};
 use metricsql_parser::parser;
 use metricsql_parser::parser::ParseError;
 
-use crate::execution::{compile_expression, DAGNode};
-
 const PARSE_CACHE_MAX_LEN: usize = 500;
 
 pub struct ParseCacheValue {
     pub expr: Option<Expr>,
     pub err: Option<ParseError>,
-    pub eval_node: Option<DAGNode>,
+    pub optimized: Option<Expr>,
     pub has_subquery: bool,
     pub sort_results: bool,
 }
@@ -96,32 +94,32 @@ impl ParseCache {
                 let has_subquery = expr.contains_subquery();
                 let sort_results = should_sort_results(&expr);
 
-                let node = compile_expression(&expr);
-                if let Ok(eval_node) = node {
-                    ParseCacheValue {
-                        expr: Some(expr),
-                        eval_node: Some(eval_node),
-                        err: None,
-                        has_subquery,
-                        sort_results,
-                    }
-                } else {
-                    let err = node.err().unwrap();
-                    ParseCacheValue {
-                        expr: None,
-                        eval_node: None,
-                        has_subquery: false,
-                        sort_results: false,
-                        err: Some(ParseError::General(format!(
-                            "Error optimizing expression: {:?}",
-                            err
-                        ))),
-                    }
-                }
+                let res = ParseCacheValue {
+                    expr: Some(expr),
+                    optimized: None,
+                    err: None,
+                    has_subquery,
+                    sort_results,
+                };
+
+               // // let expr = optimize(&expr);
+               //      let err = node.err().unwrap();
+               //      ParseCacheValue {
+               //          expr: None,
+               //          eval_node: None,
+               //          has_subquery: false,
+               //          sort_results: false,
+               //          err: Some(ParseError::General(format!(
+               //              "Error optimizing expression: {:?}",
+               //              err
+               //          ))),
+               //      }
+               //  }
+               res
             }
             Err(e) => ParseCacheValue {
                 expr: None,
-                eval_node: None,
+                optimized: None,
                 err: Some(e.clone()),
                 has_subquery: false,
                 sort_results: false,

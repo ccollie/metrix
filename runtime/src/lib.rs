@@ -23,7 +23,6 @@ pub use cache::*;
 pub use provider::*;
 pub use query_stats::*;
 pub use runtime_error::*;
-//pub use types::*;
 
 pub mod cache;
 pub mod execution;
