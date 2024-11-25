@@ -274,32 +274,6 @@ pub(crate) const fn get_rollup_function_factory(func: RollupFunction) -> RollupH
     }
 }
 
-pub(crate) const fn rollup_func_requires_config(f: &RollupFunction) -> bool {
-    use RollupFunction::*;
-
-    matches!(
-        f,
-        PredictLinear
-            | CountLeOverTime
-            | CountGtOverTime
-            | CountEqOverTime
-            | CountNeOverTime
-            | CountValuesOverTime
-            | DurationOverTime
-            | HoeffdingBoundLower
-            | HoeffdingBoundUpper
-            | HoltWinters
-            | QuantilesOverTime
-            | QuantileOverTime
-            | ShareEqOverTime
-            | ShareGtOverTime
-            | ShareLeOverTime
-            | SumGtOverTime
-            | SumLeOverTime
-            | SumEqOverTime
-    )
-}
-
 pub(super) fn remove_counter_resets(values: &mut [f64]) {
     // There is no need in handling NaNs here, since they are impossible
     // on values from storage.

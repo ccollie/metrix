@@ -1,3 +1,4 @@
+use std::time::Duration;
 use metricsql_parser::ast::{DurationExpr, Operator};
 use crate::{RuntimeError, RuntimeResult};
 use crate::types::QueryValue;
@@ -6,7 +7,7 @@ pub(crate) fn eval_duration_scalar_binop(
     dur: &DurationExpr,
     scalar: f64,
     op: Operator,
-    step: i64,
+    step: Duration,
 ) -> RuntimeResult<QueryValue> {
     let d = dur.value(step);
     match op {
@@ -37,7 +38,7 @@ pub(crate) fn eval_duration_duration_binop(
     dur_a: &DurationExpr,
     dur_b: &DurationExpr,
     op: Operator,
-    step: i64,
+    step: Duration,
 ) -> RuntimeResult<QueryValue> {
     let a = dur_a.value(step);
     let b = dur_b.value(step);

@@ -5,7 +5,7 @@ use metricsql_parser::label::LabelFilter;
 use metricsql_parser::optimizer::{push_down_binary_op_filters_in_place, trim_filters_by_match_modifier};
 use crate::execution::{Context, EvalConfig};
 use crate::execution::binary::{can_push_down_common_filters, get_common_label_filters};
-use crate::execution::new_eval::eval_expr;
+use crate::execution::exec::eval_expr;
 use crate::execution::utils::series_len;
 use crate::prelude::Timeseries;
 use crate::runtime_error::{RuntimeError, RuntimeResult};

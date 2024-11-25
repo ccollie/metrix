@@ -5,7 +5,7 @@ use get_size::GetSize;
 use integer_encoding::VarInt;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(GetSize)]
 pub struct Label {
     pub name: String,

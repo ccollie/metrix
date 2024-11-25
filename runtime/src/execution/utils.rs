@@ -25,8 +25,8 @@ pub fn remove_empty_series(tss: &mut Vec<Timeseries>) {
 }
 
 #[inline]
-pub(crate) fn adjust_eval_range<'a>(
-    func: &RollupFunction,
+pub(super) fn adjust_eval_range<'a>(
+    func: RollupFunction,
     offset: &Option<DurationExpr>,
     ec: &'a EvalConfig,
 ) -> RuntimeResult<(Duration, Cow<'a, EvalConfig>)> {
@@ -44,7 +44,7 @@ pub(crate) fn adjust_eval_range<'a>(
         // See also https://github.com/VictoriaMetrics/VictoriaMetrics/issues/976
     }
 
-    if *func == RollupFunction::RollupCandlestick {
+    if func == RollupFunction::RollupCandlestick {
         // Automatically apply `offset -step` to `rollup_candlestick` function
         // in order to obtain expected OHLC results.
         // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/309#issuecomment-582113462

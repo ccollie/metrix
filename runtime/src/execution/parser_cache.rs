@@ -7,14 +7,12 @@ use metricsql_parser::ast::{Expr, Operator};
 use metricsql_parser::parser;
 use metricsql_parser::parser::ParseError;
 
-use crate::execution::{compile_expression, DAGNode};
-
 const PARSE_CACHE_MAX_LEN: usize = 500;
 
 pub struct ParseCacheValue {
     pub expr: Option<Expr>,
     pub err: Option<ParseError>,
-    pub eval_node: Option<DAGNode>,
+    pub optimized: Option<Expr>,
     pub has_subquery: bool,
     pub sort_results: bool,
 }
@@ -98,7 +96,7 @@ impl ParseCache {
 
                 let res = ParseCacheValue {
                     expr: Some(expr),
-                    eval_node: None,
+                    optimized: None,
                     err: None,
                     has_subquery,
                     sort_results,
@@ -121,7 +119,7 @@ impl ParseCache {
             }
             Err(e) => ParseCacheValue {
                 expr: None,
-                eval_node: None,
+                optimized: None,
                 err: Some(e.clone()),
                 has_subquery: false,
                 sort_results: false,

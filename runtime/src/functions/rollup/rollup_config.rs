@@ -322,7 +322,7 @@ impl RollupConfig {
 
     /// calculates rollup for the given timestamps and values and puts them to tsm.
     /// returns the number of samples scanned
-    fn do_timeseries_map(
+    pub(crate) fn do_timeseries_map(
         &self,
         tsm: Arc<TimeSeriesMap>,
         values: &[f64],
@@ -431,9 +431,6 @@ impl RollupConfig {
         Ok(samples_scanned)
     }
 
-    fn exec_configs(configs: &[RollupConfig]) {
-
-    }
 
     fn validate(&self) -> RuntimeResult<()> {
         // Sanity checks.

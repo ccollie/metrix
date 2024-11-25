@@ -1,6 +1,6 @@
 pub(crate) use histogram::vmrange_buckets_to_le;
 use metricsql_parser::functions::TransformFunction;
-pub(crate) use utils::{extract_labels, extract_labels_from_expr, get_timezone_offset};
+pub(crate) use utils::{extract_labels_from_expr, get_timezone_offset};
 
 use crate::execution::EvalConfig;
 use crate::functions::arg_parse::get_series_arg;
@@ -34,7 +34,7 @@ use crate::functions::transform::math::{
 };
 use rand::{rand, rand_exp, rand_norm};
 use range::{
-    range_mad, range_avg, range_first, range_last, range_linear_regression, range_max, range_median,
+    range_avg, range_first, range_last, range_linear_regression, range_mad, range_max, range_median,
     range_min, range_normalize, range_stddev, range_stdvar, range_sum, range_trim_outliers,
     range_trim_spikes, range_trim_zscore, range_zscore, transform_range_quantile
 };
@@ -53,6 +53,8 @@ pub(crate) use union::handle_union;
 use vector::vector;
 use crate::runtime_error::RuntimeResult;
 use crate::types::{QueryValue, Timeseries};
+
+pub(crate) use self::union::handle_union;
 
 mod absent;
 mod bitmap;

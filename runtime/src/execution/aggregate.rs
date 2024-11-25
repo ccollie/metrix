@@ -5,7 +5,7 @@ use metricsql_parser::ast::{AggregationExpr, Expr, FunctionExpr, MetricExpr};
 use metricsql_parser::functions::BuiltinFunction;
 use crate::common::cpu::num_cpus;
 use crate::execution::{Context, EvalConfig};
-use crate::execution::new_eval::{eval_exprs_in_parallel, eval_rollup_func_args};
+use crate::execution::exec::{eval_exprs_in_parallel, eval_rollup_func_args};
 use crate::execution::rollups::RollupExecutor;
 use crate::functions::aggregate::{exec_aggregate_fn, AggrFuncArg, IncrementalAggregationHandler};
 use crate::functions::rollup::get_rollup_function_factory;
