@@ -7,6 +7,7 @@ use strum_macros::EnumIter;
 use crate::common::ValueType;
 use crate::functions::signature::{Signature, Volatility};
 use crate::functions::{BuiltinFunction, FunctionMeta, MAX_ARG_COUNT};
+use crate::functions::RollupFunction::AggrOverTime;
 use crate::parser::ParseError;
 
 /// Built-in Rollup Functions
@@ -438,14 +439,14 @@ impl FromStr for RollupTag {
     }
 }
 
-/// get_rollup_arg_idx returns the argument index for the given fe, which accepts the rollup argument.
+/// get_rollup_arg_idx returns the argument index for the given fe which accepts the rollup argument.
 ///
 /// -1 is returned if fe isn't a rollup function.
 pub const fn get_rollup_arg_idx(fe: &RollupFunction, arg_count: usize) -> i32 {
     use RollupFunction::*;
     match fe {
         QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => 1,
-        QuantilesOverTime => (arg_count - 1) as i32,
+        AggrOverTime | QuantilesOverTime => (arg_count - 1) as i32,
         _ => 0,
     }
 }
@@ -458,8 +459,8 @@ pub const fn get_rollup_arg_idx_for_optimization(
     use RollupFunction::*;
     match func {
         CountValuesOverTime => Some(1),
-        AggrOverTime | QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
-        QuantilesOverTime => Some(arg_count - 1),
+        QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
+        AggrOverTime | QuantilesOverTime => Some(arg_count - 1),
         _ => Some(0),
     }
 }

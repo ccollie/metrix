@@ -4520,7 +4520,7 @@ mod tests {
 
     #[test]
     fn aggr_over_time_single_func() {
-        let q = r#"round(aggr_over_time(rand(0)[:10s], "increase"), 0.01)"#;
+        let q = r#"round(aggr_over_time("increase", rand(0)[:10s]),0.01)"#;
         let mut r1 = make_result(&[6.76, 4.59, 3.78, 5.86, 5.93, 6.45]);
         r1.metric.set("rollup", "increase");
         test_query(q, vec![r1]);
@@ -4528,7 +4528,7 @@ mod tests {
 
     #[test]
     fn aggr_over_time_multi_func() {
-        let q = r#"sort(aggr_over_time(round(rand(0),0.1)[:10s], "min_over_time", "count_over_time", "max_over_time"))"#;
+        let q = r#"sort(aggr_over_time("min_over_time", "median_over_time", "max_over_time", round(rand(0),0.1)[:10s]))"#;
         let mut r1 = make_result(&[0.0, 0.0, 0.0, 0.0, 0.1, 0.1]);
         r1.metric.set("rollup", "min_over_time");
         let mut r2 = make_result(&[1.0, 1.0, 1.0, 0.9, 1.0, 0.9]);
@@ -4541,17 +4541,21 @@ mod tests {
 
     #[test]
     fn test_avg_aggr_over_time() {
-        let q = r#"avg(aggr_over_time(time()[:10s], "min_over_time", "max_over_time"))"#;
+        let q = r#"avg(aggr_over_time("min_over_time", "max_over_time", time()[:10s]))"#;
         assert_result_eq(q, &[905.0, 1105.0, 1305.0, 1505.0, 1705.0, 1905.0]);
+    }
 
+    #[test]
+    fn test_avg_aggr_over_time_by_rollup() {
         // avg(aggr_over_time(multi-func)) by (rollup)
-        let q = r#"sort(avg(aggr_over_time(time()[:10s], "min_over_time", "max_over_time")) by (rollup))"#;
+        let q = r#"sort(avg(aggr_over_time("min_over_time", "max_over_time", time()[:10s])) by (rollup))"#;
         let mut r1 = make_result(&[810_f64, 1010.0, 1210.0, 1410.0, 1610.0, 1810.0]);
         r1.metric.set("rollup", "min_over_time");
         let mut r2 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
         r2.metric.set("rollup", "max_over_time");
         test_query(q, vec![r1, r2]);
     }
+
 
     #[test]
     fn rollup_candlestick() {

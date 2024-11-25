@@ -65,21 +65,21 @@ fn calc_sample_intervals_pre_fn(values: &mut [f64], timestamps: &[Timestamp]) {
 }
 
 // Pre-allocated handlers for closure to save allocations at runtime
-const FN_OPEN: RollupHandler = RollupHandler::Wrapped(rollup_open);
-const FN_CLOSE: RollupHandler = RollupHandler::Wrapped(rollup_close);
-const FN_MIN: RollupHandler = RollupHandler::Wrapped(rollup_min);
-const FN_MAX: RollupHandler = RollupHandler::Wrapped(rollup_max);
-const FN_AVG: RollupHandler = RollupHandler::Wrapped(rollup_avg);
-const FN_LOW: RollupHandler = RollupHandler::Wrapped(rollup_low);
-const FN_HIGH: RollupHandler = RollupHandler::Wrapped(rollup_high);
+static FN_OPEN: RollupHandler = RollupHandler::Wrapped(rollup_open);
+static FN_CLOSE: RollupHandler = RollupHandler::Wrapped(rollup_close);
+static FN_MIN: RollupHandler = RollupHandler::Wrapped(rollup_min);
+static FN_MAX: RollupHandler = RollupHandler::Wrapped(rollup_max);
+static FN_AVG: RollupHandler = RollupHandler::Wrapped(rollup_avg);
+static FN_LOW: RollupHandler = RollupHandler::Wrapped(rollup_low);
+static FN_HIGH: RollupHandler = RollupHandler::Wrapped(rollup_high);
 
-static MAX: &str = "max";
-static MIN: &str = "min";
-static AVG: &str = "avg";
-static OPEN: &str = "open";
-static CLOSE: &str = "close";
-static LOW: &str = "low";
-static HIGH: &str = "high";
+const MAX: &str = "max";
+const MIN: &str = "min";
+const AVG: &str = "avg";
+const OPEN: &str = "open";
+const CLOSE: &str = "close";
+const LOW: &str = "low";
+const HIGH: &str = "high";
 
 fn get_tag_fn_from_str(name: &str) -> Option<(&'static str, &RollupHandler)> {
     match name {
@@ -94,11 +94,10 @@ fn get_tag_fn_from_str(name: &str) -> Option<(&'static str, &RollupHandler)> {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct TagFunction {
     pub tag_value: &'static str,
-    pub func: RollupHandler,
+    pub func: RollupHandler, // COW ???
 }
 
 pub type PreFunctionVec = SmallVec<PreFunction, 4>;
@@ -322,7 +321,7 @@ impl RollupConfig {
 
     /// calculates rollup for the given timestamps and values and puts them to tsm.
     /// returns the number of samples scanned
-    fn do_timeseries_map(
+    pub(crate) fn do_timeseries_map(
         &self,
         tsm: Arc<TimeSeriesMap>,
         values: &[f64],
@@ -508,7 +507,7 @@ fn seek_first_timestamp_idx_after(
         return 0;
     }
 
-    let start_idx = (n_hint.saturating_sub(2)).min(count - 1);
+    let start_idx = n_hint.saturating_sub(2).min(count - 1);
     let end_idx = (n_hint + 2).min(count);
 
     let slice_start = if timestamps[start_idx] <= seek_timestamp { start_idx } else { 0 };
@@ -722,7 +721,7 @@ fn get_rollup_tag(expr: &Expr) -> RuntimeResult<Option<&String>> {
     }
 }
 
-// todo: use in optimize so it's cached in the DAG node
+// todo: use in optimize so it's cached in the AST node
 fn get_rollup_aggr_functions(expr: &Expr) -> RuntimeResult<Vec<RollupFunction>> {
     fn get_func_by_name(name: &str) -> RuntimeResult<RollupFunction> {
         if let Ok(func) = get_rollup_func_by_name(name) {
@@ -740,14 +739,19 @@ fn get_rollup_aggr_functions(expr: &Expr) -> RuntimeResult<Vec<RollupFunction>> 
         }
     }
 
-    fn get_func_from_expr(expr: &Expr) -> RuntimeResult<RollupFunction> {
+    fn get_func_from_expr(expr: &Expr, funcs: &mut Vec<RollupFunction>) -> RuntimeResult<()> {
         if let Expr::StringLiteral(name) = expr {
-            get_func_by_name(name.as_str())
+            funcs.push( get_func_by_name(name.as_str())? );
+        } else if let Expr::Parens(pe) = expr {
+            for arg in pe.expressions.iter() {
+                get_func_from_expr(arg, funcs)?;
+            }
         } else {
             let msg =
-                format!("{expr} cannot be passed here; expecting quoted aggregate function name",);
-            Err(RuntimeError::ArgumentError(msg))
+                    format!("{expr} cannot be passed here; expecting quoted aggregate function name",);
+            return Err(RuntimeError::ArgumentError(msg))
         }
+        Ok(())
     }
 
     let expr = if let Expr::Aggregation(afe) = expr {
@@ -777,7 +781,7 @@ fn get_rollup_aggr_functions(expr: &Expr) -> RuntimeResult<Vec<RollupFunction>> 
         }
         let mut functions = Vec::with_capacity(fe.args.len() - 1);
         for arg in fe.args[1..].iter() {
-            functions.push(get_func_from_expr(arg)?)
+            get_func_from_expr(arg, &mut functions)?;
         }
         Ok(functions)
     } else {
