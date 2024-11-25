@@ -51,10 +51,10 @@ use step::step;
 use union::{union};
 pub(crate) use union::handle_union;
 use vector::vector;
+use crate::functions::transform::ru::transform_ru;
 use crate::runtime_error::RuntimeResult;
 use crate::types::{QueryValue, Timeseries};
 
-pub(crate) use self::union::handle_union;
 
 mod absent;
 mod bitmap;

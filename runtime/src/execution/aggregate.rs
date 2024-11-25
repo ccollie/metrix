@@ -6,7 +6,7 @@ use metricsql_parser::functions::BuiltinFunction;
 use crate::common::cpu::num_cpus;
 use crate::execution::{Context, EvalConfig};
 use crate::execution::exec::{eval_exprs_in_parallel, eval_rollup_func_args};
-use crate::execution::rollups::RollupExecutor;
+use crate::execution::rollups::RollupEvaluator;
 use crate::functions::aggregate::{exec_aggregate_fn, AggrFuncArg, IncrementalAggregationHandler};
 use crate::functions::rollup::get_rollup_function_factory;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
@@ -49,7 +49,7 @@ pub(super) fn eval_aggr_func(
 
             let nrf = get_rollup_function_factory(rf);
             let func_handler = nrf(&args)?;
-            let mut executor = RollupExecutor::new(rf, func_handler, expr, &re);
+            let mut executor = RollupEvaluator::new(rf, func_handler, expr, &re);
             executor.timeseries_limit = get_timeseries_limit(ae)?;
             executor.is_incr_aggregate = true;
 
@@ -138,7 +138,7 @@ fn try_get_arg_rollup_func_with_metric_expr(
             match fe.function {
                 BuiltinFunction::Rollup(_) => {
                     if let Some(arg) = fe.arg_for_optimization() {
-                        match arg.deref() {
+                        match arg {
                             Expr::MetricExpression(me) => create_func(me, expr, &fe.name(), false),
                             Expr::Rollup(re) => {
                                 match &*re.expr {

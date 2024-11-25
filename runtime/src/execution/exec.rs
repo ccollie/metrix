@@ -441,23 +441,6 @@ fn eval_transform_func(
     exec_transform_fn(func, &mut tfa).map_err(|err| map_error(err, fe))
 }
 
-#[inline]
-fn eval_args(ctx: &Context, ec: &EvalConfig, args: &[Expr]) -> RuntimeResult<Vec<Value>> {
-    // see if we can evaluate all args in parallel
-    // todo: if rayon in cheap enough, we can avoid the check and always go parallel
-    // todo: see https://docs.rs/rayon/1.0.3/rayon/iter/trait.IndexedParallelIterator.html#method.with_min_len
-    let count = args.iter()
-        .skip(5)
-        .filter(|arg| !matches!(arg, Expr::StringLiteral(_) | Expr::Duration(_) | Expr::NumberLiteral(_)))
-        .count();
-    
-    if count > 1 {
-        eval_exprs_in_parallel(ctx, ec, args)
-    } else {
-        eval_exprs_sequentially(ctx, ec, args)
-    }
-}
-
 pub(super) fn eval_exprs_sequentially(
     ctx: &Context,
     ec: &EvalConfig,

@@ -1,16 +1,10 @@
-use tracing::{field, trace_span, Span};
+pub(crate) use binop_duration::*;
 pub(crate) use binop_scalar_scalar::*;
 pub(crate) use binop_scalar_vector::*;
 pub(crate) use binop_string_string::*;
 pub(crate) use binop_vector_scalar::*;
 pub(crate) use binop_vector_vector::*;
-pub(crate) use binop_duration::*;
 pub(crate) use common::*;
-use metricsql_parser::ast::{BinModifier, Operator};
-use crate::execution::Context;
-use crate::execution::utils::series_len;
-use crate::prelude::{InstantVector, QueryValue};
-use crate::RuntimeResult;
 
 mod binop_scalar_scalar;
 mod binop_scalar_vector;
