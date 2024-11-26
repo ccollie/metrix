@@ -446,7 +446,7 @@ pub const fn get_rollup_arg_idx(fe: &RollupFunction, arg_count: usize) -> i32 {
     use RollupFunction::*;
     match fe {
         QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => 1,
-        AggrOverTime | QuantilesOverTime => (arg_count - 1) as i32,
+        QuantilesOverTime => (arg_count - 1) as i32,
         _ => 0,
     }
 }
@@ -460,7 +460,7 @@ pub const fn get_rollup_arg_idx_for_optimization(
     match func {
         CountValuesOverTime => Some(1),
         QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
-        AggrOverTime | QuantilesOverTime => Some(arg_count - 1),
+        QuantilesOverTime => Some(arg_count - 1),
         _ => Some(0),
     }
 }

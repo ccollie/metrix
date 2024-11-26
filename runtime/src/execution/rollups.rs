@@ -26,6 +26,7 @@ use metricsql_parser::ast::{AggregationExpr, Expr, MetricExpr, RollupExpr};
 use metricsql_parser::functions::RollupFunction;
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::{field, trace_span, Span};
 use crate::execution::utils::{adjust_eval_range, duration_value, get_step};
 
@@ -158,7 +159,8 @@ impl<'a> RollupEvaluator<'a> {
         let window = duration_value(&self.re.window, ec.step);
 
         let mut ec_sq = ec.copy_no_timestamps();
-        ec_sq.start -= (window + MAX_SILENCE_INTERVAL + step).as_millis() as i64;
+        ec_sq.start -= (window + step + max_silence_interval(ctx)).as_millis() as i64;
+        ec_sq.end += step.as_millis() as i64;
         ec_sq.step = step;
         ec_sq.max_points_per_series = ctx.config.max_points_subquery_per_timeseries;
         validate_max_points_per_timeseries(
@@ -824,6 +826,16 @@ fn do_rollup_for_timeseries(
     ts_dst.timestamps = Arc::clone(shared_timestamps);
 
     Ok(samples_scanned)
+}
+
+const FIVE_MINUTES: Duration = Duration::from_secs(5 * 60);
+
+fn max_silence_interval(ctx: &Context) -> Duration {
+    if ctx.config.min_staleness_interval.is_zero() {
+        FIVE_MINUTES
+    } else {
+        ctx.config.min_staleness_interval
+    }
 }
 
 fn mul_no_overflow(a: i64, b: i64) -> i64 {

@@ -353,12 +353,27 @@ impl RollupConfig {
             }
         }
         
-        let mut window = if !self.window.is_zero() { self.window } else { self.step };
-        if self.may_adjust_window && window < max_prev_interval {
-            window = max_prev_interval;
-        }
-        if self.is_default_rollup && !self.lookback_delta.is_zero() && window > self.lookback_delta {
-            window = self.lookback_delta;
+        let mut window = self.window;
+        if window.is_zero() {
+            window = self.step;
+
+            if self.may_adjust_window && window < max_prev_interval {
+                // Adjust lookbehind window only if it isn't set explicitly, e.g. rate(foo).
+                // In the case of missing lookbehind window it should be adjusted in order to return non-empty graph
+                // when the window doesn't cover at least two raw samples (this is what most users expect).
+                //
+                // If the user explicitly sets the lookbehind window to some fixed value, e.g. rate(foo[1s]),
+                // then it is expected he knows what he is doing. Do not adjust the lookbehind window then.
+                //
+                // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/3483
+                window = max_prev_interval;
+            }
+
+            if self.is_default_rollup && !self.lookback_delta.is_zero() && window > self.lookback_delta {
+                // Implicit window exceeds -search.maxStalenessInterval, so limit it to -search.maxStalenessInterval
+                // according to https://github.com/VictoriaMetrics/VictoriaMetrics/issues/784
+                window = self.lookback_delta;
+            }
         }
 
         let mut samples_scanned = values.len() as u64;

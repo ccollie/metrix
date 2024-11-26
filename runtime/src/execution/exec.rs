@@ -446,12 +446,18 @@ pub(super) fn eval_exprs_sequentially(
     ec: &EvalConfig,
     args: &[Expr],
 ) -> RuntimeResult<Vec<Value>> {
-    if args.is_empty() {
-        return Ok(Vec::new());
+    match args.len() {
+        0 => Ok(Vec::new()),
+        1 => {
+            let value = eval_expr(ctx, ec, &args[0])?;
+            Ok(vec![value])
+        }
+        _ => {
+            args.iter()
+                .map(|expr| eval_expr(ctx, ec, expr))
+                .collect::<RuntimeResult<Vec<Value>>>()
+        }
     }
-    args.iter()
-        .map(|expr| eval_expr(ctx, ec, expr))
-        .collect::<RuntimeResult<Vec<Value>>>()
 }
 
 pub(super) fn eval_exprs_in_parallel(
@@ -459,15 +465,18 @@ pub(super) fn eval_exprs_in_parallel(
     ec: &EvalConfig,
     args: &[Expr],
 ) -> RuntimeResult<Vec<Value>> {
-    if args.is_empty() {
-        return Ok(Vec::new());
+    match args.len() {
+        0 => Ok(vec![]),
+        1 => {
+            let value = eval_expr(ctx, ec, &args[0])?;
+            Ok(vec![value])
+        }
+        _ => {
+            args.par_iter()
+                .map(|expr| eval_expr(ctx, ec, expr))
+                .collect()
+        }
     }
-    let res: RuntimeResult<Vec<Value>> = args
-        .par_iter()
-        .map(|expr| eval_expr(ctx, ec, expr))
-        .collect();
-
-    res
 }
 
 pub(super) fn eval_rollup_func_args(
