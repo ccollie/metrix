@@ -73,7 +73,7 @@ impl PartialOrd for Sample {
 }
 
 impl Hash for Sample {
-    fn hash<H>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.timestamp.hash(state);
         self.value.to_bits().hash(state);
     }
