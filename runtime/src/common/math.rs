@@ -61,10 +61,7 @@ pub fn mode_no_nans(prev_value: f64, a: &mut [f64]) -> f64 {
 pub(crate) fn mean(values: &[f64]) -> f64 {
     let mut sum: f64 = 0.0;
     let mut n = 0;
-    for v in values.iter() {
-        if v.is_nan() {
-            continue;
-        }
+    for v in values.iter().copied().filter(|v| !v.is_nan()) {
         sum += v;
         n += 1;
     }
@@ -84,13 +81,10 @@ pub(crate) fn stdvar(values: &[f64]) -> f64 {
     let mut avg: f64 = 0.0;
     let mut count: usize = 0;
     let mut q: f64 = 0.0;
-    for v in values {
-        if v.is_nan() {
-            continue;
-        }
+    for v in values.iter().copied().filter(|v| !v.is_nan()) {
         count += 1;
-        let avg_new = avg + (*v - avg) / count as f64;
-        q += (*v - avg) * (*v - avg_new);
+        let avg_new = avg + (v - avg) / count as f64;
+        q += (v - avg) * (v - avg_new);
         avg = avg_new
     }
     if count == 0 {
@@ -121,7 +115,7 @@ pub(crate) fn quantiles(qs: &mut [f64], phis: &[f64], origin_values: &[f64]) {
 
 /// calculates the given phi from origin_values without modifying origin_values
 pub(crate) fn quantile(phi: f64, origin_values: &[f64]) -> f64 {
-    // todo: tinyvec ?
+    // todo: smallVec ?
     let mut block = get_pooled_vec_f64(origin_values.len());
     prepare_for_quantile_float64(&mut block, origin_values);
     quantile_sorted(phi, &block)
@@ -135,10 +129,7 @@ fn prepare_for_quantile_float64(dst: &mut Vec<f64>, src: &[f64]) {
 
 /// copies items from src to dst but removes NaNs and sorts the dst
 fn prepare_tv_for_quantile_float64(dst: &mut SmallVec<f64, 64>, src: &[f64]) {
-    for v in src.iter() {
-        if v.is_nan() {
-            continue;
-        }
+    for v in src.iter().filter(|v| !v.is_nan()) {
         dst.push(*v);
     }
     dst.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Less));
