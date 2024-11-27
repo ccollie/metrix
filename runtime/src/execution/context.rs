@@ -77,11 +77,12 @@ impl Context {
 
     // todo: pass in tracer
     pub fn parse_promql(&self, q: &str) -> RuntimeResult<(Arc<ParseCacheValue>, ParseCacheResult)> {
+        let optimize = self.config.optimize_queries;
         let (res, cached) = if self.config.disable_cache {
-            let val = ParseCache::parse_internal(q);
+            let val = ParseCache::parse_internal(q, optimize);
             (Arc::new(val), ParseCacheResult::CacheMiss)
         } else {
-            self.parse_cache.parse(q)
+            self.parse_cache.parse(q, optimize)
         };
         if let Some(err) = &res.err {
             return Err(RuntimeError::ParseError(err.clone()));
@@ -188,6 +189,9 @@ pub struct SessionConfig {
 
     /// The maximum duration for query execution (default 30 secs)
     pub max_query_duration: Duration,
+
+    /// Whether to optimize the query before execution
+    pub optimize_queries: bool
 }
 
 impl SessionConfig {
@@ -230,6 +234,7 @@ impl Default for SessionConfig {
             set_lookback_to_step: false,
             max_step_for_points_adjustment: Duration::from_millis(1000),
             max_query_duration: Duration::from_secs(30),
+            optimize_queries: false,
         }
     }
 }

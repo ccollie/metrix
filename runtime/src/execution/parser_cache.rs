@@ -6,6 +6,7 @@ use lru_time_cache::LruCache;
 use metricsql_parser::ast::{Expr, Operator};
 use metricsql_parser::parser;
 use metricsql_parser::parser::ParseError;
+use metricsql_parser::prelude::{adjust_comparison_ops, optimize as optimize_expr};
 
 const PARSE_CACHE_MAX_LEN: usize = 500;
 
@@ -20,7 +21,7 @@ pub struct ParseCacheValue {
 pub struct ParseCache {
     requests: AtomicU64,
     misses: AtomicU64,
-    lru: Mutex<LruCache<String, Arc<ParseCacheValue>>>, // todo: use parking_lot rwLock
+    lru: Mutex<LruCache<String, Arc<ParseCacheValue>>>, // todo:
 }
 
 #[derive(PartialEq)]
@@ -64,13 +65,13 @@ impl ParseCache {
         self.lru.lock().unwrap().clear()
     }
 
-    pub fn parse(&self, q: &str) -> (Arc<ParseCacheValue>, ParseCacheResult) {
+    pub fn parse(&self, q: &str, optimize: bool) -> (Arc<ParseCacheValue>, ParseCacheResult) {
         self.requests.fetch_add(1, Ordering::Relaxed);
         match self.get(q) {
             Some(value) => (value, ParseCacheResult::CacheHit),
             None => {
                 self.misses.fetch_add(1, Ordering::Relaxed);
-                let parsed = Self::parse_internal(q);
+                let parsed = Self::parse_internal(q, optimize);
                 let k = q.to_string();
                 let to_insert = Arc::new(parsed);
 
@@ -88,34 +89,38 @@ impl ParseCache {
     }
 
     // todo: pass options
-    pub(super) fn parse_internal(q: &str) -> ParseCacheValue {
+    pub(super) fn parse_internal(q: &str, optimize: bool) -> ParseCacheValue {
         match parser::parse(q) {
-            Ok(expr) => {
+            Ok(mut expr) => {
+                adjust_comparison_ops(&mut expr);
                 let has_subquery = expr.contains_subquery();
                 let sort_results = should_sort_results(&expr);
 
-                let res = ParseCacheValue {
+                if optimize {
+                    match optimize_expr(expr) {
+                        Ok(e) => expr = e,
+                        Err(e) => {
+                            return ParseCacheValue {
+                                expr: None,
+                                optimized: None,
+                                err: Some(ParseError::General(format!(
+                                    "Error optimizing expression: {:?}",
+                                    e
+                                ))),
+                                has_subquery: false,
+                                sort_results: false,
+                            }
+                        }
+                    }
+                };
+
+                ParseCacheValue {
                     expr: Some(expr),
                     optimized: None,
                     err: None,
                     has_subquery,
                     sort_results,
-                };
-
-               // // let expr = optimize(&expr);
-               //      let err = node.err().unwrap();
-               //      ParseCacheValue {
-               //          expr: None,
-               //          eval_node: None,
-               //          has_subquery: false,
-               //          sort_results: false,
-               //          err: Some(ParseError::General(format!(
-               //              "Error optimizing expression: {:?}",
-               //              err
-               //          ))),
-               //      }
-               //  }
-               res
+                }
             }
             Err(e) => ParseCacheValue {
                 expr: None,
