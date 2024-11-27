@@ -284,12 +284,13 @@ pub(super) fn remove_counter_resets(values: &mut [f64]) {
     let mut prev_value = values[0];
 
     for (i, v) in values.iter_mut().enumerate() {
-        let d = *v - prev_value;
+        let val = *v;
+        let d = val - prev_value;
         if d < 0.0 {
             if (-d * 8.0) < prev_value {
                 // This is likely a partial counter reset.
                 // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/2787
-                correction += prev_value - *v;
+                correction += prev_value - val;
             } else {
                 correction += prev_value;
             }
@@ -337,7 +338,7 @@ pub(super) fn rollup_avg(rfa: &RollupFuncArg) -> f64 {
         // with irregular data points.
         return NAN;
     }
-    let sum: f64 = rfa.values.iter().sum();
+    let sum: f64 = rfa.values.iter().copied().sum();
     sum / rfa.values.len() as f64
 }
 
@@ -351,14 +352,8 @@ pub(super) fn rollup_min(rfa: &RollupFuncArg) -> f64 {
         return NAN;
     }
 
-    let mut min_value = rfa.values[0];
-    for v in rfa.values.iter() {
-        if *v < min_value {
-            min_value = *v;
-        }
-    }
-
-    min_value
+    let min = rfa.values.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap();
+    min
 }
 
 pub(crate) fn rollup_mad(rfa: &RollupFuncArg) -> f64 {
@@ -518,13 +513,9 @@ pub(super) fn rollup_range(rfa: &RollupFuncArg) -> f64 {
     let values = rfa.values;
     let mut max = values[0];
     let mut min = max;
-    for v in values.iter() {
-        if *v > max {
-            max = *v;
-        }
-        if *v < min {
-            min = *v;
-        }
+    for v in values.iter().cloned() {
+        max = max.max(v);
+        min = min.min(v);
     }
     max - min
 }
@@ -535,7 +526,7 @@ pub(super) fn rollup_sum2(rfa: &RollupFuncArg) -> f64 {
     if rfa.values.is_empty() {
         return NAN;
     }
-    rfa.values.iter().fold(0.0, |r, x| r + (*x * *x))
+    rfa.values.iter().copied().fold(0.0, |r, x| r + (x * x))
 }
 
 pub(super) fn rollup_geomean(rfa: &RollupFuncArg) -> f64 {

@@ -1641,20 +1641,12 @@ mod tests {
     }
 
     #[test]
-    fn dummy() {
+    fn test_scalar() {
+        assert_result_eq("-1 < 2", &[-1.0, -1.0, -1.0, -1.0, -1.0, -1.0]);
         assert_result_eq(
             "123 < time()",
             &[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0],
         );
-    }
-
-    #[test]
-    fn test_scalar() {
-        assert_result_eq("-1 < 2", &[-1.0, -1.0, -1.0, -1.0, -1.0, -1.0]);
-        // assert_result_eq(
-        //     "123 < time()",
-        //     &[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0],
-        // );
         assert_result_eq("time() > 1234", &[NAN, NAN, 1400.0, 1600.0, 1800.0, 2000.0]);
         assert_result_eq("time() >bool 1234", &[0.0, 0.0, 1.0, 1.0, 1.0, 1.0]);
         assert_result_eq(
@@ -1665,10 +1657,10 @@ mod tests {
             "(time() > 1234) !=bool 1400",
             &[NAN, NAN, 0.0, 1.0, 1.0, 1.0],
         );
-        // assert_result_eq(
-        //     "1400 !=bool (time() > 1234)",
-        //     &[NAN, NAN, 0.0, 1.0, 1.0, 1.0],
-        // );
+        assert_result_eq(
+            "1400 !=bool (time() > 1234)",
+            &[NAN, NAN, 0.0, 1.0, 1.0, 1.0],
+        );
         let q = "123 > time()";
         test_query(q, vec![]);
 
@@ -4536,27 +4528,27 @@ mod tests {
 
     #[test]
     fn aggr_over_time_multi_func() {
-        let q = r#"sort(aggr_over_time(, round(rand(0),0.1)[:10s], "min_over_time", "median_over_time", "max_over_time"))"#;
+        let q = r#"sort(aggr_over_time(round(rand(0),0.1)[:10s], "min_over_time", "median_over_time", "max_over_time"))"#;
         let mut r1 = make_result(&[0.0, 0.0, 0.0, 0.0, 0.1, 0.1]);
         r1.metric.set("rollup", "min_over_time");
         let mut r2 = make_result(&[1.0, 1.0, 1.0, 0.9, 1.0, 0.9]);
-        r2.metric.set("rollup", "max_over_time");
+        r2.metric.set("rollup", "median_over_time");
         let mut r3 = make_result(&[20_f64, 20.0, 20.0, 20.0, 20.0, 20.0]);
-        r3.metric.set("rollup", "count_over_time");
+        r3.metric.set("rollup", "max_over_time");
         let result_expected: Vec<QueryResult> = vec![r1, r2, r3];
         test_query(q, result_expected)
     }
 
     #[test]
     fn test_avg_aggr_over_time() {
-        let q = r#"avg(aggr_over_time("min_over_time", "max_over_time", time()[:10s]))"#;
+        let q = r#"avg(aggr_over_time(time()[:10s], "min_over_time", "max_over_time"))"#;
         assert_result_eq(q, &[905.0, 1105.0, 1305.0, 1505.0, 1705.0, 1905.0]);
     }
 
     #[test]
     fn test_avg_aggr_over_time_by_rollup() {
         // avg(aggr_over_time(multi-func)) by (rollup)
-        let q = r#"sort(avg(aggr_over_time("min_over_time", "max_over_time", time()[:10s])) by (rollup))"#;
+        let q = r#"sort(avg(aggr_over_time(time()[:10s], "min_over_time", "max_over_time")) by (rollup))"#;
         let mut r1 = make_result(&[810_f64, 1010.0, 1210.0, 1410.0, 1610.0, 1810.0]);
         r1.metric.set("rollup", "min_over_time");
         let mut r2 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
