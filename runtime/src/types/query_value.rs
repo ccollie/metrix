@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::str::FromStr;
 use std::time::Duration;
 use crate::common::format::format_number;
@@ -71,6 +72,12 @@ impl PartialOrd for Sample {
     }
 }
 
+impl Hash for Sample {
+    fn hash<H>(&self, state: &mut H) {
+        self.timestamp.hash(state);
+        self.value.to_bits().hash(state);
+    }
+}
 
 pub type InstantVector = Vec<Timeseries>; // todo: Vec<(label, Sample)> or somesuch
 
