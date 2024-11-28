@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Div;
 use crate::cache::rollup_result_cache::merge_timeseries;
 use crate::common::math::is_stale_nan;
@@ -34,7 +35,7 @@ use crate::execution::utils::{adjust_eval_range, duration_value, get_step};
 pub(crate) struct RollupEvaluator<'a> {
     /// Source expression
     expr: &'a Expr,
-    re: &'a RollupExpr,
+    re: Cow<'a, RollupExpr>,
     func: RollupFunction,
     func_handler: RollupHandler,
     keep_metric_names: bool,
@@ -52,7 +53,7 @@ impl<'a> RollupEvaluator<'a> {
         // -: RollupFunc(m) if iafc is None
         // - aggrFunc(rollupFunc(m)) if iafc isn't None
         expr: &'a Expr,
-        re: &'a RollupExpr,
+        re: Cow<'a, RollupExpr>,
     ) -> Self {
         Self {
             expr,

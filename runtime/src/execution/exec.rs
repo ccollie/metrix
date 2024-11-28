@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use tracing::info;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -266,14 +267,14 @@ pub fn eval_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Q
             let re = RollupExpr::new(expr.clone());
             let handler = RollupHandler::Wrapped(rollup_default);
             let mut executor =
-                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, &re);
+                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, Cow::Owned(re));
             let val = executor.eval(ctx, ec).map_err(|err| map_error(err, expr))?;
             Ok(val)
         }
         Expr::Rollup(re) => {
             let handler = RollupHandler::Wrapped(rollup_default);
             let mut executor =
-                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, re);
+                RollupEvaluator::new(RollupFunction::DefaultRollup, handler, expr, Cow::Borrowed(re));
             executor.eval(ctx, ec).map_err(|err| map_error(err, expr))
         }
         Expr::Aggregation(ae) => {
@@ -314,7 +315,7 @@ fn eval_function(
             let nrf = get_rollup_function_factory(rf);
             let (args, re, _) = eval_rollup_func_args(ctx, ec, fe)?;
             let func_handler = nrf(&args)?;
-            let mut rollup_handler = RollupEvaluator::new(rf, func_handler, expr, &re);
+            let mut rollup_handler = RollupEvaluator::new(rf, func_handler, expr, re);
             // todo: record samples_scanned in span
             let val = rollup_handler
                 .eval(ctx, ec)
@@ -479,12 +480,12 @@ pub(super) fn eval_exprs_in_parallel(
     }
 }
 
-pub(super) fn eval_rollup_func_args(
+pub(super) fn eval_rollup_func_args<'a>(
     ctx: &Context,
     ec: &EvalConfig,
-    fe: &FunctionExpr,
-) -> RuntimeResult<(Vec<Value>, RollupExpr, usize)> {
-    let mut re: RollupExpr = Default::default();
+    fe: &'a FunctionExpr,
+) -> RuntimeResult<(Vec<Value>, Cow<'a, RollupExpr>, usize)> {
+    let mut re = Default::default();
     // todo: i dont think we can have a empty arg_idx_for_optimization
     let rollup_arg_idx = fe.arg_idx_for_optimization().expect("rollup_arg_idx is None");
 
@@ -518,39 +519,21 @@ pub(super) fn eval_rollup_func_args(
     Ok((args, re, rollup_arg_idx))
 }
 
-// todo: COW
-fn get_rollup_expr_arg(arg: &Expr) -> RuntimeResult<RollupExpr> {
+fn get_rollup_expr_arg(arg: &Expr) -> RuntimeResult<Cow<RollupExpr>> {
     match arg {
-        Expr::Rollup(re) => {
-            let mut re = re.clone();
-            if !re.for_subquery() {
-                // Return standard rollup if it doesn't contain subquery.
-                return Ok(re);
+        Expr::Rollup(re) if !re.for_subquery() => Ok(Cow::Borrowed(re)),
+        Expr::Rollup(re) => match re.expr.as_ref() {
+            Expr::MetricExpression(_) => {
+                let arg = Expr::Rollup(RollupExpr::new(*re.expr.clone()));
+                let fe = FunctionExpr::default_rollup(arg)
+                    .map_err(|e| RuntimeError::General(format!("{:?}", e)))?;
+
+                let mut new_re = re.clone();
+                new_re.expr = Box::new(Expr::Function(fe));
+                Ok(Cow::Owned(new_re))
             }
-
-            match &re.expr.as_ref() {
-                Expr::MetricExpression(_) => {
-                    // Convert me[w:step] -> default_rollup(me)[w:step]
-
-                    let arg = Expr::Rollup(RollupExpr::new(*re.expr.clone()));
-
-                    match FunctionExpr::default_rollup(arg) {
-                        Err(e) => Err(RuntimeError::General(format!("{:?}", e))),
-                        Ok(fe) => {
-                            re.expr = Box::new(Expr::Function(fe));
-                            Ok(re)
-                        }
-                    }
-                }
-                _ => {
-                    // arg contains subquery.
-                    Ok(re)
-                }
-            }
-        }
-        _ => {
-            // Wrap non-rollup arg into RollupExpr.
-            Ok(RollupExpr::new(arg.clone()))
-        }
+            _ => Ok(Cow::Borrowed(re)),
+        },
+        _ => Ok(Cow::Owned(RollupExpr::new(arg.clone()))),
     }
 }
