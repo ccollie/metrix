@@ -26,6 +26,7 @@ const fn op_neq(left: f64, right: f64) -> bool {
     left != right
 }
 
+#[inline]
 const fn op_and(left: f64, right: f64) -> f64 {
     if left.is_nan() || right.is_nan() {
         f64::NAN
@@ -35,6 +36,7 @@ const fn op_and(left: f64, right: f64) -> f64 {
 }
 
 // return the first non-NaN item. If both left and right are NaN, it returns NaN.
+#[inline]
 const fn op_or(left: f64, right: f64) -> f64 {
     if !left.is_nan() {
         return left
