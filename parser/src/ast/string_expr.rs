@@ -181,25 +181,20 @@ impl StringExpr {
 
     pub fn get_literal(&self) -> ParseResult<Option<&String>> {
         if self.is_literal_only() {
-            if let Some(first) = self.0.first() {
-                return match first {
-                    StringSegment::Literal(lit) => Ok(Some(lit)),
-                    _ => Err(ParseError::General(
-                        "BUG: string segment should be all literal".to_string(),
-                    )),
-                };
+            if let Some(StringSegment::Literal(lit)) = self.0.first() {
+                return Ok(Some(lit));
             }
+            return Err(ParseError::General(
+                "BUG: string segment should be all literal".to_string(),
+            ));
         }
         Ok(None)
     }
 
     pub fn as_identifier(&self) -> Option<&String> {
         if self.is_identifier() {
-            if let Some(first) = self.0.first() {
-                return match first {
-                    StringSegment::Ident(ident) => Some(ident),
-                    _ => None,
-                };
+            if let StringSegment::Ident(ident) = self.0.first().unwrap() {
+                return Some(ident);
             }
         }
         None

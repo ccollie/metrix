@@ -224,6 +224,11 @@ fn handle_number_number(ln: f64, rn: f64, op: Operator, is_bool: bool) -> ParseR
 
 fn handle_string_string(left: &str, right: &str, op: Operator, is_bool: bool) -> ParseResult<Expr> {
     if op == Operator::Add {
+        if left.is_empty() {
+            return Ok(Expr::from(right));
+        } else if right.is_empty() {
+            return Ok(Expr::from(left));
+        }
         let mut res = String::with_capacity(left.len() + right.len());
         res += left;
         res += right;
@@ -235,8 +240,8 @@ fn handle_string_string(left: &str, right: &str, op: Operator, is_bool: bool) ->
         Ok(
             Expr::BinaryOperator(
                 BinaryExpr { 
-                    left: Box::new(Expr::from(left.to_string())), 
-                    right: Box::new(Expr::from(right.to_string())), 
+                    left: Box::new(Expr::from(left)),
+                    right: Box::new(Expr::from(right)),
                     op, 
                     modifier: None 
                 }

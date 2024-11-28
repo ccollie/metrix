@@ -13,10 +13,16 @@ pub(crate) fn eval_string_string_binop(
 ) -> RuntimeResult<QueryValue> {
     match op {
         Operator::Add => {
-            let mut res = String::with_capacity(left.len() + right.len());
-            res += left;
-            res += right;
-            Ok(QueryValue::String(res))
+            if left.is_empty() {
+                Ok(right.into())
+            } else if right.is_empty() {
+                Ok(left.into())
+            } else {
+                let mut res = String::with_capacity(left.len() + right.len());
+                res += left;
+                res += right;
+                Ok(QueryValue::String(res))
+            }
         }
         _ => {
             if op.is_comparison() {
