@@ -5,7 +5,7 @@ pub type BinopFunc = fn(left: f64, right: f64) -> f64;
 
 /// eq returns true if left == right.
 #[inline]
-fn op_eq(left: f64, right: f64) -> bool {
+const fn op_eq(left: f64, right: f64) -> bool {
     // Special handling for nan == nan.
     if left.is_nan() {
         return right.is_nan();
@@ -15,7 +15,7 @@ fn op_eq(left: f64, right: f64) -> bool {
 
 /// neq returns true if left != right.
 #[inline]
-fn op_neq(left: f64, right: f64) -> bool {
+const fn op_neq(left: f64, right: f64) -> bool {
     // Special handling for comparison with nan.
     if left.is_nan() {
         return !right.is_nan();
@@ -26,7 +26,7 @@ fn op_neq(left: f64, right: f64) -> bool {
     left != right
 }
 
-fn op_and(left: f64, right: f64) -> f64 {
+const fn op_and(left: f64, right: f64) -> f64 {
     if left.is_nan() || right.is_nan() {
         f64::NAN
     } else {
@@ -35,7 +35,7 @@ fn op_and(left: f64, right: f64) -> f64 {
 }
 
 // return the first non-NaN item. If both left and right are NaN, it returns NaN.
-fn op_or(left: f64, right: f64) -> f64 {
+const fn op_or(left: f64, right: f64) -> f64 {
     if !left.is_nan() {
         return left
     }
@@ -44,56 +44,56 @@ fn op_or(left: f64, right: f64) -> f64 {
 
 /// gt returns true if left > right
 #[inline]
-fn op_gt(left: f64, right: f64) -> bool {
+const fn op_gt(left: f64, right: f64) -> bool {
     left > right
 }
 
 /// lt returns true if left < right
 #[inline]
-fn op_lt(left: f64, right: f64) -> bool {
+const fn op_lt(left: f64, right: f64) -> bool {
     left < right
 }
 
 /// Gte returns true if left >= right
 #[inline]
-fn op_gte(left: f64, right: f64) -> bool {
+const fn op_gte(left: f64, right: f64) -> bool {
     left >= right
 }
 
 /// Lte returns true if left <= right
 #[inline]
-fn op_lte(left: f64, right: f64) -> bool {
+const fn op_lte(left: f64, right: f64) -> bool {
     left <= right
 }
 
 /// Plus returns left + right
 #[inline]
-fn op_plus(left: f64, right: f64) -> f64 {
+const fn op_plus(left: f64, right: f64) -> f64 {
     left + right
 }
 
 /// Minus returns left - right
 #[inline]
-fn op_minus(left: f64, right: f64) -> f64 {
+const fn op_minus(left: f64, right: f64) -> f64 {
     left - right
 }
 
 /// Mul returns left * right
 #[inline]
-fn op_mul(left: f64, right: f64) -> f64 {
+const fn op_mul(left: f64, right: f64) -> f64 {
     left * right
 }
 
 /// Div returns left / right
 /// Todo: protect against div by zero
 #[inline]
-fn op_div(left: f64, right: f64) -> f64 {
+const fn op_div(left: f64, right: f64) -> f64 {
     left / right
 }
 
 /// returns left % right
 #[inline]
-fn op_mod(left: f64, right: f64) -> f64 {
+const fn op_mod(left: f64, right: f64) -> f64 {
     left % right
 }
 
@@ -111,7 +111,7 @@ fn op_atan2(left: f64, right: f64) -> f64 {
 
 /// returns left or right if left is NaN.
 #[inline]
-fn op_default(left: f64, right: f64) -> f64 {
+const fn op_default(left: f64, right: f64) -> f64 {
     if left.is_nan() {
         return right;
     }
@@ -120,7 +120,7 @@ fn op_default(left: f64, right: f64) -> f64 {
 
 /// returns left if right is not NaN. Otherwise, NaN is returned.
 #[inline]
-fn op_if(left: f64, right: f64) -> f64 {
+const fn op_if(left: f64, right: f64) -> f64 {
     if right.is_nan() {
         return f64::NAN;
     }
@@ -129,7 +129,7 @@ fn op_if(left: f64, right: f64) -> f64 {
 
 /// if_not returns left if right is NaN. Otherwise, NaN is returned.
 #[inline]
-pub fn op_if_not(left: f64, right: f64) -> f64 {
+pub const fn op_if_not(left: f64, right: f64) -> f64 {
     if right.is_nan() {
         return left;
     }
@@ -137,7 +137,7 @@ pub fn op_if_not(left: f64, right: f64) -> f64 {
 }
 
 #[inline]
-pub fn op_unless(left: f64, right: f64) -> f64 {
+pub const fn op_unless(left: f64, right: f64) -> f64 {
     if right != left {
         return f64::NAN;
     }
@@ -156,7 +156,7 @@ pub const fn to_comparison_value(b: bool, x: f64) -> f64 {
 
 macro_rules! make_comparison_func {
     ($name: ident, $func: expr) => {
-        pub fn $name(left: f64, right: f64) -> f64 {
+        pub const fn $name(left: f64, right: f64) -> f64 {
             to_comparison_value($func(left, right), left)
         }
     };
@@ -164,7 +164,7 @@ macro_rules! make_comparison_func {
 
 macro_rules! make_comparison_func_bool {
     ($name: ident, $func: expr) => {
-        pub fn $name(left: f64, right: f64) -> f64 {
+        pub const fn $name(left: f64, right: f64) -> f64 {
             if left.is_nan() {
                 return f64::NAN;
             }
