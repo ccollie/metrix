@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
-use std::time::Duration;
 use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::prelude::{DurationExpr, Expr, Matchers};
+use std::time::Duration;
 
 use crate::execution::{
     adjust_start_end, exec, parse_promql_internal, validate_max_points_per_timeseries,
@@ -12,7 +12,7 @@ use crate::prelude::{is_empty_extra_matchers, join_matchers_with_extra_filters_o
 use crate::types::{Timestamp, TimestampTrait};
 use crate::{
     remove_empty_values_and_timeseries, Deadline, QueryResult, QueryResults, RuntimeError,
-    RuntimeResult, SearchQuery, MAX_DURATION_MSECS,
+    RuntimeResult, SearchQuery,
 };
 
 /// Default step used if not set.
@@ -510,21 +510,6 @@ fn get_duration_expr(offset: &Option<DurationExpr>) -> Cow<DurationExpr> {
 
 fn get_latency_offset_milliseconds(ctx: &Context) -> u64 {
     std::cmp::min(ctx.config.latency_offset.as_millis() as u64, 1000)
-}
-
-fn validate_duration(arg_key: &str, duration: Duration, default_value: u64) -> RuntimeResult<()> {
-    let mut msecs = duration.as_millis() as u64;
-    if msecs == 0 {
-        msecs = default_value
-    }
-    if msecs <= 0 || msecs > MAX_DURATION_MSECS {
-        let msg = format!(
-            "{}={}ms is out of allowed range [{} ... {}]",
-            arg_key, msecs, 0, MAX_DURATION_MSECS
-        );
-        return Err(RuntimeError::from(msg));
-    }
-    Ok(())
 }
 
 /// get_deadline_for_query returns deadline for the given query r.

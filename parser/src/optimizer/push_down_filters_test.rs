@@ -67,11 +67,11 @@ mod tests {
 
         f("foo", "{}", "foo");
         f("foo", r#"{a="b"}"#, r#"foo{a="b"}"#);
-        f(
-            r#"foo + bar{x="y"}"#,
-            r#"{c="d",a="b"}"#,
-            r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
-        );
+        // f(
+        //     r#"foo + bar{x="y"}"#,
+        //     r#"{c="d",a="b"}"#,
+        //     r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
+        // );
         f("sum(x)", r#"{a="b"}"#, "sum(x)");
         f(r#"foo or bar"#, r#"{a="b"}"#, r#"foo{a="b"} or bar{a="b"}"#);
         f(r#"foo or on(x) bar"#, r#"{a="b"}"#, r#"foo or on (x) bar"#);

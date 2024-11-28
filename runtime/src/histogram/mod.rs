@@ -8,15 +8,11 @@ const E10MAX: i32 = 18;
 const BUCKETS_PER_DECIMAL: usize = 18;
 const DECIMAL_BUCKETS_COUNT: i32 = E10MAX - E10MIN;
 const BUCKETS_COUNT: usize = (DECIMAL_BUCKETS_COUNT * BUCKETS_PER_DECIMAL as i32) as usize;
-
 const LOWER_MIN: f64 = 1e-9;
 
 static LOWER_BUCKET_RANGE: &str = "0...0.000";
 static UPPER_BUCKET_RANGE: &str = "1000000000000000000.000...+Inf";
 
-pub trait HistogramBucketVisitor {
-    fn visit(vm_range: &str, count: u64);
-}
 
 /// `Histogram` is a histogram for non-negative values with automatically created buckets.
 ///

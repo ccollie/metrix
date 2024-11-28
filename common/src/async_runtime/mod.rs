@@ -1,7 +1,7 @@
 use crate::error::{ErrorExt, StatusCode};
 use agnostic_lite::{AsyncBlockingSpawner, AsyncSpawner, RuntimeLite};
 use cfg_if::cfg_if;
-use snafu::Snafu;
+use thiserror::Error;
 use std::any::Any;
 use std::future::Future;
 use std::sync::LazyLock;
@@ -33,14 +33,13 @@ pub type Timeout<F> = <AsyncRuntime as RuntimeLite>::Timeout<F>;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type AsyncRuntimeResult<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub))]
+#[derive(Debug, Error)]
 pub enum Error {
-    #[snafu(display("Join error: {}", msg))]
-    Join { msg: String },
-    #[snafu(display("Async operation timed out after {:?}", duration))]
-    Timeout { duration: Duration },
-    #[snafu(display("Unexpected error"))]
+    #[error("Join error: {0}")]
+    Join(String),
+    #[error("Async operation timed out after {0:?}")]
+    Timeout(Duration),
+    #[error("Unexpected error: {source:?}")]
     Execution {
         source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
@@ -80,7 +79,7 @@ where
     let res = futures::executor::block_on(async { spawn(future).await });
     match res {
         Ok(v) => Ok(v),
-        Err(e) => Err(Error::Join { msg: e.to_string() }),
+        Err(e) => Err(Error::Join(e.to_string()))
     }
 }
 

@@ -72,22 +72,3 @@ fn join_regexp_values(a: &[&String]) -> String {
     }
     res
 }
-
-pub(crate) fn should_reset_metric_group(be: &BinaryExpr) -> bool {
-    if be.op.is_comparison() && !be.returns_bool() {
-        // Do not reset metric_group for non-boolean `compare` binary ops like Prometheus does.
-        return false;
-    }
-    if be.keep_metric_names() {
-        // Do not reset metric_group if it is explicitly requested via `a op b keep_metric_names`
-        // See https://docs.victoriametrics.com/MetricsQL.html#keep_metric_names
-        return false;
-    }
-
-    // in the original code, the metric group is not reset for logical ops
-    if be.op.is_logical_op() {
-        return false;
-    }
-
-    true
-}

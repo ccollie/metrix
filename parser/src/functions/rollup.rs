@@ -7,7 +7,6 @@ use strum_macros::EnumIter;
 use crate::common::ValueType;
 use crate::functions::signature::{Signature, Volatility};
 use crate::functions::{BuiltinFunction, FunctionMeta, MAX_ARG_COUNT};
-use crate::functions::RollupFunction::AggrOverTime;
 use crate::parser::ParseError;
 
 /// Built-in Rollup Functions

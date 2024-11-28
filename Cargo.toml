@@ -49,8 +49,6 @@ serde_regex="1.1"
 serde_with = "3"
 scopeguard = "1.2.0"
 smallvec = { version = "2.0.0-alpha.7", features = ["specialization", "std"] }
-snafu = "0.8"
-snafu-derive = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = { version = "0.26" }
 test-case = "3"

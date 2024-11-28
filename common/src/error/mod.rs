@@ -13,11 +13,7 @@
 // limitations under the License.
 
 pub mod ext;
-pub mod format;
 pub mod status_code;
 
-pub use snafu;
-
 pub use ext::*;
-pub use snafu::ResultExt;
 pub use status_code::*;

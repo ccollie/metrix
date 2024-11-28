@@ -49,7 +49,7 @@ impl Context {
 
         fn handle_error(err: Error) -> RuntimeError {
             match err {
-                Error::Join { msg } => RuntimeError::General(msg),
+                Error::Join(msg) => RuntimeError::General(msg),
                 Error::Timeout { .. } => {
                     RuntimeError::DeadlineExceededError("search timeout".to_string())
                 }

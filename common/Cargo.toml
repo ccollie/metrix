@@ -33,10 +33,10 @@ regex-syntax.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_regex.workspace = true
-snafu.workspace = true
 xxhash-rust.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
+thiserror = "2.0.3"
 
 [dev-dependencies]
 test-case.workspace = true

@@ -6,7 +6,6 @@ use thiserror::Error;
 
 use crate::parser::tokens::Token;
 use crate::parser::TokenWithLocation;
-
 pub type ParseResult<T> = Result<T, ParseError>;
 
 #[derive(Default, Debug, PartialEq, Clone, Error)]

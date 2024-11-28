@@ -1,16 +1,13 @@
 use std::borrow::Cow;
 use std::time::Duration;
-use rayon::iter::IntoParallelRefIterator;
 
-use metricsql_common::pool::{get_pooled_vec_f64, get_pooled_vec_i64};
 use metricsql_parser::ast::DurationExpr;
 use metricsql_parser::functions::RollupFunction;
 
 use crate::common::math::is_stale_nan;
 use crate::execution::EvalConfig;
-use crate::rayon::iter::ParallelIterator;
-use crate::{RuntimeResult};
-use crate::types::{QueryValue, Timeseries, Timestamp};
+use crate::types::{QueryValue, Timeseries};
+use crate::RuntimeResult;
 
 pub(crate) fn series_len(val: &QueryValue) -> usize {
     match &val {
@@ -70,44 +67,6 @@ pub(crate) fn get_step(expr: &Option<DurationExpr>, step: Duration) -> Duration 
     } else {
         res
     }
-}
-
-/// Executes `f` for each `Timeseries` in `tss` in parallel.
-pub(super) fn process_series_in_parallel<F>(
-    tss: &Vec<Timeseries>,
-    f: F,
-) -> RuntimeResult<(Vec<Timeseries>, u64)>
-where
-    F: Fn(&Timeseries, &mut [f64], &[Timestamp]) -> RuntimeResult<(Vec<Timeseries>, u64)> + Send + Sync,
-{
-    let handler = |ts: &Timeseries| -> RuntimeResult<(Vec<Timeseries>, u64)> {
-        let len = ts.values.len();
-        // todo: should we have an upper limit here to avoid OOM? Or explicitly size down
-        // afterward if needed?
-        let mut values = get_pooled_vec_f64(len);
-        let mut timestamps = get_pooled_vec_i64(len);
-
-        // todo(perf): have param for if values have NaNs
-        remove_nan_values(&mut values, &mut timestamps, &ts.values, &ts.timestamps);
-
-        f(ts, &mut values, &timestamps)
-    };
-
-    let res = if tss.len() > 1 {
-        let res: RuntimeResult<Vec<(Vec<Timeseries>, u64)>> = tss.par_iter().map(handler).collect();
-        res?
-    } else {
-        vec![handler(&tss[0])?]
-    };
-
-    let mut series: Vec<Timeseries> = Vec::with_capacity(tss.len());
-    let mut sample_total = 0_u64;
-    for (timeseries, sample_count) in res.into_iter() {
-        sample_total += sample_count;
-        series.extend::<Vec<Timeseries>>(timeseries)
-    }
-
-    Ok((series, sample_total))
 }
 
 pub(crate) fn remove_nan_values(

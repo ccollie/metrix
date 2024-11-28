@@ -11,7 +11,6 @@ pub(crate) use utils::{escape_ident, extract_string_value, quote, unescape_ident
 use crate::ast::{check_ast, Expr};
 use crate::optimizer::remove_parens_expr;
 use crate::parser::expr::parse_expression;
-
 mod aggregation;
 mod expand;
 mod expr;
@@ -20,7 +19,6 @@ mod regexp_cache;
 mod rollup;
 mod selector;
 mod with_expr;
-
 pub mod duration;
 pub mod number;
 pub mod parse_error;

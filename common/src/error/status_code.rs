@@ -41,7 +41,7 @@ pub enum StatusCode {
     // ====== End of common status code ================
 
     // ====== Begin of SQL/PromQL related status code =========
-    /// SQL Syntax error.
+    /// PromSQL Syntax error.
     InvalidSyntax = 2000,
     // ====== End of SQL related status code ===========
 
@@ -57,17 +57,6 @@ pub enum StatusCode {
     TableAlreadyExists = 4000,
     TableNotFound = 4001,
     TableColumnNotFound = 4002,
-    TableColumnExists = 4003,
-    DatabaseNotFound = 4004,
-    RegionNotFound = 4005,
-    RegionAlreadyExists = 4006,
-    RegionNotReady = 4007,
-    // ====== End of catalog related status code =======
-
-    // ====== Begin of storage related status code =====
-    /// Storage is temporarily unable to handle the request
-    StorageUnavailable = 5000,
-    // ====== End of storage related status code =======
 
     // ====== Begin of server related status code =====
     /// Runtime resources exhausted, like creating threads failed.
@@ -78,16 +67,6 @@ pub enum StatusCode {
     // ====== End of server related status code =======
 
     // ====== Begin of auth related status code =====
-    /// User not exist
-    UserNotFound = 7000,
-    /// Unsupported password type
-    UnsupportedPasswordType = 7001,
-    /// Username and password does not match
-    UserPasswordMismatch = 7002,
-    /// Not found http authorization header
-    AuthHeaderNotFound = 7003,
-    /// Invalid http authorization header
-    InvalidAuthHeader = 7004,
     /// Illegal request to connect catalog-schema
     AccessDenied = 7005,
     /// User is not authorized to perform the operation
@@ -104,10 +83,8 @@ impl StatusCode {
     /// Returns `true` if the error with this code is retryable.
     pub fn is_retryable(&self) -> bool {
         match self {
-            StatusCode::StorageUnavailable
             | StatusCode::RuntimeResourcesExhausted
-            | StatusCode::Internal
-            | StatusCode::RegionNotReady => false,
+            | StatusCode::Internal => false,
 
             StatusCode::Success
             | StatusCode::Unknown
@@ -121,17 +98,8 @@ impl StatusCode {
             | StatusCode::TableAlreadyExists
             | StatusCode::TableNotFound
             | StatusCode::TimedOut
-            | StatusCode::RegionNotFound
-            | StatusCode::RegionAlreadyExists
             | StatusCode::TableColumnNotFound
-            | StatusCode::TableColumnExists
-            | StatusCode::DatabaseNotFound
             | StatusCode::RateLimited
-            | StatusCode::UserNotFound
-            | StatusCode::UnsupportedPasswordType
-            | StatusCode::UserPasswordMismatch
-            | StatusCode::AuthHeaderNotFound
-            | StatusCode::InvalidAuthHeader
             | StatusCode::AccessDenied
             | StatusCode::PermissionDenied => false,
         }
@@ -147,7 +115,6 @@ impl StatusCode {
             | StatusCode::Cancelled
             | StatusCode::PlanQuery
             | StatusCode::EngineExecuteQuery
-            | StatusCode::StorageUnavailable
             | StatusCode::RuntimeResourcesExhausted => true,
             StatusCode::Success
             | StatusCode::Unsupported
@@ -155,19 +122,9 @@ impl StatusCode {
             | StatusCode::InvalidSyntax
             | StatusCode::TableAlreadyExists
             | StatusCode::TableNotFound
-            | StatusCode::RegionNotFound
-            | StatusCode::RegionNotReady
-            | StatusCode::RegionAlreadyExists
             | StatusCode::TableColumnNotFound
-            | StatusCode::TableColumnExists
             | StatusCode::TimedOut
-            | StatusCode::DatabaseNotFound
             | StatusCode::RateLimited
-            | StatusCode::UserNotFound
-            | StatusCode::UnsupportedPasswordType
-            | StatusCode::UserPasswordMismatch
-            | StatusCode::AuthHeaderNotFound
-            | StatusCode::InvalidAuthHeader
             | StatusCode::AccessDenied
             | StatusCode::PermissionDenied => false,
         }
@@ -187,31 +144,14 @@ impl StatusCode {
             v if v == StatusCode::EngineExecuteQuery as u32 => Some(StatusCode::EngineExecuteQuery),
             v if v == StatusCode::TableAlreadyExists as u32 => Some(StatusCode::TableAlreadyExists),
             v if v == StatusCode::TableNotFound as u32 => Some(StatusCode::TableNotFound),
-            v if v == StatusCode::RegionNotFound as u32 => Some(StatusCode::RegionNotFound),
-            v if v == StatusCode::RegionNotReady as u32 => Some(StatusCode::RegionNotReady),
-            v if v == StatusCode::RegionAlreadyExists as u32 => {
-                Some(StatusCode::RegionAlreadyExists)
-            }
             v if v == StatusCode::TableColumnNotFound as u32 => {
                 Some(StatusCode::TableColumnNotFound)
             }
-            v if v == StatusCode::TableColumnExists as u32 => Some(StatusCode::TableColumnExists),
-            v if v == StatusCode::DatabaseNotFound as u32 => Some(StatusCode::DatabaseNotFound),
-            v if v == StatusCode::StorageUnavailable as u32 => Some(StatusCode::StorageUnavailable),
             v if v == StatusCode::RuntimeResourcesExhausted as u32 => {
                 Some(StatusCode::RuntimeResourcesExhausted)
             }
             v if v == StatusCode::RateLimited as u32 => Some(StatusCode::RateLimited),
-            v if v == StatusCode::UserNotFound as u32 => Some(StatusCode::UserNotFound),
-            v if v == StatusCode::UnsupportedPasswordType as u32 => {
-                Some(StatusCode::UnsupportedPasswordType)
-            }
-            v if v == StatusCode::UserPasswordMismatch as u32 => {
-                Some(StatusCode::UserPasswordMismatch)
-            }
             v if v == StatusCode::TimedOut as u32 => Some(StatusCode::TimedOut),
-            v if v == StatusCode::AuthHeaderNotFound as u32 => Some(StatusCode::AuthHeaderNotFound),
-            v if v == StatusCode::InvalidAuthHeader as u32 => Some(StatusCode::InvalidAuthHeader),
             v if v == StatusCode::AccessDenied as u32 => Some(StatusCode::AccessDenied),
             _ => None,
         }
