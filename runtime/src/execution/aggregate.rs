@@ -49,7 +49,7 @@ pub(super) fn eval_aggr_func(
 
             let nrf = get_rollup_function_factory(rf);
             let func_handler = nrf(&args)?;
-            let mut executor = RollupEvaluator::new(rf, func_handler, expr, &re);
+            let mut executor = RollupEvaluator::new(rf, func_handler, expr, re);
             executor.timeseries_limit = get_timeseries_limit(ae)?;
             executor.is_incr_aggregate = true;
 
