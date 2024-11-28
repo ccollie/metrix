@@ -50,14 +50,18 @@ impl MapInner {
     }
 
     fn get_or_create_series(&mut self, label_name: &str, label_value: &str) -> &mut Timeseries {
-        let value = label_value.to_string();
         let timestamps = &self.origin.timestamps;
-        self.series.entry(value).or_insert_with_key(move |value| {
+
+        // doing things this way (instead of entry) to avoid cloning the label_value
+        if !self.series.contains_key(label_value) {
             let values: Vec<f64> = vec![f64::NAN; timestamps.len()];
             let mut ts = Timeseries::with_shared_timestamps(timestamps, &values);
-            ts.metric_name.set(label_name, value);
-            ts
-        })
+            ts.metric_name = self.origin.metric_name.clone();
+            ts.metric_name.set(label_name, label_value);
+            self.series.insert(label_value.to_string(), ts);
+        }
+
+        self.series.get_mut(label_value).unwrap()
     }
 
     fn reset(&mut self) {

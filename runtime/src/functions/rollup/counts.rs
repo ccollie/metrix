@@ -114,21 +114,12 @@ pub(super) fn new_rollup_count_values(args: &[QueryValue]) -> RuntimeResult<Roll
         ));
     }
 
-    match args[1] {
-        QueryValue::InstantVector(ref tss) => tss,
+    let label_name = match &args[0] {
+        QueryValue::String(s) => s.to_string(),
         _ => {
             return Err(RuntimeError::ArgumentError(
-                "expecting instant vector as the second arg to count_values_over_time()"
+                "expecting string for label name parameter in count_values_over_time()"
                     .to_string(),
-            ));
-        }
-    };
-
-    let label_name = match args[0] {
-        QueryValue::String(ref s) => s.clone(),
-        _ => {
-            return Err(RuntimeError::ArgumentError(
-                "expecting string as the first arg to count_values_over_time()".to_string(),
             ));
         }
     };
@@ -138,21 +129,14 @@ pub(super) fn new_rollup_count_values(args: &[QueryValue]) -> RuntimeResult<Roll
         let tsm = binding.as_ref();
         let idx = rfa.idx;
 
-        // https://stackoverflow.com/questions/73117416/how-do-i-print-u64-to-a-buffer-on-stack-in-rust
-        let cursor = Cursor::new([0u8; 40]);
-        let mut buf: Vec<u8> = Vec::with_capacity(40);
+        let mut buf = F64WriteBuffer::new();
 
         // Note: the code below may create very big number of time series
         // if the number of unique values in rfa.values is big.
-        let mut label_value = String::with_capacity(40);
         for v in rfa.values {
-            // Note: write! does not panic, so unwrap is safe here
-            write!(buf, "{v}").unwrap();
-            let pos = cursor.position() as usize;
-            let buffer = &cursor.get_ref()[..pos];
+            let label_value = buf.write(*v);
 
-            label_value.push_str(std::str::from_utf8(buffer).unwrap());
-            tsm.with_series(label_name.as_str(), label_value.as_str(), |ts| {
+            tsm.with_series(label_name.as_str(), label_value, |ts| {
                 let mut count = ts.values[idx];
                 if count.is_nan() {
                     count = 1.0;
@@ -161,12 +145,32 @@ pub(super) fn new_rollup_count_values(args: &[QueryValue]) -> RuntimeResult<Roll
                 }
                 ts.values[idx] = count;
             });
-
-            label_value.clear();
         }
         f64::NAN
     };
 
     let handler = RollupHandler::General(Box::new(f));
     Ok(handler)
+}
+
+
+// todo: move to common
+struct F64WriteBuffer {
+    buf: [u8; 40],
+}
+
+impl F64WriteBuffer {
+    fn new() -> Self {
+        Self { buf: [0u8; 40] }
+    }
+
+    // based on https://stackoverflow.com/questions/73117416/how-do-i-print-u64-to-a-buffer-on-stack-in-rust
+    fn write(&mut self, value: f64) -> &str {
+        let mut cursor = Cursor::new(&mut self.buf[..]);
+        // Note: write! does not panic, so unwrap is safe here
+        write!(cursor, "{}", value).unwrap();
+        let pos = cursor.position() as usize;
+        // Note: unwrap is safe here, because we are writing valid utf8
+        std::str::from_utf8(&self.buf[..pos]).unwrap()
+    }
 }
