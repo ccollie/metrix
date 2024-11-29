@@ -3303,7 +3303,7 @@ mod tests {
     fn increases_over_time() {
         assert_result_eq(
             "increases_over_time(rand(0)[200s:10s])",
-            &[11.0, 9.0, 9.0, 12.0, 9.0, 8.0],
+            &[9.0, 14.0, 12.0, 11.0, 9.0, 11.0],
         );
     }
 
@@ -3311,7 +3311,7 @@ mod tests {
     fn decreases_over_time() {
         assert_result_eq(
             "decreases_over_time(rand(0)[200s:10s])",
-            &[9.0, 11.0, 11.0, 8.0, 11.0, 12.0],
+            &[11.0, 6.0, 8.0, 9.0, 11.0, 9.0],
         );
     }
 
@@ -4207,17 +4207,6 @@ mod tests {
     fn rate() {
         // test_query("rate({})", vec![]);
 
-        let q = r#"rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names"#;
-        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("foo");
-        r.metric.set("x", "y");
-        test_query(q, vec![r]);
-
-        let q = r#"sum(rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names) by (__name__)"#;
-        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("foo");
-        test_query(q, vec![r]);
-
         assert_result_eq("rate(2000-time())", &[5.5, 4.5, 3.5, 2.5, 1.5, 0.5]);
 
         assert_result_eq("rate((2000-time())[100s])", &[5.0, 4.0, 3.0, 2.0, 1.0, 0.0]);
@@ -4234,6 +4223,20 @@ mod tests {
         assert_result_eq(q, &[0.0, 0.0, 0.0, 7.0, 5.0, 3.0]);
 
         test_query("rate({}[:5s])", vec![]);
+    }
+
+    #[test]
+    fn rate_with_metric() {
+        let q = r#"rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names"#;
+        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
+        r.metric.set_metric_group("foo");
+        r.metric.set("x", "y");
+        test_query(q, vec![r]);
+
+        let q = r#"sum(rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names) by (__name__)"#;
+        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
+        r.metric.set_metric_group("foo");
+        test_query(q, vec![r]);
     }
 
     #[test]

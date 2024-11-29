@@ -736,14 +736,15 @@ pub(super) fn rollup_increases(rfa: &RollupFuncArg) -> f64 {
 
     let mut n = 0;
     for v in values.iter() {
-        if *v > prev_value {
-            if change_below_tolerance(*v, prev_value) {
+        let val = *v;
+        if val > prev_value {
+            if change_below_tolerance(val, prev_value) {
                 // This may be precision error. See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/767#issuecomment-1650932203
                 continue;
             }
             n += 1;
         }
-        prev_value = *v;
+        prev_value = val;
     }
 
     n as f64
@@ -776,14 +777,15 @@ pub(super) fn rollup_resets(rfa: &RollupFuncArg) -> f64 {
 
     let mut n = 0;
     for v in values.iter() {
-        if *v < prev_value {
-            if change_below_tolerance(*v, prev_value) {
+        let val = *v;
+        if val < prev_value {
+            if change_below_tolerance(val, prev_value) {
                 // This may be precision error. See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/767#issuecomment-1650932203
                 continue;
             }
             n += 1;
         }
-        prev_value = *v;
+        prev_value = val;
     }
 
     n as f64
