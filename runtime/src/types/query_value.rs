@@ -20,7 +20,7 @@ pub type Labels = Vec<Label>;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Sample {
-    /// Time in microseconds
+    /// Time in milliseconds since the Unix epoch.
     pub timestamp: Timestamp,
     pub value: f64,
 }
