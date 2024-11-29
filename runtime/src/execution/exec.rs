@@ -423,13 +423,18 @@ fn eval_unary_op(ctx: &Context, ec: &EvalConfig, ue: &UnaryExpr) -> RuntimeResul
     }
 }
 
+#[inline]
+fn should_parallelize_fn(func: TransformFunction) -> bool {
+    func == TransformFunction::Union || func == TransformFunction::RangeNormalize
+}
+
 fn eval_transform_func(
     ctx: &Context,
     ec: &EvalConfig,
     fe: &FunctionExpr,
     func: TransformFunction,
 ) -> RuntimeResult<Vec<Timeseries>> {
-    let args = if func == TransformFunction::Union {
+    let args = if should_parallelize_fn(func) {
         eval_exprs_in_parallel(ctx, ec, &fe.args)?
     } else {
         eval_exprs_sequentially(ctx, ec, &fe.args)?
