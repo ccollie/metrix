@@ -49,7 +49,13 @@ pub(super) fn adjust_eval_range<'a>(
         let mut result = ec_new.copy_no_timestamps();
         result.start += step;
         result.end += step;
-        offset -= ec_new.step;
+
+        if offset > ec_new.step {
+            offset -= ec_new.step;
+        } else {
+            offset = Duration::ZERO;
+        }
+
         ec_new = Cow::Owned(result);
     }
 
