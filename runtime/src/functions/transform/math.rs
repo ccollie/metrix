@@ -56,10 +56,10 @@ pub(crate) fn sgn(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> 
     let tf = |values: &mut [f64]| {
         let mut zero = 0.0f64;
         for v in values {
-            match v.total_cmp(&&mut zero) {
-                std::cmp::Ordering::Less => *v = -1.0f64,
-                std::cmp::Ordering::Equal => *v = 0.0f64,
-                std::cmp::Ordering::Greater => *v = 1.0f64,
+            *v = match v.total_cmp(&&mut zero) {
+                std::cmp::Ordering::Less => -1.0f64,
+                std::cmp::Ordering::Equal => 0.0f64,
+                std::cmp::Ordering::Greater => 1.0f64,
             }
         }
     };

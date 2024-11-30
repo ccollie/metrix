@@ -271,7 +271,7 @@ pub struct TypeIterator<'a> {
     arg_index: usize,
 }
 
-impl<'a> Iterator for TypeIterator<'a> {
+impl Iterator for TypeIterator<'_> {
     type Item = ValueType;
 
     fn next(&mut self) -> Option<ValueType> {

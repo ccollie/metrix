@@ -243,10 +243,8 @@ pub fn group_series_by_match_modifier(
     modifier: &Option<VectorMatchModifier>,
     with_metric_name: bool,
 ) -> TimeseriesHashMap {
-    let mut m: TimeseriesHashMap = AHashMap::with_capacity(series.len());
-
-    if series.len() >= SIGNATURE_PARALLELIZATION_THRESHOLD {
-        let sigs: Vec<Signature> = series
+    let sigs: Vec<Signature> = if series.len() >= SIGNATURE_PARALLELIZATION_THRESHOLD {
+        series
             .par_iter()
             .map_with(modifier, |modifier, timeseries| {
                 if with_metric_name {
@@ -257,22 +255,26 @@ pub fn group_series_by_match_modifier(
                         .tags_signature_by_match_modifier(modifier)
                 }
             })
-            .collect();
-
-        for (ts, sig) in series.iter_mut().zip(sigs.iter()) {
-            m.entry(*sig).or_default().push(std::mem::take(ts));
-        }
+            .collect::<Vec<Signature>>()
     } else {
-        for ts in series.iter_mut() {
-            ts.metric_name.sort_labels();
-            let key = if with_metric_name {
-                ts.metric_name.signature_by_match_modifier(modifier)
-            } else {
-                ts.metric_name.tags_signature_by_match_modifier(modifier)
-            };
-            m.entry(key).or_default().push(std::mem::take(ts));
-        }
+        series
+            .iter()
+            .map(|timeseries| {
+                if with_metric_name {
+                    timeseries.metric_name.signature_by_match_modifier(modifier)
+                } else {
+                    timeseries
+                        .metric_name
+                        .tags_signature_by_match_modifier(modifier)
+                }
+            })
+            .collect::<Vec<Signature>>()
     };
+
+    let mut m: TimeseriesHashMap = AHashMap::with_capacity(series.len());
+    for (ts, sig) in series.iter_mut().zip(sigs.iter()) {
+        m.entry(*sig).or_default().push(std::mem::take(ts));
+    }
 
     m
 }

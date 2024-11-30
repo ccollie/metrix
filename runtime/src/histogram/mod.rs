@@ -195,7 +195,7 @@ pub struct NonZeroBucket<'a> {
     pub count: u64,
 }
 
-impl<'a> fmt::Debug for NonZeroBucket<'a> {
+impl fmt::Debug for NonZeroBucket<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Bucket {{ {}..{} }}", self.vm_range, self.count)
     }

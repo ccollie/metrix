@@ -818,7 +818,7 @@ fn do_rollup_for_timeseries(
 ) -> RuntimeResult<u64> {
     ts_dst.metric_name.copy_from(mn_src);
     if !rc.tag_value.is_empty() {
-        ts_dst.metric_name.set("rollup", &rc.tag_value)
+        ts_dst.metric_name.set("rollup", rc.tag_value)
     }
     if !keep_metric_names {
         ts_dst.metric_name.reset_measurement();

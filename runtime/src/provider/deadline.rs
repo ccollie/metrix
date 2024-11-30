@@ -41,11 +41,6 @@ impl Deadline {
                 "Timeout value too large: {}", humanize_duration(&timeout),
             )));
         }
-        if millis < MIN_TIME_MSECS {
-            return Err(RuntimeError::ArgumentError(format!(
-                "Negative timeouts are not supported. Got {}", humanize_duration(&timeout),
-            )));
-        }
         let start = start_time.into();
         Ok(Deadline {
             deadline: start + millis as i64,

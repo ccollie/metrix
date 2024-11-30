@@ -40,7 +40,7 @@ pub struct RollupFuncArg<'a> {
     pub(super) tsm: Option<Arc<TimeSeriesMap>>,
 }
 
-impl<'a> RollupFuncArg<'a> {
+impl RollupFuncArg<'_> {
     pub(crate) fn get_tsm(&self) -> Arc<TimeSeriesMap> {
         if let Some(tsm) = &self.tsm {
             tsm.clone()

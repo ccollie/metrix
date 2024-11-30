@@ -36,8 +36,8 @@ pub(super) fn parse_func_expr(p: &mut Parser) -> ParseResult<Expr> {
 /// 2. For rollup function arguments without a lookbehind window, an implicit [1i] is added, which
 ///    essentially converts vectors into ranges
 /// 3. non-rollup series selectors are wrapped in a default_rollup()
-/// see https://docs.victoriametrics.com/MetricsQL.html
-/// https://docs.victoriametrics.com/MetricsQL.html#implicit-query-conversions
+///    see https://docs.victoriametrics.com/MetricsQL.html
+///    https://docs.victoriametrics.com/MetricsQL.html#implicit-query-conversions
 pub fn validate_function_args(func: &BuiltinFunction, args: &[Expr]) -> ParseResult<()> {
     let sig = func.signature();
     sig.validate_arg_count(func.name(), args.len())?;

@@ -68,6 +68,7 @@ fn exec_binary_op_args(
         let op = be.op.as_str();
         let span = trace_span!("execute left and right sides in parallel", op);
         let _guard = span.enter();
+        // todo: chili
         return match rayon::join(
             || {
                 trace!("left");

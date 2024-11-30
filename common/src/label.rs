@@ -33,10 +33,7 @@ impl Label {
 }
 
 impl PartialOrd for Label {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let cmp = self.cmp(other);
-        Some(cmp)
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 impl Ord for Label {

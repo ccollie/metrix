@@ -307,7 +307,7 @@ impl RollupConfig {
         let mut ts_dst: Timeseries = Timeseries::default();
         ts_dst.metric_name.copy_from(metric);
         if !self.tag_value.is_empty() {
-            ts_dst.metric_name.set("rollup", &self.tag_value)
+            ts_dst.metric_name.set("rollup", self.tag_value)
         }
         if !keep_metric_names && !func_keeps_metric_name {
             ts_dst.metric_name.reset_measurement();
@@ -675,7 +675,7 @@ fn get_rollup_function_handler_meta(
                 let rollup_fn = get_rollup_fn(&rf)?;
                 let handler = RollupHandler::wrap(rollup_fn);
                 funcs.push(TagFunction {
-                    tag_value: &*rf.name(),
+                    tag_value: rf.name(),
                     func: handler,
                 });
             }

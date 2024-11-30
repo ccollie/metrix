@@ -14,7 +14,7 @@ use crate::execution::{Context, EvalConfig};
 use crate::functions::rollup::{get_rollup_function_factory, rollup_default, RollupHandler};
 use crate::functions::transform::{exec_transform_fn, TransformFuncArg};
 use crate::rayon::iter::ParallelIterator;
-use crate::prelude::{QueryValue, Timeseries};
+use crate::prelude::{eval_number, QueryValue, Timeseries};
 use crate::{QueryResult, RuntimeError, RuntimeResult};
 use crate::common::math::round_to_decimal_digits;
 use crate::execution::aggregate::eval_aggr_func;
@@ -381,10 +381,20 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
                     exec_vector_vector_binop(ctx, left, right, be.op, &be.modifier)
                 }
                 (QueryValue::InstantVector(vector), QueryValue::Scalar(scalar)) => {
-                    eval_vector_scalar_binop(vector, be.op, scalar, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                    if be.op.is_logical_op() {
+                        let right = eval_number(ec, scalar)?;
+                        exec_vector_vector_binop(ctx, vector, right, be.op, &be.modifier)
+                    } else {
+                        eval_vector_scalar_binop(vector, be.op, scalar, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                    }
                 }
                 (QueryValue::Scalar(scalar), QueryValue::InstantVector(vector)) => {
-                    eval_scalar_vector_binop(scalar, be.op, vector, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                    if be.op.is_logical_op() {
+                        let left = eval_number(ec, scalar)?;
+                        exec_vector_vector_binop(ctx, left, vector, be.op, &be.modifier)
+                    } else {
+                        eval_scalar_vector_binop(scalar, be.op, vector, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                    }
                 }
                 (QueryValue::String(left), QueryValue::String(right)) => {
                     eval_string_string_binop(be.op, &left, &right, be.returns_bool())

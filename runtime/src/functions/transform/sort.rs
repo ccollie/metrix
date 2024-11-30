@@ -72,7 +72,7 @@ fn transform_sort_impl(
 }
 
 fn sort_by_label_impl(tfa: &mut TransformFuncArg, is_desc: bool) -> RuntimeResult<Vec<Timeseries>> {
-    let mut labels: Vec<String> = Vec::with_capacity(1);
+    let mut labels: Vec<String> = Vec::with_capacity(tfa.args.len() - 1);
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
 
     for arg in tfa.args.iter().skip(1) {
@@ -124,7 +124,7 @@ fn label_alpha_numeric_sort_impl(
     tfa: &mut TransformFuncArg,
     is_desc: bool,
 ) -> RuntimeResult<Vec<Timeseries>> {
-    let mut labels: Vec<String> = vec![];
+    let mut labels: Vec<String> = Vec::with_capacity(tfa.args.len() - 1);
     for (i, arg) in tfa.args.iter().skip(1).enumerate() {
         let label = arg.get_string().map_err(|err| {
             RuntimeError::ArgumentError(format!(

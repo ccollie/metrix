@@ -299,10 +299,10 @@ impl<T: Clone> From<&[T]> for UnitVec<T> {
 #[macro_export]
 macro_rules! unitvec {
     () => (
-        crate::types::unit_vec::UnitVec::new()
+        $crate::types::unit_vec::UnitVec::new()
     );
     ($elem:expr; $n:expr) => (
-        let mut new = crate::types::unit_vec::UnitVec::new();
+        let mut new = $crate::types::unit_vec::UnitVec::new();
 
         for _ in 0..$n {
             new.push($elem)

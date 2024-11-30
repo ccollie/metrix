@@ -25,7 +25,7 @@ pub struct TokenWithLocation<'source> {
     pub span: Span,
 }
 
-impl<'source> TokenWithLocation<'source> {
+impl TokenWithLocation<'_> {
     pub fn len(&self) -> usize {
         self.text.len()
     }

@@ -523,6 +523,10 @@ fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> 
     Ok(rvs)
 }
 
+fn sort_series_by_metric_name(tss: &mut [Timeseries]) {
+    tss.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
+}
+
 /// `vector1 or vector2` results in a vector that contains all original elements (label sets + values)
 /// of vector1 and additionally all elements of vector2 which do not have matching label sets in vector1.
 ///
@@ -530,11 +534,13 @@ fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> 
 fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     if bfa.left.is_empty() {
         // Short-circuit.
+        sort_series_by_metric_name(&mut bfa.right);
         return Ok(std::mem::take(&mut bfa.right));
     }
 
     if bfa.right.is_empty() {
         // Short-circuit.
+        sort_series_by_metric_name(&mut bfa.left);
         return Ok(std::mem::take(&mut bfa.left));
     }
 
@@ -558,6 +564,9 @@ fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     }
 
     left.append(&mut rvs);
+    // Sort series by metric name as Prometheus does.
+    // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
+    sort_series_by_metric_name(&mut left);
 
     Ok(left)
 }

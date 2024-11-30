@@ -558,7 +558,7 @@ pub fn merge_timeseries(
                 let step = ec.step.as_millis() as i64;
                 while t_start < b_start {
                     tmp.values.push(f64::NAN);
-                    t_start = t_start + step;
+                    t_start += step;
                 }
             }
             Some(ts_a) => {
@@ -575,11 +575,12 @@ pub fn merge_timeseries(
 
     // todo: collect() then rvs.extend()
     // Copy the remaining timeseries from m.
+    let step_ms = ec.step.as_millis() as i64;
     for ts_a in map.values_mut() {
-        let t_start = b_start;
+        let mut t_start = b_start;
         while t_start <= ec.end {
             ts_a.values.push(f64::NAN);
-            t_start.add(ec.step);
+            t_start += step_ms;
         }
 
         validate_timeseries_length(ts_a)?;

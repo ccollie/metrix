@@ -136,7 +136,7 @@ impl QueryStatsTracker {
         start_time: Timestamp,
     ) {
         let register_time = current_time_millis();
-        let duration = Duration::from_millis((register_time - start_time).abs() as u64);
+        let duration = Duration::from_millis((register_time - start_time).unsigned_abs());
         if duration < self.config.min_query_duration {
             return;
         }

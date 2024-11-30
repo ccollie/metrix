@@ -529,21 +529,25 @@ impl Display for MetricName {
 }
 
 impl PartialOrd for MetricName {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for MetricName {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.measurement != other.measurement {
-            return Some(self.measurement.cmp(&other.measurement));
+            return self.measurement.cmp(&other.measurement);
         }
         // Metric names for a and b match. Compare tags.
         // Tags must be already sorted by the caller, so just compare them.
         for (a, b) in self.labels.iter().zip(&other.labels) {
             if let Some(ord) = a.partial_cmp(b) {
                 if ord != Ordering::Equal {
-                    return Some(ord);
+                    return ord;
                 }
             }
         }
 
-        Some(self.labels.len().cmp(&other.labels.len()))
+        self.labels.len().cmp(&other.labels.len())
     }
 }
 

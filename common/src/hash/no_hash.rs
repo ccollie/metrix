@@ -157,7 +157,7 @@ impl<T> Copy for NoHashHasher<T> {}
 /// satisfy the following constraint:
 ///
 /// > **One of the `Hasher::write_{u8,u16,u32,u64,usize,i8,i16,i32,i64,isize}`
-/// methods is invoked exactly once.**
+/// > methods is invoked exactly once.**
 ///
 /// The best way to ensure this is to write a custom `Hash` impl even when
 /// deriving `Hash` for a simple newtype of a single type which itself

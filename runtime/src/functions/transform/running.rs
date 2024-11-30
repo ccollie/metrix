@@ -6,24 +6,19 @@ use crate::functions::utils::get_first_non_nan_index;
 pub(crate) fn running_avg(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     running_func_impl(tfa, handle_avg)
 }
-
 pub(crate) fn running_sum(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     running_func_impl(tfa, handle_sum)
 }
-
 pub(crate) fn running_min(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     running_func_impl(tfa, handle_min)
 }
-
 pub(crate) fn running_max(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     running_func_impl(tfa, handle_max)
 }
-
 #[inline]
 fn handle_sum(a: f64, b: f64, _idx: usize) -> f64 {
     a + b
 }
-
 #[inline]
 fn handle_max(a: f64, b: f64, _idx: usize) -> f64 {
     a.max(b)
