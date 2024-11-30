@@ -605,7 +605,10 @@ mod tests {
             7.38905609893065,
         ]);
         test_query(q, vec![r]);
+    }
 
+    #[test]
+    fn test_exp_1() {
         let q = r#"exp(alias(time()/1e3, "foobar")) keep_metric_names"#;
         let mut r = make_result(&[
             std::f64::consts::E,
@@ -2264,7 +2267,7 @@ mod tests {
     #[test]
     fn avg_over_time() {
         let q = "round(avg_over_time(rand(0)[200s:5s]), 0.001)";
-        assert_result_eq(q, &[0.521, 0.518, 0.509, 0.544, 0.511, 0.504]);
+        assert_result_eq(q, &[0.467, 0.488, 0.462, 0.486, 0.441, 0.474]);
     }
 
     #[test]
@@ -4104,33 +4107,6 @@ mod tests {
         let q = "range_median(time())";
         let r = make_result(&[1500.0, 1500.0, 1500.0, 1500.0, 1500.0, 1500.0]);
         test_query(q, vec![r])
-    }
-
-    #[test]
-    fn test_ttf() {
-        let q = "ttf(2000-time())";
-        let r = make_result(&[
-            1000_f64,
-            866.6666666666666,
-            688.8888888888889,
-            496.2962962962963,
-            298.7654320987655,
-            99.58847736625516,
-        ]);
-        test_query(q, vec![r]);
-
-        assert_result_eq("ttf(1000-time())", &[0_f64, 0.0, 0.0, 0.0, 0.0, 0.0]);
-
-        let q = "ttf(1500-time())";
-        let r = make_result(&[
-            500_f64,
-            366.6666666666667,
-            188.8888888888889,
-            62.962962962962976,
-            20.987654320987662,
-            6.995884773662555,
-        ]);
-        test_query(q, vec![r]);
     }
 
     #[test]

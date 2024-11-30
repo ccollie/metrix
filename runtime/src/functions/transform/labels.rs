@@ -57,7 +57,7 @@ pub(crate) fn alias(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>
 
     for ts in series.iter_mut() {
         if alias.is_empty() {
-            ts.metric_name.remove_label(METRIC_NAME_LABEL);
+            ts.metric_name.reset_measurement();
         } else {
             ts.metric_name.set(METRIC_NAME_LABEL, &alias)
         }
