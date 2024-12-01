@@ -238,6 +238,50 @@ pub(crate) fn get_timeseries() -> Timeseries {
 /// The minimum threshold of timeseries tags to process in parallel when computing signatures.
 pub(crate) const SIGNATURE_PARALLELIZATION_THRESHOLD: usize = 8;
 
+fn signature_without_labels(mn: &MetricName, labels: &[String], keep_metric_name: bool) -> Signature {
+    let group_name = if keep_metric_name {
+        &mn.measurement
+    } else {
+        ""
+    };
+    if labels.is_empty() {
+        let iter = mn.labels.iter();
+        return Signature::from_name_and_labels(group_name, iter);
+    }
+    let iter = mn.labels.iter().filter(|tag| !labels.contains(&tag.name));
+    Signature::from_name_and_labels(group_name, iter)
+}
+
+fn signature_with_labels(mn: &MetricName, labels: &[String], keep_metric_name: bool) -> Signature {
+    let group_name = if keep_metric_name {
+        &mn.measurement
+    } else {
+        ""
+    };
+    let iter = mn.labels.iter().filter(|tag| labels.contains(&tag.name));
+    Signature::from_name_and_labels(group_name, iter)
+}
+
+fn get_hash_signature(mn: &MetricName, modifier: &Option<VectorMatchModifier>, keep_metric_name: bool) -> Signature {
+    match modifier {
+        None => {
+            if keep_metric_name {
+                Signature::from_name_and_labels(&mn.measurement, mn.labels.iter())
+            } else {
+                Signature::from_name_and_labels("", mn.labels.iter())
+            }
+        },
+        Some(m) => match m {
+            VectorMatchModifier::On(labels) => {
+                signature_with_labels(mn, labels.as_ref(), keep_metric_name)
+            },
+            VectorMatchModifier::Ignoring(labels) => {
+                signature_without_labels(mn, labels.as_ref(), keep_metric_name)
+            }
+        },
+    }
+}
+
 pub fn group_series_by_match_modifier(
     series: &mut Vec<Timeseries>,
     modifier: &Option<VectorMatchModifier>,
@@ -247,26 +291,14 @@ pub fn group_series_by_match_modifier(
         series
             .par_iter()
             .map_with(modifier, |modifier, timeseries| {
-                if with_metric_name {
-                    timeseries.metric_name.signature_by_match_modifier(modifier)
-                } else {
-                    timeseries
-                        .metric_name
-                        .tags_signature_by_match_modifier(modifier)
-                }
+                get_hash_signature(&timeseries.metric_name, modifier, with_metric_name)
             })
             .collect::<Vec<Signature>>()
     } else {
         series
             .iter()
             .map(|timeseries| {
-                if with_metric_name {
-                    timeseries.metric_name.signature_by_match_modifier(modifier)
-                } else {
-                    timeseries
-                        .metric_name
-                        .tags_signature_by_match_modifier(modifier)
-                }
+                get_hash_signature(&timeseries.metric_name, modifier, with_metric_name)
             })
             .collect::<Vec<Signature>>()
     };

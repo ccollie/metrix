@@ -277,7 +277,7 @@ fn adjust_binary_op_tags(
     Ok((rvs_left, rvs_right))
 }
 
-fn should_reset_metric_group(op: Operator, keep_metric_names: bool, returns_bool: bool) -> bool {
+const fn should_reset_metric_group(op: Operator, keep_metric_names: bool, returns_bool: bool) -> bool {
     if op.is_comparison() && !returns_bool {
         // Do not reset metric_group for non-boolean `compare` binary ops like Prometheus does.
         return false;
@@ -671,14 +671,18 @@ fn create_series_map_by_tag_set(
 ) -> (TimeseriesHashMap, TimeseriesHashMap) {
     let empty_matching = None;
 
-    let matching = if let Some(modifier) = bfa.modifier.as_ref() {
-        &modifier.matching
+    let (matching, keep_metric_names)  = if let Some(modifier) = bfa.modifier.as_ref() {
+        (&modifier.matching, modifier.keep_metric_names)
     } else {
-        &empty_matching
+        (&empty_matching, false)
     };
 
-    let m_left = group_series_by_match_modifier(&mut bfa.left, matching, false);
-    let m_right = group_series_by_match_modifier(&mut bfa.right, matching, false);
+    // todo: Chili
+    let (m_left, m_right) = chili::Scope::global()
+        .join(|_| group_series_by_match_modifier(&mut bfa.left, matching, keep_metric_names),
+              |_| group_series_by_match_modifier(&mut bfa.right, matching, keep_metric_names));
+    // let m_left = group_series_by_match_modifier(&mut bfa.left, matching, keep_metric_names);
+    // let m_right = group_series_by_match_modifier(&mut bfa.right, matching, keep_metric_names);
 
     (m_left, m_right)
 }

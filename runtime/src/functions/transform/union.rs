@@ -21,15 +21,36 @@ pub(crate) fn handle_union(
 
     let len = args[0].len();
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(len);
-    let mut m: AHashSet<Signature> = AHashSet::with_capacity(len);
+
+    if are_all_args_scalar(&args) {
+        for mut arg in args.into_iter() {
+            match arg {
+                QueryValue::Scalar(v) => {
+                    let mut ts = eval_number(ec, v)?;
+                    rvs.append(&mut ts);
+                }
+                QueryValue::InstantVector(ref mut v) => {
+                    rvs.append(v);
+                }
+                _ => {
+                    return Err(RuntimeError::ArgumentError(
+                        "expected scalar".to_string(),
+                    ));
+                }
+            }
+        }
+        return Ok(rvs);
+    }
+
+    let mut m: AHashSet<String> = AHashSet::with_capacity(len);
 
     fn process_vector(
         v: &mut [Timeseries],
-        m: &mut AHashSet<Signature>,
+        m: &mut AHashSet<String>,
         rvs: &mut Vec<Timeseries>,
     ) {
         for ts in v.iter_mut() {
-            let key = ts.metric_name.signature();
+            let key = ts.metric_name.to_string();
             if m.insert(key) {
                 rvs.push(std::mem::take(ts));
             }
@@ -55,4 +76,28 @@ pub(crate) fn handle_union(
     }
 
     Ok(rvs)
+}
+
+fn are_all_args_scalar(args: &Vec<QueryValue>) -> bool {
+    args.iter().all(|arg| {
+        match arg {
+            QueryValue::Scalar(_) => true,
+            QueryValue::InstantVector(v) => {
+                if v.len() != 1 {
+                    return false;
+                }
+                let mn = &v[0].metric_name;
+                return mn.is_empty()
+            },
+            _ => false,
+        }
+    })
+}
+
+fn is_scalar_ts(tss: &Vec<Timeseries>) -> bool {
+    if tss.len() != 1 {
+        return false;
+    }
+    let mn = &tss[0].metric_name;
+    mn.is_empty()
 }
