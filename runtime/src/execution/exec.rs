@@ -369,8 +369,8 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
             eval_string_string_binop(be.op, left, right, be.returns_bool())
         }
         (left, right) => {
-            // maybe chili here instead of rayon
-            let (lhs, rhs) = join(|| eval_expr(ctx, ec, left), || eval_expr(ctx, ec, right));
+            let (lhs, rhs) =
+                chili::Scope::global().join(|_| eval_expr(ctx, ec, left), |_| eval_expr(ctx, ec, right));
 
             match (lhs?, rhs?) {
                 (QueryValue::Scalar(left), QueryValue::Scalar(right)) => {
@@ -489,9 +489,33 @@ pub(super) fn eval_exprs_in_parallel(
             Ok(vec![value])
         }
         _ => {
-            args.par_iter()
-                .map(|expr| eval_expr(ctx, ec, expr))
-                .collect()
+            eval_parallel_internal(&mut chili::Scope::global(), ctx, ec, args)
+        }
+    }
+}
+
+#[inline]
+fn eval_parallel_internal(scope: &mut chili::Scope, ctx: &Context, ec: &EvalConfig, args: &[Expr]) -> RuntimeResult<Vec<Value>> {
+    match args {
+        [] => Ok(vec![]),
+        [first] => {
+            let value = eval_expr(ctx, ec, &first)?;
+            Ok(vec![value])
+        }
+        [first, second] => {
+            let (left, right) = scope.join(
+                |_| eval_expr(ctx, ec, &first),
+                |_| eval_expr(ctx, ec, &second),
+            );
+            Ok(vec![left?, right?])
+        }
+        _ => {
+            let mid = args.len() / 2;
+            let left_half = eval_parallel_internal(scope, ctx, ec, &args[0..mid])?;
+            let right_half = eval_parallel_internal(scope, ctx, ec, &args[mid..])?;
+            let mut result = left_half;
+            result.extend(right_half);
+            Ok(result)
         }
     }
 }

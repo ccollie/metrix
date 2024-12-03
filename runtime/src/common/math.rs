@@ -1,7 +1,7 @@
+use chili::Scope;
 use metricsql_common::pool::get_pooled_vec_f64;
 use num_traits::Pow;
-use smallvec::SmallVec;
-use std::cmp::Ordering;
+use smallvec::{smallvec, SmallVec};
 use std::ops::DerefMut;
 use crate::types::Timestamp;
 
@@ -18,6 +18,8 @@ pub fn is_stale_nan(f: f64) -> bool {
 }
 
 pub static IQR_PHIS: [f64; 2] = [0.25, 0.75];
+
+const SMALL_VEC_THRESHOLD: usize = 64;
 
 /// mode_no_nans returns mode for a.
 ///
@@ -98,12 +100,12 @@ pub(crate) fn stddev(values: &[f64]) -> f64 {
     std_var.sqrt()
 }
 
-/// quantiles calculates the given phis from origin_values without modifying origin_values, appends
+/// `quantiles` calculates the given phis from origin_values without modifying origin_values, appends
 /// them to qs and returns the result.
 pub(crate) fn quantiles(qs: &mut [f64], phis: &[f64], origin_values: &[f64]) {
-    if origin_values.len() <= 64 {
-        let mut vec = SmallVec::<f64, 64>::new();
-        prepare_tv_for_quantile_float64(&mut vec, origin_values);
+    if origin_values.len() <= SMALL_VEC_THRESHOLD {
+        let mut vec = SmallVec::<f64, SMALL_VEC_THRESHOLD>::new();
+        prepare_small_vec_for_quantile_float64(&mut vec, origin_values);
         return quantiles_sorted(qs, phis, &vec);
     }
 
@@ -115,7 +117,11 @@ pub(crate) fn quantiles(qs: &mut [f64], phis: &[f64], origin_values: &[f64]) {
 
 /// calculates the given phi from origin_values without modifying origin_values
 pub(crate) fn quantile(phi: f64, origin_values: &[f64]) -> f64 {
-    // todo: smallVec ?
+    if origin_values.len() <= SMALL_VEC_THRESHOLD {
+        let mut vec = SmallVec::<f64, SMALL_VEC_THRESHOLD>::new();
+        prepare_small_vec_for_quantile_float64(&mut vec, origin_values);
+        return quantile_sorted(phi, &vec);
+    }
     let mut block = get_pooled_vec_f64(origin_values.len());
     prepare_for_quantile_float64(&mut block, origin_values);
     quantile_sorted(phi, &block)
@@ -124,15 +130,15 @@ pub(crate) fn quantile(phi: f64, origin_values: &[f64]) -> f64 {
 /// prepare_for_quantile_float64 copies items from src to dst but removes NaNs and sorts the dst
 fn prepare_for_quantile_float64(dst: &mut Vec<f64>, src: &[f64]) {
     dst.extend(src.iter().filter(|v| !v.is_nan()));
-    dst.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Less));
+    dst.sort_by(|a, b| a.total_cmp(b));
 }
 
 /// copies items from src to dst but removes NaNs and sorts the dst
-fn prepare_tv_for_quantile_float64(dst: &mut SmallVec<f64, 64>, src: &[f64]) {
+fn prepare_small_vec_for_quantile_float64(dst: &mut SmallVec<f64, SMALL_VEC_THRESHOLD>, src: &[f64]) {
     for v in src.iter().filter(|v| !v.is_nan()) {
         dst.push(*v);
     }
-    dst.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Less));
+    dst.sort_by(|a, b| a.total_cmp(b));
 }
 
 /// calculates the given phis over a sorted list of values, appends them to qs and returns the result.
@@ -140,9 +146,54 @@ fn prepare_tv_for_quantile_float64(dst: &mut SmallVec<f64, 64>, src: &[f64]) {
 /// It is expected that values won't contain NaN items.
 /// The implementation mimics Prometheus implementation for compatibility's sake.
 pub(crate) fn quantiles_sorted(qs: &mut [f64], phis: &[f64], values: &[f64]) {
-    // todo(perf): rayon ?
-    for (phi, qs) in phis.iter().zip(qs.iter_mut()) {
-        *qs = quantile_sorted(*phi, values);
+    let values = quantiles_sorted_internal(&mut Scope::global(), phis, values);
+    for (qs, value) in qs.iter_mut().zip(values.into_iter()) {
+        *qs = value;
+    }
+}
+
+fn quantiles_sorted_internal(scope: &mut Scope, phis: &[f64], values: &[f64]) -> SmallVec<f64, 6> {
+    match phis {
+        [] => SmallVec::new(),
+        [first] => {
+            let v = quantile_sorted(*first, values);
+            smallvec![v]
+        }
+        [first, second] => {
+            let (v1, v2) = scope.join(
+                |_| quantile_sorted(*first, values),
+                |_| quantile_sorted(*second, values)
+            );
+            smallvec![v1, v2]
+        }
+        [first, second, third] => {
+            let ((v1, v2), v3) = scope.join(
+                |s1| s1.join(|_| quantile_sorted(*first, values), |_| quantile_sorted(*second, values)),
+                |_| quantile_sorted(*third, values)
+            );
+            smallvec![v1, v2, v3]
+        }
+        [first, second, third, fourth] => {
+            let ((v1, v2), (v3, v4)) = scope.join(
+                |s1| s1.join(
+                    |_| quantile_sorted(*first, values),
+                    |_| quantile_sorted(*second, values)
+                ),
+                |s2| s2.join(|_| quantile_sorted(*third, values), |_| quantile_sorted(*fourth, values))
+
+            );
+            smallvec![v1, v2, v3, v4]
+        }
+        _ => {
+            let mid = phis.len() / 2;
+            let (head, tail) = phis.split_at(mid);
+            let (mut left, right) = scope.join(
+                |s1| quantiles_sorted_internal(s1, head, values),
+                |s2| quantiles_sorted_internal(s2, tail, values),
+            );
+            left.extend(right);
+            left
+        }
     }
 }
 
