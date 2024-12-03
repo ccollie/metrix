@@ -1,10 +1,13 @@
 use std::cmp::Ordering;
-
+use rayon::prelude::ParallelSliceMut;
 use crate::common::strings::compare_str_alphanumeric;
 use crate::functions::arg_parse::get_series_arg;
 use crate::functions::transform::TransformFuncArg;
 use crate::{RuntimeError, RuntimeResult};
 use crate::types::Timeseries;
+
+/// The threshold for switching to a parallel sort implementation.
+const THREAD_SORT_THRESHOLD: usize = 4;
 
 pub(crate) fn sort(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     transform_sort_impl(tfa, false)
@@ -32,44 +35,33 @@ pub(crate) fn sort_by_label_desc(tfa: &mut TransformFuncArg) -> RuntimeResult<Ve
     sort_by_label_impl(tfa, true)
 }
 
-fn transform_sort_impl(
-    tfa: &mut TransformFuncArg,
-    is_desc: bool,
-) -> RuntimeResult<Vec<Timeseries>> {
-    let comparator = if is_desc {
-        |a: &f64, b: &f64| b.total_cmp(a)
-    } else {
-        |a: &f64, b: &f64| a.total_cmp(b)
-    };
 
+fn transform_sort_impl(tfa: &TransformFuncArg, is_desc: bool) -> RuntimeResult<Vec<Timeseries>> {
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
-    series.sort_by(move |first, second| {
-        let a = &first.values;
-        let b = &second.values;
-        let iter_a = a.iter().rev();
-        let iter_b = b.iter().rev();
 
-        // Note: we handle NaN manually instead of relying on total_cmp because of
-        // its handling of negative and positive NaNs. We want to treat them as equal.
-        for (x, y) in iter_a.zip(iter_b) {
-            if !x.is_nan() {
-                if y.is_nan() {
-                    return Ordering::Greater;
-                }
-                let cmp = (comparator)(x, y);
-                if cmp != Ordering::Equal {
-                    return cmp;
-                }
-            } else if !y.is_nan() {
-                return Ordering::Less;
-            }
+    fn sort(a: &Timeseries, b: &Timeseries, is_desc: bool) -> Ordering {
+        let iter_a = a.values.iter().rev().cloned();
+        let iter_b = b.values.iter().rev().cloned();
+        if is_desc {
+            iter_cmp_f64_desc(iter_a, iter_b)
+        } else {
+            iter_cmp_f64(iter_a, iter_b)
         }
+    }
 
-        Ordering::Equal
-    });
+    if series.len() >= THREAD_SORT_THRESHOLD {
+        series.par_sort_by(|a, b| sort(a, b, is_desc));
+    } else {
+        series.sort_by(|a, b| sort(a, b, is_desc));
+    }
+
+    println!("Sorted {:?}", series);
 
     Ok(std::mem::take(&mut series))
 }
+
+const EMPTY_STRING: String = String::new();
+const EMPTY_STRING_REF: &String = &EMPTY_STRING;
 
 fn sort_by_label_impl(tfa: &mut TransformFuncArg, is_desc: bool) -> RuntimeResult<Vec<Timeseries>> {
     let mut labels: Vec<String> = Vec::with_capacity(tfa.args.len() - 1);
@@ -80,42 +72,27 @@ fn sort_by_label_impl(tfa: &mut TransformFuncArg, is_desc: bool) -> RuntimeResul
         labels.push(label);
     }
 
-    let comparator = if is_desc {
-        |a: &String, b: &String| b.cmp(a)
-    } else {
-        |a: &String, b: &String| a.cmp(b)
-    };
-
-    series.sort_by(|first, second| {
+    fn sort(a: &Timeseries, b: &Timeseries, labels: &Vec<String>, is_desc: bool) -> Ordering {
         for label in labels.iter() {
-            let a = first.metric_name.label_value(label);
-            let b = second.metric_name.label_value(label);
-            match (a, b) {
-                (None, None) => continue,
-                (Some(a1), Some(b1)) => {
-                    let cmp = (comparator)(a1, b1);
-                    if cmp != Ordering::Equal {
-                        return cmp;
-                    }
-                }
-                (Some(_), None) => {
-                    return if is_desc {
-                        Ordering::Less
-                    } else {
-                        Ordering::Greater
-                    };
-                }
-                (None, Some(_)) => {
-                    return if is_desc {
-                        Ordering::Greater
-                    } else {
-                        Ordering::Less
-                    };
-                }
+            let a = a.metric_name.label_value(label);
+            let b = b.metric_name.label_value(label);
+            let order = if is_desc {
+                compare_string(b, a)
+            } else {
+                compare_string(a, b)
+            };
+            if order != Ordering::Equal {
+                return order;
             }
         }
         Ordering::Equal
-    });
+    }
+
+    if series.len() >= THREAD_SORT_THRESHOLD {
+        series.par_sort_by(|first, second| sort(first, second, &labels, is_desc));
+    } else {
+        series.sort_by(|first, second| sort(first, second, &labels, is_desc));
+    }
 
     Ok(series)
 }
@@ -136,44 +113,114 @@ fn label_alpha_numeric_sort_impl(
         labels.push(label);
     }
 
-    let comparator = if is_desc {
-        |a: &String, b: &String| compare_str_alphanumeric(b, a)
-    } else {
-        |a: &String, b: &String| compare_str_alphanumeric(a, b)
-    };
+    fn sort(a: &Timeseries, b: &Timeseries, labels: &Vec<String>, is_desc: bool) -> Ordering {
+        let comparator = if is_desc {
+            |a: &String, b: &String| compare_str_alphanumeric(b, a)
+        } else {
+            |a: &String, b: &String| compare_str_alphanumeric(a, b)
+        };
 
-    let mut res = get_series_arg(&tfa.args, 0, tfa.ec)?;
-    res.sort_by(|first, second| {
-        for label in &labels {
-            match (
-                first.metric_name.label_value(label),
-                second.metric_name.label_value(label),
-            ) {
-                (None, None) => continue,
-                (Some(a), Some(b)) => {
-                    let cmp = (comparator)(a, b);
-                    if cmp != Ordering::Equal {
-                        return cmp;
-                    }
-                }
-                (None, Some(_)) => {
-                    return if is_desc {
-                        Ordering::Greater
-                    } else {
-                        Ordering::Less
-                    };
-                }
-                (Some(_), None) => {
-                    return if is_desc {
-                        Ordering::Less
-                    } else {
-                        Ordering::Greater
-                    };
-                }
+        for label in labels.iter() {
+            let a = a.metric_name.label_value(label);
+            let b = b.metric_name.label_value(label);
+            let order = comparator(a.unwrap_or(EMPTY_STRING_REF), b.unwrap_or(EMPTY_STRING_REF));
+            if order != Ordering::Equal {
+                return order;
             }
         }
         Ordering::Equal
-    });
+    }
 
-    Ok(res)
+    let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
+
+    if series.len() >= THREAD_SORT_THRESHOLD {
+        series.par_sort_by(|first, second| sort(first, second, &labels, is_desc));
+    } else {
+        series.sort_by(|first, second| sort(first, second, &labels, is_desc));
+    }
+
+    Ok(series)
+}
+
+/// Order `a` and `b` lexicographically using `Ord`
+#[inline]
+pub fn iter_cmp<A, L, R>(mut a: L, mut b: R) -> Ordering
+where
+    A: Ord,
+    L: Iterator<Item = A>,
+    R: Iterator<Item = A>,
+{
+    loop {
+        match (a.next(), b.next()) {
+            (None, None) => return Ordering::Equal,
+            (None, _) => return Ordering::Less,
+            (_, None) => return Ordering::Greater,
+            (Some(x), Some(y)) => match x.cmp(&y) {
+                Ordering::Equal => (),
+                non_eq => return non_eq,
+            },
+        }
+    }
+}
+
+#[inline]
+fn reverse_ordering(order: Ordering) -> Ordering {
+    match order {
+        Ordering::Less => Ordering::Greater,
+        Ordering::Equal => Ordering::Equal,
+        Ordering::Greater => Ordering::Less,
+    }
+}
+
+#[inline]
+pub fn iter_cmp_f64<'a, L, R>(mut a: L, mut b: R) -> Ordering
+where
+    L: Iterator<Item = f64>,
+    R: Iterator<Item = f64>,
+{
+    loop {
+        match (a.next(), b.next()) {
+            (None, None) => return Ordering::Equal,
+            (None, _) => return Ordering::Less,
+            (_, None) => return Ordering::Greater,
+            (Some(x), Some(y)) => match compare_float(x, y) {
+                Ordering::Equal => (),
+                non_eq => return non_eq,
+            },
+        }
+    }
+}
+
+#[inline]
+pub fn iter_cmp_f64_desc<'a, L, R>(a: L, b: R) -> Ordering
+where
+    L: Iterator<Item = f64>,
+    R: Iterator<Item = f64>,
+{
+    let order = iter_cmp_f64(a, b);
+    reverse_ordering(order)
+}
+
+#[inline]
+fn compare_float(a: f64, b: f64) -> Ordering {
+    if !a.is_nan() {
+        if b.is_nan() {
+            return Ordering::Greater;
+        }
+        let order = a.total_cmp(&b);
+        if order != Ordering::Equal {
+            return order
+        }
+    } else if !b.is_nan() {
+        return Ordering::Less;
+    }
+
+    Ordering::Equal
+}
+
+#[inline]
+fn compare_string(a: Option<&String>, b: Option<&String>) -> Ordering {
+    let a = a.unwrap_or(EMPTY_STRING_REF);
+    let b = b.unwrap_or(EMPTY_STRING_REF);
+    a.cmp(b)
 }
