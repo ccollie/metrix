@@ -449,36 +449,57 @@ impl MetricName {
         Signature::from_name_and_labels(group_name, iter)
     }
 
-    /// Calculate signature for the metric name by the given match modifier.
-    pub fn signature_by_match_modifier(&self, modifier: &Option<VectorMatchModifier>) -> Signature {
+    pub fn get_hash_signature(&self, modifier: &Option<VectorMatchModifier>, keep_metric_name: bool) -> Signature {
         match modifier {
-            None => self.signature(),
-            Some(m) => match m {
-                VectorMatchModifier::On(labels) => self.signature_with_labels(labels.as_ref()),
-                VectorMatchModifier::Ignoring(labels) => {
-                    self.signature_without_labels(labels.as_ref())
+            None => {
+                if keep_metric_name {
+                    Signature::from_name_and_labels(&self.measurement, self.labels.iter())
+                } else {
+                    Signature::from_name_and_labels("", self.labels.iter())
                 }
             },
-        }
-    }
-
-    /// Calculate signature for the metric name by the given match modifier without including
-    /// the measurement name (i.e. only labels are considered).
-    pub fn tags_signature_by_match_modifier(
-        &self,
-        modifier: &Option<VectorMatchModifier>,
-    ) -> Signature {
-        match modifier {
-            None => self.signature(),
             Some(m) => match m {
-                VectorMatchModifier::On(labels) => self.tags_signature_with_labels(labels.as_ref()),
+                VectorMatchModifier::On(on_tags) => {
+                    // removes all the tags not included to on_tags.
+                    let keep_names = if !on_tags.contains(METRIC_NAME_LABEL) {
+                        false
+                    } else {
+                        keep_metric_name
+                    };
+                    signature_with_labels(self, on_tags.as_ref(), keep_names)
+                },
                 VectorMatchModifier::Ignoring(labels) => {
-                    self.tags_signature_without_labels(labels.as_ref())
+                    signature_without_labels(self, labels.as_ref(), keep_metric_name)
                 }
             },
         }
     }
 }
+
+fn signature_without_labels(mn: &MetricName, labels: &[String], keep_metric_name: bool) -> Signature {
+    let group_name = if keep_metric_name {
+        &mn.measurement
+    } else {
+        ""
+    };
+    if labels.is_empty() {
+        let iter = mn.labels.iter();
+        return Signature::from_name_and_labels(group_name, iter);
+    }
+    let iter = mn.labels.iter().filter(|tag| !labels.contains(&tag.name));
+    Signature::from_name_and_labels(group_name, iter)
+}
+
+fn signature_with_labels(mn: &MetricName, labels: &[String], keep_metric_name: bool) -> Signature {
+    let group_name = if keep_metric_name {
+        &mn.measurement
+    } else {
+        ""
+    };
+    let iter = mn.labels.iter().filter(|tag| labels.contains(&tag.name));
+    Signature::from_name_and_labels(group_name, iter)
+}
+
 
 impl FromStr for MetricName {
     type Err = ParseError;
@@ -534,16 +555,27 @@ impl PartialOrd for MetricName {
 
 impl Ord for MetricName {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.measurement != other.measurement {
-            return self.measurement.cmp(&other.measurement);
+        let order = self.measurement.cmp(&other.measurement);
+        if order != Ordering::Equal {
+            return order;
         }
         // Metric names for a and b match. Compare tags.
         // Tags must be already sorted by the caller, so just compare them.
-        for (a, b) in self.labels.iter().zip(&other.labels) {
-            if let Some(ord) = a.partial_cmp(b) {
-                if ord != Ordering::Equal {
-                    return ord;
-                }
+        let ats = &self.labels;
+        let bts = &other.labels;
+
+        let other_len = bts.len();
+
+        for (i, a) in ats.iter().enumerate() {
+            if i >= other_len {
+                // self contains more tags than other and all the previous tags were identical,
+                // so self is considered bigger than other.
+                return Ordering::Greater;
+            }
+            let bt = &bts[i];
+            let ordering = a.cmp(bt);
+            if ordering != Ordering::Equal {
+                return ordering;
             }
         }
 
@@ -693,22 +725,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tags_signature_without_labels() {
-        let mut mn = MetricName::new("name");
-        mn.add_label("foo", "bar");
-        mn.add_label("baz", "qux");
-        let mut exp_mn = MetricName::new("name");
-        exp_mn.add_label("baz", "qux");
-        assert_eq!(
-            exp_mn.tags_signature_without_labels(&vec!["foo".to_string()]),
-            mn.tags_signature_without_labels(&vec!["foo".to_string()]),
-            "expecting {} got {}",
-            &exp_mn,
-            &mn
-        );
-    }
-
-    #[test]
     fn test_tags_signature_with_labels() {
         let mut mn = MetricName::new("name");
         mn.add_label("le", "8.799e1");
@@ -718,21 +734,6 @@ mod tests {
         exp_mn.add_label("baz", "qux");
         let actual = mn.tags_signature_with_labels(&vec!["baz".to_string()]);
         let expected = exp_mn.tags_signature_with_labels(&vec!["baz".to_string()]);
-        assert_eq!(
-            actual, expected,
-            "expecting {:?} got {:?}",
-            expected, actual
-        );
-    }
-
-    #[test]
-    fn test_tags_1() {
-        let mut mn = MetricName::new("name");
-        mn.add_label("le", "8.799e1");
-        let mut exp_mn = MetricName::default();
-        exp_mn.add_label("le", "8.799e1");
-        let actual = mn.tags_signature_without_labels(&vec![]);
-        let expected = exp_mn.tags_signature_without_labels(&vec![]);
         assert_eq!(
             actual, expected,
             "expecting {:?} got {:?}",

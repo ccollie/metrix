@@ -1,12 +1,13 @@
+use chili::Scope;
 use metricsql_common::prelude::humanize_duration;
+use metricsql_parser::ast::Expr;
+use metricsql_parser::functions::RollupFunction;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use smallvec::SmallVec;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-use metricsql_parser::ast::Expr;
-use metricsql_parser::functions::{RollupFunction};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use smallvec::SmallVec;
 
 use crate::common::math::quantile;
 use crate::execution::{get_timestamps, validate_max_points_per_timeseries};
@@ -473,6 +474,53 @@ impl RollupConfig {
                 Err(RuntimeError::from(msg))
             }
             _ => Ok(()),
+        }
+    }
+}
+
+fn exec_handler_internal(scope: &mut Scope,
+                         handler: &RollupHandler,
+                         dest: &mut Vec<f64>,
+                         args: &[RollupFuncArg]) {
+    match args {
+        [] => (),
+        [first] => {
+            let v = handler.eval(first);
+            dest.push(v);
+        }
+        [first, second] => {
+            let (v1, v2) = scope.join(
+                |_| handler.eval(first),
+                |_| handler.eval(second)
+            );
+            dest.extend_from_slice(&[v1, v2]);
+        }
+        [first, second, third] => {
+            let ((v1, v2), v3) = scope.join(
+                |s1| s1.join(|_| handler.eval(first), |_| handler.eval(second)),
+                |_| handler.eval(third)
+            );
+            dest.extend_from_slice(&[v1, v2, v3]);
+        }
+        [first, second, third, fourth] => {
+            let ((v1, v2), (v3, v4)) = scope.join(
+                |s1| s1.join(|_| handler.eval(first), |_| handler.eval(second)
+                ),
+                |s2| s2.join(|_| handler.eval(third), |_| handler.eval(fourth))
+
+            );
+            dest.extend_from_slice(&[v1, v2, v3, v4]);
+        }
+        _ => {
+            args.par_iter()
+                .map(|rfa| handler.eval(rfa))
+                .collect_into_vec(dest);
+            // let mid = args.len() / 2;
+            // let (head, tail) = args.split_at(mid);
+            // scope.join(
+            //     |s1| exec_handler_internal(s1, handler, dest, head),
+            //     |s2| exec_handler_internal(s2, handler, dest, tail),
+            // );
         }
     }
 }

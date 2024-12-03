@@ -4307,9 +4307,17 @@ mod tests {
     }
 
     #[test]
-    fn running_sum() {
+    fn running_sum_1() {
         assert_result_eq("running_sum(1)", &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn running_sum_time() {
         assert_result_eq("running_sum(time()/1e3)", &[1.0, 2.2, 3.6, 5.2, 7.0, 9.0]);
+    }
+
+    #[test]
+    fn running_sum_time_ex() {
         assert_result_eq("running_sum(time()/1e3 > 1.2 < 1.8)",
                          &[f64::NAN, f64::NAN, 1.4, 3.3, 3.3, 3.3]);
     }

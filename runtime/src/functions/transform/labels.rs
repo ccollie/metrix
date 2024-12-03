@@ -79,6 +79,7 @@ pub(crate) fn handle_label_set(
                 ts.metric_name.set(dst_label, value)
             }
         }
+        println!("ts.metric_name={:?}", ts.metric_name);
     }
 }
 
@@ -275,12 +276,11 @@ pub(crate) fn label_transform(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<T
     // todo: would it be useful to use a cache ?
     let r = compile_regexp(&regex);
     match r {
-        Ok(..) => {}
+        Ok(_) => {}
         Err(err) => {
-            return Err(RuntimeError::from(format!(
-                "cannot compile regex {}: {:?}",
-                &regex, err,
-            )));
+            return Err(
+                RuntimeError::from(format!("cannot compile regex {regex}: {:?}", err))
+            );
         }
     }
 
@@ -378,10 +378,9 @@ where
 {
     let anchored = format!("^(?:{})$", re);
     match Regex::new(&anchored) {
-        Err(e) => Err(RuntimeError::from(format!(
-            "cannot compile regexp {} : {}",
-            &re, e
-        ))),
+        Err(e) => Err(RuntimeError::from(
+            format!("cannot compile regexp {re} : {}", e)
+        )),
         Ok(ref r) => handler(tfa, r),
     }
 }

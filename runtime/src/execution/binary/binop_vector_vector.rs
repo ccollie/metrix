@@ -274,7 +274,7 @@ fn adjust_binary_op_tags(
 }
 
 const fn should_reset_metric_group(op: Operator, keep_metric_names: bool, returns_bool: bool) -> bool {
-    if op.is_comparison() && !returns_bool {
+    if !returns_bool && op.is_comparison() {
         // Do not reset metric_group for non-boolean `compare` binary ops like Prometheus does.
         return false;
     }

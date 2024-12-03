@@ -1420,6 +1420,9 @@ impl BinaryExpr {
     }
 
     pub fn should_reset_metric_group(&self) -> bool {
+        if matches!(&self.modifier, Some(modifier) if modifier.keep_metric_names) {
+            return false;
+        }
         let op = self.op;
         if op.is_comparison() && !self.returns_bool() {
             // do not reset MetricGroup for non-boolean `compare` binary ops like Prometheus does.

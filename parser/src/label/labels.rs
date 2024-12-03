@@ -39,6 +39,15 @@ impl Labels {
         Self(labels)
     }
 
+    pub fn contains(&self, l: &str) -> bool {
+        for label in &self.0 {
+            if label == l {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn new_from_iter<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = String>,
