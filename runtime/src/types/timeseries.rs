@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use ahash::AHashMap;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use metricsql_common::hash::Signature;
 use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::ast::VectorMatchModifier;
@@ -283,29 +283,26 @@ fn get_hash_signature(mn: &MetricName, modifier: &Option<VectorMatchModifier>, k
 }
 
 pub fn group_series_by_match_modifier(
-    series: &mut Vec<Timeseries>,
+    series: Vec<Timeseries>,
     modifier: &Option<VectorMatchModifier>,
     with_metric_name: bool,
 ) -> TimeseriesHashMap {
-    let sigs: Vec<Signature> = if series.len() >= SIGNATURE_PARALLELIZATION_THRESHOLD {
-        series
-            .par_iter()
-            .map_with(modifier, |modifier, timeseries| {
-                get_hash_signature(&timeseries.metric_name, modifier, with_metric_name)
-            })
-            .collect::<Vec<Signature>>()
-    } else {
-        series
-            .iter()
-            .map(|timeseries| {
-                get_hash_signature(&timeseries.metric_name, modifier, with_metric_name)
-            })
-            .collect::<Vec<Signature>>()
-    };
-
     let mut m: TimeseriesHashMap = AHashMap::with_capacity(series.len());
-    for (ts, sig) in series.iter_mut().zip(sigs.iter()) {
-        m.entry(*sig).or_default().push(std::mem::take(ts));
+    if series.len() >= SIGNATURE_PARALLELIZATION_THRESHOLD {
+        for (sig, ts) in series
+            .into_par_iter()
+            .map(|timeseries| {
+                let sig = get_hash_signature(&timeseries.metric_name, modifier, with_metric_name);
+                (sig, timeseries)
+            }).collect::<Vec<_>>() {
+            m.entry(sig).or_default().push(ts);
+        }
+
+    } else {
+        for timeseries in series.into_iter() {
+            let sig = get_hash_signature(&timeseries.metric_name, modifier, with_metric_name);
+            m.entry(sig).or_default().push(timeseries);
+        }
     }
 
     m

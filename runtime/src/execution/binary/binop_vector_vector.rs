@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
+use std::hash::Hasher;
+use std::path::Prefix;
 use ahash::AHashMap;
 use tracing::{field, trace_span, Span};
-use metricsql_common::hash::Signature;
+use metricsql_common::hash::{FastHasher, Signature};
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};
 use metricsql_parser::binaryop::{
     get_scalar_binop_handler, get_scalar_comparison_handler, BinopFunc,
@@ -12,13 +14,7 @@ use crate::execution::Context;
 use crate::execution::utils::{remove_empty_series, series_len};
 use crate::prelude::QueryValue;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use crate::types::{
-    group_series_by_match_modifier,
-    Timeseries,
-    InstantVector,
-    TimeseriesHashMap,
-    METRIC_NAME_LABEL
-};
+use crate::types::{group_series_by_match_modifier, Timeseries, InstantVector, TimeseriesHashMap, METRIC_NAME_LABEL, MetricName};
 
 pub struct BinaryOpFuncArg<'a> {
     op: Operator,
@@ -388,20 +384,26 @@ fn group_join(
         map.clear();
 
         for mut ts_right in tss_right.drain(..) {
-            let mut ts_copy = ts_left.clone(); // todo(perf): how to avoid clone ?
-            ts_copy.metric_name.set_labels(
+
+            let mut mn = ts_left.metric_name.clone();
+            mn.set_labels(
                 empty_prefix,
                 join_tags.as_ref(),
                 skip_tags.as_ref(),
                 &mut ts_right.metric_name,
             );
 
-            let key = ts_copy.metric_name.labels_signature();
+            let key = mn.signature();
 
             match map.entry(key) {
                 Entry::Vacant(entry) => {
+                    let mut copy = Timeseries {
+                        metric_name: mn,
+                        values: ts_left.values.clone(),
+                        timestamps: ts_left.timestamps.clone(),
+                    };
                     entry.insert(TsPair {
-                        left: ts_copy,
+                        left: copy,
                         right: ts_right,
                     });
                 }
@@ -432,6 +434,7 @@ fn group_join(
 
     Ok(())
 }
+
 
 pub fn merge_non_overlapping_timeseries(dst: &mut Timeseries, src: &Timeseries) -> bool {
     // Verify whether the time series can be merged.
@@ -677,12 +680,12 @@ fn create_series_map_by_tag_set(
         (&empty_matching, false)
     };
 
-    // todo: Chili
+    let left = std::mem::take(&mut bfa.left);
+    let right = std::mem::take(&mut bfa.right);
+
     let (m_left, m_right) = chili::Scope::global()
-        .join(|_| group_series_by_match_modifier(&mut bfa.left, matching, keep_metric_names),
-              |_| group_series_by_match_modifier(&mut bfa.right, matching, keep_metric_names));
-    // let m_left = group_series_by_match_modifier(&mut bfa.left, matching, keep_metric_names);
-    // let m_right = group_series_by_match_modifier(&mut bfa.right, matching, keep_metric_names);
+        .join(|_| group_series_by_match_modifier(left, matching, keep_metric_names),
+              |_| group_series_by_match_modifier(right, matching, keep_metric_names));
 
     (m_left, m_right)
 }
