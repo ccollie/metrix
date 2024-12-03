@@ -61,7 +61,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
     where F: Fn(&T) -> R + Send + Sync
     {
         let ((one, two), three) =
-            s.join(|s1| s1.join(|_| f(first), |_| f(second)), |_| f(third));
+            s.join(|s1| handle_two(s1, f, first, second), |_| f(third));
         (one, two, three)
     }
 
@@ -69,8 +69,8 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
     where F: Fn(&T) -> R + Send + Sync
     {
         let ((one, two), (three, four)) =
-            s.join(|s1| s1.join(|_| f(first), |_| f(second)),
-                   |s2| s2.join(|_| f(third), |_| f(fourth)));
+            s.join(|s1| handle_two(s1, f, first, second),
+                   |s2| handle_two(s2, f, third, fourth));
         (one, two, three, four)
     }
 
@@ -78,7 +78,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
     where F: Fn(&T) -> R + Send + Sync
     {
         let ((one, two, three), (four, five)) =
-            s.join(|s| handle_three(s, f, first, second, third), |s| handle_two(s, f, fourth, fifth));
+            s.join(|s1| handle_three(s1, f, first, second, third), |s2| handle_two(s2, f, fourth, fifth));
         (one, two, three, four, five)
     }
 

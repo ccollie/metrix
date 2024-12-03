@@ -421,7 +421,7 @@ impl RollupConfig {
             }
 
             rfa
-        }).collect();
+        }).collect(); // todo: collect into a smallvec to avoid heap allocation
 
         let len = func_args.len();
         match len {

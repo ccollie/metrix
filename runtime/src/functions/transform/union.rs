@@ -1,5 +1,4 @@
 use ahash::AHashSet;
-use metricsql_common::hash::Signature;
 use crate::execution::{eval_number, EvalConfig};
 use crate::functions::transform::TransformFuncArg;
 use crate::{RuntimeError, RuntimeResult};

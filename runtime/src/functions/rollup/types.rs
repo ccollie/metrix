@@ -40,6 +40,7 @@ pub struct RollupFuncArg<'a> {
     pub(super) tsm: Option<Arc<TimeSeriesMap>>,
 }
 
+
 impl RollupFuncArg<'_> {
     pub(crate) fn get_tsm(&self) -> Arc<TimeSeriesMap> {
         if let Some(tsm) = &self.tsm {

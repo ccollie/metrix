@@ -2811,18 +2811,48 @@ mod tests {
 
     #[test]
     fn sum() {
+        assert_result_eq("sum(time()/100)", &[10.0, 12.0, 14.0, 16.0, 18.0, 20.0]);
+    }
+
+    #[test]
+    fn sum_scalar() {
         assert_result_eq("sum(123)", &[123.0, 123.0, 123.0, 123.0, 123.0, 123.0]);
+    }
+
+    #[test]
+    fn sum_multi_arg() {
         assert_result_eq("sum(1, 2, 3)", &[6.0, 6.0, 6.0, 6.0, 6.0, 6.0]);
-        assert_result_eq("sum((1, 2, 3))", &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn sum_union_scalars() {
+        assert_result_eq("sum((1, 2, 3))", &[6.0, 6.0, 6.0, 6.0, 6.0, 6.0]);
+    }
+
+    #[test]
+    fn sum_union_vectors() {
+        let q = r#"sum((
+            alias(1, "foo"),
+            alias(2, "foo"),
+            alias(3, "foo"),
+        ))"#;
+        assert_result_eq(q, &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn sum_scalar_by_empty_parens_expr() {
         assert_result_eq(
             "sum(123) by ()",
             &[123.0, 123.0, 123.0, 123.0, 123.0, 123.0],
         );
+    }
+
+    #[test]
+    fn sum_scalar_without_empty_parens_expr() {
         assert_result_eq(
             "sum(123) without ()",
             &[123.0, 123.0, 123.0, 123.0, 123.0, 123.0],
         );
-        assert_result_eq("sum(time()/100)", &[10.0, 12.0, 14.0, 16.0, 18.0, 20.0]);
     }
 
     #[test]
@@ -4428,9 +4458,17 @@ mod tests {
     }
 
     #[test]
-    fn range_linear_regression() {
+    fn range_linear_regression_time() {
         assert_result_eq("range_linear_regression(time())",&[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
+    }
+
+    #[test]
+    fn range_linear_regression_negative_time() {
         assert_result_eq("range_linear_regression(-time())", &[-1000.0, -1200.0, -1400.0, -1600.0, -1800.0, -2000.0]);
+    }
+
+    #[test]
+    fn range_linear_regression_custom() {
         assert_result_eq(
             "range_linear_regression(time() > 1200 < 1800)",
             &[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0],
