@@ -3696,7 +3696,7 @@ mod tests {
 
     #[test]
     fn bottomk() {
-        let q = r#"bottomk(1, label_set(10, "foo", "bar") or label_set(time()/150, "baz", "sss")) or label_set(time()<100, "a", "b"))"#;
+        let q = r#"bottomk(1, label_set(10, "foo", "bar") or label_set(time()/150, "baz", "sss") or label_set(time()<100, "a", "b"))"#;
         let mut r1 = make_result(&[NAN, NAN, NAN, 10.0, 10.0, 10.0]);
         r1.metric.set("foo", "bar");
         let mut r2 = make_result(&[6.666666666666667, 8.0, 9.333333333333334, NAN, NAN, NAN]);
