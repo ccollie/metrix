@@ -54,8 +54,10 @@ pub(super) fn rollup_high(rfa: &RollupFuncArg) -> f64 {
         start = 1;
     }
 
-    for v in &values[start..] {
-        max = max.max(*v);
+    for v in values.iter().skip(start).copied() {
+        if v > max {
+            max = v;
+        }
     }
 
     max
@@ -72,10 +74,9 @@ pub(super) fn rollup_low(rfa: &RollupFuncArg) -> f64 {
         min = values[0];
         start = 1;
     }
-    let vals = &values[start..];
-    for v in vals.iter() {
-        if *v < min {
-            min = *v
+    for v in values.iter().skip(start).copied() {
+        if v < min {
+            min = v
         }
     }
     min
