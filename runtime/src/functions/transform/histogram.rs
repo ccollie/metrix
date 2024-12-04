@@ -563,7 +563,7 @@ pub(crate) fn histogram_quantiles(tfa: &mut TransformFuncArg) -> RuntimeResult<V
     let mut tfa_tmp = TransformFuncArg {
         ec: tfa.ec,
         args: vec![],
-        keep_metric_names: tfa.keep_metric_names,
+        fe: tfa.fe,
     };
 
     for i in 1..len - 1 {

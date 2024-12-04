@@ -38,8 +38,8 @@ pub(crate) struct RollupEvaluator<'a> {
     re: Cow<'a, RollupExpr>,
     func: RollupFunction,
     func_handler: RollupHandler,
-    keep_metric_names: bool,
     is_tracing: bool,
+    keep_metric_names: bool,
     /// Max number of timeseries to return
     pub(crate) timeseries_limit: usize,
     pub(crate) is_incr_aggregate: bool,
@@ -55,12 +55,13 @@ impl<'a> RollupEvaluator<'a> {
         expr: &'a Expr,
         re: Cow<'a, RollupExpr>,
     ) -> Self {
+        let mut keep_metric_names = get_keep_metric_names(expr) || function.keep_metric_name();
         Self {
             expr,
             re,
             func: function,
             func_handler: handler,
-            keep_metric_names: function.keep_metric_name(),
+            keep_metric_names,
             timeseries_limit: 0,
             is_incr_aggregate: false,
             is_tracing: false,
@@ -204,6 +205,7 @@ impl<'a> RollupEvaluator<'a> {
             ec.lookback_delta,
             &shared_timestamps,
         )?;
+
 
         let (res, samples_scanned_total) = do_parallel(
             &tss_sq,
@@ -876,4 +878,22 @@ pub(crate) fn drop_stale_nans(
 
     values.truncate(k);
     timestamps.truncate(k);
+}
+
+
+fn get_keep_metric_names(expr: &Expr) -> bool {
+    match expr {
+        // If expr is a FuncExpr, return its KeepMetricNames flag.
+        Expr::Function(fe)  => fe.keep_metric_names,
+        Expr::Aggregation(ae) => {
+            // This case is possible when optimized aggrFunc calculations are used
+            // such as `sum(rate(...))`.
+            if ae.args.len() == 1 {
+                matches!(&ae.args[0], Expr::Function(fe) if fe.keep_metric_names)
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
 }

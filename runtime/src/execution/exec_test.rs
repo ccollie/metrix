@@ -4201,14 +4201,6 @@ mod tests {
     }
 
     #[test]
-    fn rate_time() {
-        let q = r#"rate(label_set(alias(time(), "foo"), "x", "y"))"#;
-        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set("x", "y");
-        test_query(q, vec![r]);
-    }
-
-    #[test]
     fn rate() {
         // test_query("rate({})", vec![]);
 
@@ -4231,13 +4223,24 @@ mod tests {
     }
 
     #[test]
-    fn rate_with_metric() {
+    fn rate_time() {
+        let q = r#"rate(label_set(alias(time(), "foo"), "x", "y"))"#;
+        let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
+        r.metric.set("x", "y");
+        test_query(q, vec![r]);
+    }
+
+    #[test]
+    fn rate_time_keep_metric_names() {
         let q = r#"rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
         r.metric.set_metric_group("foo");
         r.metric.set("x", "y");
         test_query(q, vec![r]);
+    }
 
+    #[test]
+    fn sum_rate_time_by__name__keep_metric_names() {
         let q = r#"sum(rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names) by (__name__)"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
         r.metric.set_metric_group("foo");

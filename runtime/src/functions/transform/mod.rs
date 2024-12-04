@@ -1,5 +1,5 @@
 pub(crate) use histogram::vmrange_buckets_to_le;
-use metricsql_parser::functions::TransformFunction;
+use metricsql_parser::functions::{BuiltinFunction, TransformFunction};
 pub(crate) use utils::{extract_labels_from_expr, get_timezone_offset};
 
 use crate::execution::EvalConfig;
@@ -28,6 +28,7 @@ use labels::{
     label_transform, label_uppercase, label_value, labels_equal,
 };
 use limit_offset::limit_offset;
+use metricsql_parser::ast::FunctionExpr;
 use crate::functions::transform::math::{
     abs, acos, acosh, asin, asinh, atan, atanh, ceil, cos, cosh, deg, exp, floor, ln, log10, log2,
     rad, sgn, sin, sinh, sqrt, tan, tanh, transform_pi,
@@ -88,8 +89,8 @@ mod ru;
 
 pub struct TransformFuncArg<'a> {
     pub ec: &'a EvalConfig,
+    pub fe: &'a FunctionExpr,
     pub args: Vec<QueryValue>, // todo: SmallVec
-    pub keep_metric_names: bool,
 }
 
 // https://stackoverflow.com/questions/57937436/how-to-alias-an-impl-trait
@@ -233,6 +234,39 @@ const fn get_transform_func(f: TransformFunction) -> TransformFuncHandler {
     }
 }
 
+/// These functions don't change physical meaning of input time series,
+/// so they don't drop metric name
+const fn transform_func_keeps_metric_name(func: TransformFunction) -> bool {
+    use TransformFunction::*;
+    matches!(
+            func,
+            Ceil | Clamp
+                | ClampMax
+                | ClampMin
+                | Floor
+                | Interpolate
+                | KeepLastValue
+                | KeepNextValue
+                | RangeAvg
+                | RangeFirst
+                | RangeLast
+                | RangeLinearRegression
+                | RangeMax
+                | RangeMedian
+                | RangeMin
+                | RangeNormalize
+                | RangeQuantile
+                | RangeStdDev
+                | RangeStdVar
+                | Round
+                | Ru
+                | RunningAvg
+                | RunningMax
+                | RunningMin
+                | SmoothExponential
+        )
+}
+
 pub(crate) fn exec_transform_fn(
     f: TransformFunction,
     tfa: &mut TransformFuncArg,
@@ -246,15 +280,21 @@ pub(crate) fn transform_series(
     tf: impl TransformValuesFn,
 ) -> RuntimeResult<Vec<Timeseries>> {
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
-    do_transform_values(&mut series, tf, tfa.keep_metric_names)
+    do_transform_values(&mut series, tf, tfa.fe)
 }
 
 #[inline]
 pub(super) fn do_transform_values(
     arg: &mut Vec<Timeseries>,
     mut tf: impl TransformValuesFn,
-    keep_metric_names: bool,
+    fe: &FunctionExpr
 ) -> RuntimeResult<Vec<Timeseries>> {
+
+    let keep_metric_names = match fe.function {
+        BuiltinFunction::Transform(tfn) => fe.keep_metric_names || transform_func_keeps_metric_name(tfn),
+        _ => fe.keep_metric_names,
+    };
+
     for ts in arg.iter_mut() {
         if !keep_metric_names {
             ts.metric_name.reset_measurement();

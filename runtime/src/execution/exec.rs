@@ -316,6 +316,7 @@ fn eval_function(
             let (args, re, _) = eval_rollup_func_args(ctx, ec, fe)?;
             let func_handler = nrf(&args)?;
             let mut rollup_handler = RollupEvaluator::new(rf, func_handler, expr, re);
+            // rollup_handler.keep_metric_names = fe.keep_metric_names;
             // todo: record samples_scanned in span
             let val = rollup_handler
                 .eval(ctx, ec)
@@ -453,7 +454,7 @@ fn eval_transform_func(
     let mut tfa = TransformFuncArg {
         ec,
         args,
-        keep_metric_names: func.keep_metric_name(),
+        fe
     };
     exec_transform_fn(func, &mut tfa).map_err(|err| map_error(err, fe))
 }

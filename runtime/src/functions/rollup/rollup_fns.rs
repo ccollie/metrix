@@ -400,11 +400,11 @@ pub(super) fn rollup_tmin(rfa: &RollupFuncArg) -> f64 {
     }
     let mut min_value = values[0];
     let mut min_timestamp = rfa.timestamps[0];
-    for (v, ts) in rfa.values.iter().zip(rfa.timestamps.iter()) {
+    for (v, ts) in rfa.values.iter().copied().zip(rfa.timestamps.iter().copied()) {
         // Get the last timestamp for the minimum value as most users expect.
-        if v <= &min_value {
-            min_value = *v;
-            min_timestamp = *ts;
+        if v <= min_value {
+            min_value = v;
+            min_timestamp = ts;
         }
     }
     min_timestamp as f64 / 1e3_f64
@@ -421,11 +421,11 @@ pub(super) fn rollup_tmax(rfa: &RollupFuncArg) -> f64 {
     let mut max_value = rfa.values[0];
     let mut max_timestamp = rfa.timestamps[0];
 
-    for (v, ts) in rfa.values.iter().zip(rfa.timestamps.iter()) {
+    for (v, ts) in rfa.values.iter().copied().zip(rfa.timestamps.iter().copied()) {
         // Get the last timestamp for the maximum value as most users expect.
-        if *v >= max_value {
-            max_value = *v;
-            max_timestamp = *ts;
+        if v >= max_value {
+            max_value = v;
+            max_timestamp = ts;
         }
     }
 
@@ -503,7 +503,7 @@ pub(super) fn rollup_rate_over_sum(rfa: &RollupFuncArg) -> f64 {
     if timestamps.is_empty() {
         return NAN;
     }
-    let sum: f64 = rfa.values.iter().sum();
+    let sum: f64 = rfa.values.iter().copied().sum();
     sum / (rfa.window as f64 / 1e3_f64)
 }
 
@@ -514,7 +514,7 @@ pub(super) fn rollup_range(rfa: &RollupFuncArg) -> f64 {
     let values = rfa.values;
     let mut max = values[0];
     let mut min = max;
-    for v in values.iter().cloned() {
+    for v in values.iter().copied() {
         max = max.max(v);
         min = min.min(v);
     }
@@ -538,7 +538,7 @@ pub(super) fn rollup_geomean(rfa: &RollupFuncArg) -> f64 {
         return NAN;
     }
 
-    let p = rfa.values.iter().fold(1.0, |r, v| r * *v);
+    let p = rfa.values.iter().copied().fold(1.0, |r, v| r * v);
     p.powf(1.0 / len as f64)
 }
 
@@ -572,7 +572,7 @@ pub(super) fn rollup_stale_samples(rfa: &RollupFuncArg) -> f64 {
     if values.is_empty() {
         return NAN;
     }
-    rfa.values.iter().filter(|v| is_stale_nan(**v)).count() as f64
+    rfa.values.iter().copied().filter(|v| is_stale_nan(*v)).count() as f64
 }
 
 pub(super) fn rollup_stddev(rfa: &RollupFuncArg) -> f64 {
@@ -669,14 +669,14 @@ pub(super) fn rollup_changes_prometheus(rfa: &RollupFuncArg) -> f64 {
     }
     let mut prev_value = rfa.values[0];
     let mut n = 0;
-    for v in rfa.values.iter().skip(1) {
-        if *v != prev_value {
-            if change_below_tolerance(*v, prev_value) {
+    for v in rfa.values.iter().copied().skip(1) {
+        if v != prev_value {
+            if change_below_tolerance(v, prev_value) {
                 // This may be precision error. See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/767#issuecomment-1650932203
                 continue;
             }
             n += 1;
-            prev_value = *v;
+            prev_value = v;
         }
     }
 
@@ -776,8 +776,7 @@ pub(super) fn rollup_resets(rfa: &RollupFuncArg) -> f64 {
     }
 
     let mut n = 0;
-    for v in values.iter() {
-        let val = *v;
+    for val in values.iter().copied() {
         if val < prev_value {
             if change_below_tolerance(val, prev_value) {
                 // This may be precision error. See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/767#issuecomment-1650932203

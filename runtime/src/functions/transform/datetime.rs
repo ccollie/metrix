@@ -67,7 +67,7 @@ fn transform_datetime_impl(
         get_series_arg(&tfa.args, 0, tfa.ec)?
     };
 
-    do_transform_values(&mut arg, tf, tfa.keep_metric_names)
+    do_transform_values(&mut arg, tf, tfa.fe)
 }
 
 pub(crate) fn timezone_offset(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {

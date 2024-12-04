@@ -269,39 +269,6 @@ impl TransformFunction {
         }
     }
 
-    /// These functions don't change physical meaning of input time series,
-    /// so they don't drop metric name
-    pub const fn keep_metric_name(&self) -> bool {
-        use TransformFunction::*;
-        matches!(
-            self,
-            Ceil | Clamp
-                | ClampMax
-                | ClampMin
-                | Floor
-                | Interpolate
-                | KeepLastValue
-                | KeepNextValue
-                | RangeAvg
-                | RangeFirst
-                | RangeLast
-                | RangeLinearRegression
-                | RangeMax
-                | RangeMedian
-                | RangeMin
-                | RangeNormalize
-                | RangeQuantile
-                | RangeStdDev
-                | RangeStdVar
-                | Round
-                | Ru
-                | RunningAvg
-                | RunningMax
-                | RunningMin
-                | SmoothExponential
-        )
-    }
-
     pub const fn may_sort_results(&self) -> bool {
         use TransformFunction::*;
         matches!(
