@@ -3251,10 +3251,10 @@ mod tests {
         r1.metric.set("le", "+Inf");
 
         let mut r2 = make_result(&[0_f64, 0.0, 0.0, 0.0, 0.0, 0.0]);
-        r2.metric.set("le", "1.000e+00");
+        r2.metric.set("le", "1.000e0");
 
         let mut r3 = make_result(&[40_f64, 40.0, 40.0, 40.0, 40.0, 40.0]);
-        r3.metric.set("le", "2.448e+00");
+        r3.metric.set("le", "2.448e0");
 
         test_query(q, vec![r1, r2, r3]);
     }
