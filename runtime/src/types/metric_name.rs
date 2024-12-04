@@ -449,7 +449,7 @@ impl MetricName {
         Signature::from_name_and_labels(group_name, iter)
     }
 
-    pub fn get_hash_signature(&self, modifier: &Option<VectorMatchModifier>, keep_metric_name: bool) -> Signature {
+    pub(crate) fn get_hash_signature(&self, modifier: &Option<VectorMatchModifier>, keep_metric_name: bool) -> Signature {
         match modifier {
             None => {
                 if keep_metric_name {
@@ -472,6 +472,20 @@ impl MetricName {
                     signature_without_labels(self, labels.as_ref(), keep_metric_name)
                 }
             },
+        }
+    }
+
+    pub(crate) fn get_aggregate_hash_signature(&self, modifier: &Option<AggregateModifier>) -> Signature {
+        match modifier {
+            None => Signature::from_name_and_labels(&self.measurement, self.labels.iter()),
+            Some(AggregateModifier::By(by_tags)) => {
+                let keep_name = by_tags.iter().find(|x| *x == METRIC_NAME_LABEL).is_some();
+                signature_with_labels(self, by_tags, keep_name)
+            },
+            Some(AggregateModifier::Without(labels)) => {
+                // reset metric group as Prometheus does on `aggr(...) without (...)` call.
+                signature_without_labels(self, labels, false)
+            }
         }
     }
 }

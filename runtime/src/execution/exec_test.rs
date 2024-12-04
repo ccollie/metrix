@@ -3073,7 +3073,6 @@ mod tests {
 
     #[test]
     fn sum_multi_vector_by_known_tag_limit_1() {
-        // "sum(multi-vector) by (known-tag) limit 1"
         let q = r#"sum(label_set(10, "foo", "bar") or label_set(time()/100, "baz", "sss")) by (foo) limit 1"#;
         let mut r = make_result(&[10_f64, 10.0, 10.0, 10.0, 10.0, 10.0]);
         r.metric.set("foo", "bar");

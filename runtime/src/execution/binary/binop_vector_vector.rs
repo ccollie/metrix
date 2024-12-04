@@ -535,15 +535,17 @@ fn sort_series_by_metric_name(tss: &mut [Timeseries]) {
 ///
 /// https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators
 fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
+
+    // this https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
+    // may become relevant if we go cluster-mode, but for now, don't sort series
+
     if bfa.left.is_empty() {
         // Short-circuit.
-        sort_series_by_metric_name(&mut bfa.right);
         return Ok(std::mem::take(&mut bfa.right));
     }
 
     if bfa.right.is_empty() {
-        // Short-circuit.
-        sort_series_by_metric_name(&mut bfa.left);
+        // Short-circuit
         return Ok(std::mem::take(&mut bfa.left));
     }
 
@@ -569,7 +571,7 @@ fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     left.append(&mut rvs);
     // Sort series by metric name as Prometheus does.
     // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
-    sort_series_by_metric_name(&mut left);
+    // sort_series_by_metric_name(&mut left);
 
     Ok(left)
 }

@@ -79,7 +79,7 @@ pub(crate) fn handle_label_set(
                 ts.metric_name.set(dst_label, value)
             }
         }
-        println!("ts.metric_name={:?}", ts.metric_name);
+        // println!("ts.metric_name={:?}", ts.metric_name);
     }
 }
 

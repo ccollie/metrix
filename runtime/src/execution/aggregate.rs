@@ -64,7 +64,7 @@ pub(super) fn eval_aggr_func(
         args,
         ec,
         modifier: &ae.modifier,
-        limit: get_timeseries_limit(ae)?,
+        limit: ae.limit // get_timeseries_limit(ae)?,
     };
 
     match exec_aggregate_fn(ae.function, &mut afa) {
