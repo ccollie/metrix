@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use crate::hash::FastHasher;
@@ -105,5 +106,11 @@ impl From<&str> for Signature {
             hasher.write_u64(EMPTY_NAME_VALUE);
         }
         Signature(hasher.finish())
+    }
+}
+
+impl Display for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self.0)
     }
 }
