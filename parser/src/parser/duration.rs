@@ -2,13 +2,13 @@ use std::str;
 
 use crate::parser::{ParseError, ParseResult};
 
-// todo: have ms or nanoseconds as base
-const SECONDS_PER_MS: f64 = 1e-3;
-const SECONDS_PER_MINUTE: f64 = 60.0;
-const SECONDS_PER_HOUR: f64 = 60.0 * SECONDS_PER_MINUTE;
-const SECONDS_PER_DAY: f64 = 24.0 * SECONDS_PER_HOUR;
-const SECONDS_PER_WEEK: f64 = 7.0 * SECONDS_PER_DAY;
-const SECONDS_PER_YEAR: f64 = 365.0 * SECONDS_PER_DAY;
+const MILLIS_PER_SECOND: f64 = 1e3;
+const MILLIS_PER_MINUTE: f64 = 60.0 * MILLIS_PER_SECOND;
+const MILLIS_PER_HOUR: f64 = 60.0 * MILLIS_PER_MINUTE;
+const MILLIS_PER_DAY: f64 = 24.0 * MILLIS_PER_HOUR;
+const MILLIS_PER_WEEK: f64 = 7.0 * MILLIS_PER_DAY;
+const MILLIS_PER_YEAR: f64 = 365.0 * MILLIS_PER_DAY;
+
 
 /// positive_duration_value returns positive duration in milliseconds for the given s
 /// and the given step.
@@ -93,19 +93,19 @@ fn parse_single_duration(s: &str, step: &i64) -> Result<f64, ParseError> {
     let mp: f64;
     let unit = &s[num_part.len()..];
     match unit {
-        "ms" => mp = SECONDS_PER_MS,
-        "s" => mp = 1.0_f64,
-        "m" => mp = SECONDS_PER_MINUTE,
-        "h" => mp = SECONDS_PER_HOUR,
-        "d" => mp = SECONDS_PER_DAY,
-        "w" => mp = SECONDS_PER_WEEK,
-        "y" => mp = SECONDS_PER_YEAR,
-        "i" => mp = (*step as f64) / 1e3,
+        "ms" => mp = 1.0,
+        "s" => mp = MILLIS_PER_SECOND,
+        "m" => mp = MILLIS_PER_MINUTE,
+        "h" => mp = MILLIS_PER_HOUR,
+        "d" => mp = MILLIS_PER_DAY,
+        "w" => mp = MILLIS_PER_WEEK,
+        "y" => mp = MILLIS_PER_YEAR,
+        "i" => mp = (*step as f64),
         _ => {
             return Err(ParseError::General(format!("invalid duration suffix in {s}")))
         }
     }
-    Ok(mp * f * 1e3)
+    Ok(mp * f)
 }
 
 /// scan_duration scans duration, which must start with positive num.
@@ -222,6 +222,7 @@ mod tests {
         f("-123ms", 42, -123);
         f("123s", 42, 123 * 1000);
         f("-123s", 42, -123 * 1000);
+        f("4236579305ms", 42, 4236579305);
         f("123m", 42, 123 * MINUTE);
         f("1h", 42, HOUR);
         f("2d", 42, 2 * DAY);
