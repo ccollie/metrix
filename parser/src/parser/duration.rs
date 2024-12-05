@@ -45,7 +45,7 @@ pub fn parse_duration_value(s: &str, step: i64) -> ParseResult<i64> {
                 return Err(ParseError::InvalidDuration(s.to_string()));
             }
             let ds = &cursor[0..n as usize];
-            let mut d_local = parse_single_duration(ds, &step)?;
+            let mut d_local = parse_single_duration(ds, step)?;
             if is_minus && (d_local > 0.0) {
                 d_local = -d_local
             }
@@ -80,7 +80,7 @@ pub fn parse_duration_value(s: &str, step: i64) -> ParseResult<i64> {
     }
 }
 
-fn parse_single_duration(s: &str, step: &i64) -> Result<f64, ParseError> {
+fn parse_single_duration(s: &str, step: i64) -> Result<f64, ParseError> {
     let mut num_part = &s[0..s.len() - 1];
     if num_part.ends_with('m') {
         // Duration in ms
@@ -100,7 +100,7 @@ fn parse_single_duration(s: &str, step: &i64) -> Result<f64, ParseError> {
         "d" => mp = MILLIS_PER_DAY,
         "w" => mp = MILLIS_PER_WEEK,
         "y" => mp = MILLIS_PER_YEAR,
-        "i" => mp = (*step as f64),
+        "i" => mp = step as f64,
         _ => {
             return Err(ParseError::General(format!("invalid duration suffix in {s}")))
         }
