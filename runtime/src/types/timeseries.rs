@@ -1,15 +1,13 @@
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::time::Duration;
+use super::{MetricName, Timestamp};
+use crate::runtime_error::{RuntimeError, RuntimeResult};
 use ahash::AHashMap;
-use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use metricsql_common::hash::Signature;
 use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::ast::VectorMatchModifier;
-use crate::prelude::METRIC_NAME_LABEL;
-use crate::runtime_error::{RuntimeError, RuntimeResult};
-use super::{MetricName, Timestamp};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use std::fmt::Debug;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub type TimeseriesHashMap = AHashMap<Signature, Vec<Timeseries>>;
 pub type TimeseriesHashMapRef<'a> = AHashMap<Signature, &'a [Timeseries]>;

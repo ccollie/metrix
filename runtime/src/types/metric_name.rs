@@ -479,7 +479,7 @@ impl MetricName {
         match modifier {
             None => Signature::from_name_and_labels(&self.measurement, self.labels.iter()),
             Some(AggregateModifier::By(by_tags)) => {
-                let keep_name = by_tags.iter().find(|x| *x == METRIC_NAME_LABEL).is_some();
+                let keep_name = by_tags.iter().any(|x| x == METRIC_NAME_LABEL);
                 signature_with_labels(self, by_tags, keep_name)
             },
             Some(AggregateModifier::Without(labels)) => {

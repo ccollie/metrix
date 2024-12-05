@@ -72,7 +72,7 @@ fn sort_by_label_impl(tfa: &mut TransformFuncArg, is_desc: bool) -> RuntimeResul
         labels.push(label);
     }
 
-    fn sort(a: &Timeseries, b: &Timeseries, labels: &Vec<String>, is_desc: bool) -> Ordering {
+    fn sort(a: &Timeseries, b: &Timeseries, labels: &[String], is_desc: bool) -> Ordering {
         for label in labels.iter() {
             let a = a.metric_name.label_value(label);
             let b = b.metric_name.label_value(label);
@@ -113,7 +113,7 @@ fn label_alpha_numeric_sort_impl(
         labels.push(label);
     }
 
-    fn sort(a: &Timeseries, b: &Timeseries, labels: &Vec<String>, is_desc: bool) -> Ordering {
+    fn sort(a: &Timeseries, b: &Timeseries, labels: &[String], is_desc: bool) -> Ordering {
         let comparator = if is_desc {
             |a: &String, b: &String| compare_str_alphanumeric(b, a)
         } else {
@@ -173,7 +173,7 @@ fn reverse_ordering(order: Ordering) -> Ordering {
 }
 
 #[inline]
-pub fn iter_cmp_f64<'a, L, R>(mut a: L, mut b: R) -> Ordering
+pub fn iter_cmp_f64<L, R>(mut a: L, mut b: R) -> Ordering
 where
     L: Iterator<Item = f64>,
     R: Iterator<Item = f64>,
@@ -192,7 +192,7 @@ where
 }
 
 #[inline]
-pub fn iter_cmp_f64_desc<'a, L, R>(a: L, b: R) -> Ordering
+pub fn iter_cmp_f64_desc<L, R>(a: L, b: R) -> Ordering
 where
     L: Iterator<Item = f64>,
     R: Iterator<Item = f64>,

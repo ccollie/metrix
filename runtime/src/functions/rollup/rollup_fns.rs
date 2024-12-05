@@ -283,8 +283,8 @@ pub(super) fn remove_counter_resets(values: &mut [f64]) {
     let mut correction: f64 = 0.0;
     let mut prev_value = values[0];
 
-    for i in 0..values.len() {
-        let mut val = values[i];
+    for (i, v) in values.iter_mut().enumerate() {
+        let mut val = *v;
         let d = val - prev_value;
         if d < 0.0 {
             if (-d * 8.0) < prev_value {
@@ -302,7 +302,7 @@ pub(super) fn remove_counter_resets(values: &mut [f64]) {
         if i > 0 && val < prev_value {
             val = prev_value;
         }
-        values[i] = val;
+        *v = val;
     }
 }
 

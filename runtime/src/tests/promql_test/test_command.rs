@@ -112,7 +112,7 @@ impl Display for EvalCmd {
 }
 
 #[derive(Debug, Clone)]
-struct Entry {
+pub(crate) struct Entry {
     pos: usize,
     vals: Vec<SequenceValue>,
 }

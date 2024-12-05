@@ -55,7 +55,7 @@ impl<'a> RollupEvaluator<'a> {
         expr: &'a Expr,
         re: Cow<'a, RollupExpr>,
     ) -> Self {
-        let mut keep_metric_names = get_keep_metric_names(expr) || function.keep_metric_name();
+        let keep_metric_names = get_keep_metric_names(expr) || function.keep_metric_name();
         Self {
             expr,
             re,

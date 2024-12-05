@@ -64,7 +64,7 @@ impl Signature {
         Signature(hasher.finish())
     }
 
-    pub fn from_iter<'a, T: Hash + 'a>(iter: impl Iterator<Item = &'a T>) -> Self {
+    pub fn create_from_iter<'a, T: Hash + 'a>(iter: impl Iterator<Item = &'a T>) -> Self {
         let mut hasher = FastHasher::default();
         for item in iter {
             item.hash(&mut hasher);

@@ -4,7 +4,7 @@ use std::hash::Hasher;
 use std::path::Prefix;
 use ahash::AHashMap;
 use tracing::{field, trace_span, Span};
-use metricsql_common::hash::{FastHasher, Signature};
+use metricsql_common::hash::{Signature};
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};
 use metricsql_parser::binaryop::{
     get_scalar_binop_handler, get_scalar_comparison_handler, BinopFunc,
@@ -14,7 +14,7 @@ use crate::execution::Context;
 use crate::execution::utils::{remove_empty_series, series_len};
 use crate::prelude::QueryValue;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use crate::types::{group_series_by_match_modifier, Timeseries, InstantVector, TimeseriesHashMap, METRIC_NAME_LABEL, MetricName};
+use crate::types::{group_series_by_match_modifier, Timeseries, InstantVector, TimeseriesHashMap, METRIC_NAME_LABEL};
 
 pub struct BinaryOpFuncArg<'a> {
     op: Operator,
@@ -397,7 +397,7 @@ fn group_join(
 
             match map.entry(key) {
                 Entry::Vacant(entry) => {
-                    let mut copy = Timeseries {
+                    let copy = Timeseries {
                         metric_name: mn,
                         values: ts_left.values.clone(),
                         timestamps: ts_left.timestamps.clone(),

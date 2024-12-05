@@ -114,6 +114,7 @@ pub struct RollupFunctionHandlerMeta {
     functions: TagFunctionVec,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn get_rollup_configs(
     func: RollupFunction,
     rf: &RollupHandler,
@@ -145,6 +146,7 @@ pub(crate) fn get_rollup_configs(
     Ok((rcs, pre_funcs))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn get_rollup_configs_from_meta(
     meta: RollupFunctionHandlerMeta,
     start: Timestamp,

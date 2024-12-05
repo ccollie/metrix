@@ -77,7 +77,7 @@ pub(crate) fn handle_union(
     Ok(rvs)
 }
 
-fn are_all_args_scalar(args: &Vec<QueryValue>) -> bool {
+fn are_all_args_scalar(args: &[QueryValue]) -> bool {
     args.iter().all(|arg| {
         match arg {
             QueryValue::Scalar(_) => true,
@@ -86,14 +86,14 @@ fn are_all_args_scalar(args: &Vec<QueryValue>) -> bool {
                     return false;
                 }
                 let mn = &v[0].metric_name;
-                return mn.is_empty()
+                mn.is_empty()
             },
             _ => false,
         }
     })
 }
 
-fn is_scalar_ts(tss: &Vec<Timeseries>) -> bool {
+fn is_scalar_ts(tss: &[Timeseries]) -> bool {
     if tss.len() != 1 {
         return false;
     }

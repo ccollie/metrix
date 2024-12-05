@@ -190,7 +190,7 @@ impl FastCache {
             BUCKETS_COUNT
         };
 
-        let max_bucket_bytes = (max_bytes + max_buckets - 1) / max_buckets;
+        let max_bucket_bytes = max_bytes.div_ceil(max_buckets);
         let mut bucket_count = max_bytes / max_bucket_bytes;
         bucket_count = bucket_count.clamp(bucket_count, BUCKETS_COUNT);
 
@@ -627,7 +627,7 @@ impl Bucket {
                 max_bytes, MAX_BUCKET_SIZE
             );
         }
-        let max_chunks = (max_bytes + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        let max_chunks = max_bytes.div_ceil(CHUNK_SIZE);
         let data = BucketInner::new(max_chunks);
         let inner = RwLock::new(data);
         Self { inner }

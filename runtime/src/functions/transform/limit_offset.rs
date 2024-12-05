@@ -1,8 +1,7 @@
-use tracing::debug;
 use crate::execution::remove_empty_series;
 use crate::functions::arg_parse::{get_int_arg, get_series_arg};
 use crate::functions::transform::TransformFuncArg;
-use crate::{RuntimeError, RuntimeResult, types::Timeseries};
+use crate::{types::Timeseries, RuntimeError, RuntimeResult};
 
 pub(crate) fn limit_offset(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     let limit = match tfa.args[0].get_int() {

@@ -54,9 +54,9 @@ pub(crate) fn transform_pi(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Time
 
 pub(crate) fn sgn(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     let tf = |values: &mut [f64]| {
-        let mut zero = 0.0f64;
+        let zero = 0.0f64;
         for v in values {
-            *v = match v.total_cmp(&&mut zero) {
+            *v = match v.total_cmp(&zero) {
                 std::cmp::Ordering::Less => -1.0f64,
                 std::cmp::Ordering::Equal => 0.0f64,
                 std::cmp::Ordering::Greater => 1.0f64,

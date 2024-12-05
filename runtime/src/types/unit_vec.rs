@@ -311,7 +311,7 @@ macro_rules! unitvec {
     );
     ($elem:expr) => (
         {
-            let mut new = crate::types::unit_vec::UnitVec::new();
+            let mut new = $crate::types::unit_vec::UnitVec::new();
             let v = $elem;
             // SAFETY: first element always fits.
             unsafe { new.push_unchecked(v) };

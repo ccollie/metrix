@@ -7,7 +7,6 @@ use metricsql_common::prelude::humanize_duration;
 use std::time::Duration;
 
 /// These values prevent from overflow when storing ms-precision time in i64.
-const MIN_TIME_MSECS: u64 = 0;
 pub const MAX_DURATION_MSECS: u64 = 100 * 365 * 24 * 3600 * 1000;
 
 pub const MAX_DURATION: Duration = Duration::from_millis(MAX_DURATION_MSECS);

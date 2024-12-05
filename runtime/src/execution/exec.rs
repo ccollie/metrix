@@ -3,8 +3,6 @@ use tracing::info;
 use std::fmt::Display;
 use std::sync::Arc;
 use ahash::AHashSet;
-use rayon::join;
-use rayon::prelude::IntoParallelRefIterator;
 use tracing::{field, trace, trace_span, Span};
 use metricsql_common::hash::Signature;
 use metricsql_common::prelude::current_time_millis;
@@ -13,7 +11,6 @@ use metricsql_parser::functions::{BuiltinFunction, RollupFunction, TransformFunc
 use crate::execution::{Context, EvalConfig};
 use crate::functions::rollup::{get_rollup_function_factory, rollup_default, RollupHandler};
 use crate::functions::transform::{exec_transform_fn, TransformFuncArg};
-use crate::rayon::iter::ParallelIterator;
 use crate::prelude::{eval_number, QueryValue, Timeseries};
 use crate::{QueryResult, RuntimeError, RuntimeResult};
 use crate::common::math::round_to_decimal_digits;
@@ -500,13 +497,13 @@ fn eval_parallel_internal(scope: &mut chili::Scope, ctx: &Context, ec: &EvalConf
     match args {
         [] => Ok(vec![]),
         [first] => {
-            let value = eval_expr(ctx, ec, &first)?;
+            let value = eval_expr(ctx, ec, first)?;
             Ok(vec![value])
         }
         [first, second] => {
             let (left, right) = scope.join(
-                |_| eval_expr(ctx, ec, &first),
-                |_| eval_expr(ctx, ec, &second),
+                |_| eval_expr(ctx, ec, first),
+                |_| eval_expr(ctx, ec, second),
             );
             Ok(vec![left?, right?])
         }

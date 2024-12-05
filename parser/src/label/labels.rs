@@ -203,6 +203,6 @@ impl From<Labels> for Signature{
 
 impl From<&Labels> for Signature {
     fn from(labels: &Labels) -> Self {
-        Signature::from_iter(labels.0.iter())
+        Signature::create_from_iter(labels.0.iter())
     }
 }
