@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::common::join_vector;
-use crate::parser::{compile_regexp, escape_ident, is_empty_regex, quote, ParseError};
+use crate::parser::{compile_regexp, escape_ident, is_empty_regex, quote, ParseError, ParseResult};
 
 pub const NAME_LABEL: &str = "__name__";
 pub type LabelName = String;
@@ -267,6 +267,18 @@ impl LabelFilter {
             }
         }
     }
+
+    pub fn inverse(&self) -> ParseResult<Self> {
+        use LabelFilterOp::*;
+        let op = match self.op {
+            Equal => NotEqual,
+            NotEqual => Equal,
+            RegexEqual => RegexNotEqual,
+            RegexNotEqual => RegexEqual,
+        };
+        Self::new(op, &self.label, &self.value)
+    }
+
 
     pub fn as_string(&self) -> String {
         format!(
