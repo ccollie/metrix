@@ -165,7 +165,7 @@ impl ExprVisitor for InvalidExprVisitor {
         if let Expr::Function(f) = expr {
             if let BuiltinFunction::Rollup(rollup) = f.function {
                 let idx = get_rollup_arg_idx(&rollup, f.args.len());
-                if idx < 0 {
+                if idx < 0 || idx as usize >= f.args.len() {
                     return Ok(true);
                 }
                 let arg = &f.args[idx as usize];
