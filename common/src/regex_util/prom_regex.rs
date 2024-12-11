@@ -1,4 +1,4 @@
-use super::StringMatchHandler;
+use super::{compile_regexp, StringMatchHandler};
 use crate::prelude::compile_regexp_anchored;
 use regex::Error as RegexError;
 

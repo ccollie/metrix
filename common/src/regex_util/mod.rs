@@ -5,6 +5,10 @@ mod hir_utils;
 #[cfg(test)]
 mod prom_regex_test;
 mod regexp_cache;
+mod simplify;
+mod fast_matcher;
+mod fast_matcher_tests;
+mod test;
 
 pub use regex_utils::*;
 pub use prom_regex::*;

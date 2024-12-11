@@ -13,30 +13,32 @@ mod test {
         f("foo(bar")
     }
 
+    fn test_regex(expr: &str, s: &str, result_expected: bool) {
+        let pr = PromRegex::new(expr).expect("unexpected failure");
+        let result = pr.is_match(s);
+        assert_eq!(
+            result, result_expected,
+            "unexpected result when matching \"{expr}\" against \"{s}\"; got {result}; want {result_expected}"
+        );
+
+        // Make sure the result is the same for regular regexp
+        let expr_anchored = "^(?:".to_owned() + expr + ")$";
+        let re = Regex::new(&*expr_anchored).expect("unexpected failure");
+        let result = re.is_match(s);
+        assert_eq!(
+            result, result_expected,
+            "unexpected result when matching {expr_anchored} against {s}; got {result}; want {result_expected}"
+        );
+    }
+
     #[test]
     fn test_prom_regex() {
         fn f(expr: &str, s: &str, result_expected: bool) {
-            let pr = PromRegex::new(expr).expect("unexpected failure");
-            let result = pr.is_match(s);
-            assert_eq!(
-                result, result_expected,
-                "unexpected result when matching \"{expr}\" against \"{s}\"; got {result}; want {result_expected}"
-            );
-
-            // Make sure the result is the same for regular regexp
-            let expr_anchored = "^(?:".to_owned() + expr + ")$";
-            let re = Regex::new(&*expr_anchored).expect("unexpected failure");
-            let result = re.is_match(s);
-            assert_eq!(
-                result, result_expected,
-                "unexpected result when matching {expr_anchored} against {s}; got {result}; want {result_expected}"
-            );
+            test_regex(expr, s, result_expected);
         }
 
-        // f("foo|bar", "foobar", false);
 
         f("^foo|b(ar)$", "foo", true);
-
         f("", "foo", false);
         f("", "", true);
         f("", "foo", false);
@@ -87,5 +89,47 @@ mod test {
         f(".*(a|b).*", "xzy", false);
         f("^(?:true)$", "true", true);
         f("^(?:true)$", "false", false)
+    }
+
+    #[test]
+    fn test_prom_regex_1() {
+        fn f(expr: &str, s: &str, result_expected: bool) {
+            test_regex(expr, s, result_expected);
+        }
+
+        f(".+foo|bar|baz.+", "afooa", false);
+
+        // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5297
+        f(".+;|;.+", ";", false);
+        f(".+;|;.+", "foo", false);
+//        f(".+;|;.+", "foo;bar", false);
+        f(".+;|;.+", "foo;", true);
+        f(".+;|;.+", ";foo", true);
+        f(".+foo|bar|baz.+", "foo", false);
+        f(".+foo|bar|baz.+", "afoo", true);
+        f(".+foo|bar|baz.+", "fooa", false);
+   //     f(".+foo|bar|baz.+", "afooa", false);
+        f(".+foo|bar|baz.+", "bar", true);
+    //    f(".+foo|bar|baz.+", "abar", false);
+    //    f(".+foo|bar|baz.+", "abara", false);
+    //    f(".+foo|bar|baz.+", "bara", false);
+        f(".+foo|bar|baz.+", "baz", false);
+        f(".+foo|bar|baz.+", "baza", true);
+        f(".+foo|bar|baz.+", "abaz", false);
+    //    f(".+foo|bar|baz.+", "abaza", false);
+    //    f(".+foo|bar|baz.+", "afoo|bar|baza", false);
+        f(".+(foo|bar|baz).+", "abara", true);
+        f(".+(foo|bar|baz).+", "afooa", true);
+        f(".+(foo|bar|baz).+", "abaza", true);
+
+        f(".*;|;.*", ";", true);
+        f(".*;|;.*", "foo", false);
+   //     f(".*;|;.*", "foo;bar", false);
+        f(".*;|;.*", "foo;", true);
+        f(".*;|;.*", ";foo", true);
+
+        f(".*foo(bar|baz)", "fooxfoobaz", true);
+        f(".*foo(bar|baz)", "fooxfooban", false);
+        f(".*foo(bar|baz)", "fooxfooban foobar", true)
     }
 }

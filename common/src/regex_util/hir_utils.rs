@@ -1,16 +1,19 @@
+use std::sync::LazyLock;
 use regex::Error as RegexError;
 use regex_syntax::hir::Class::{Bytes, Unicode};
-use regex_syntax::{
-    hir::{
-        Class,
-        Hir,
-        HirKind
-    },
-    parse as parse_regex
-};
+use regex_syntax::{hir::{
+    Class,
+    Hir,
+    HirKind,
+    Look
+}, parse as parse_regex};
+use regex_syntax::hir::Dot;
+
+const AnyCharExceptLF: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyCharExceptLF));
+const AnyChar: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyChar));
 
 // Beyond this, it's better to use regexp.
-const MAX_OR_VALUES: usize = 16;
+const MAX_OR_VALUES: usize = 32;
 
 pub fn hir_to_string(sre: &Hir) -> String {
     match sre.kind() {
@@ -51,13 +54,6 @@ pub fn hir_to_string(sre: &Hir) -> String {
             sre.to_string()
         }
     }
-}
-
-pub fn literal_to_string(sre: &Hir) -> String {
-    if let HirKind::Literal(lit) = sre.kind() {
-        return String::from_utf8(lit.0.to_vec()).unwrap_or_default();
-    }
-    "".to_string()
 }
 
 pub fn is_empty_regexp(sre: &Hir) -> bool {
@@ -133,6 +129,51 @@ pub fn is_empty_class(class: &Class) -> bool {
     false
 }
 
+pub fn is_dot_question(sre: &Hir) -> bool {
+    sre.eq(&AnyChar)
+}
+
+pub fn matches_any_char(hir: &Hir) -> bool {
+    if let HirKind::Class(class) = hir.kind() {
+        return is_empty_class(class)
+    }
+    false
+}
+
+pub fn is_anchor(sre: &Hir, look: Look) -> bool {
+    matches!(sre.kind(), HirKind::Look(l) if look == *l)
+}
+
+pub fn is_start_anchor(sre: &Hir) -> bool {
+    is_anchor(sre, Look::Start)
+}
+
+pub fn is_end_anchor(sre: &Hir) -> bool {
+    is_anchor(sre, Look::End)
+}
+
+pub fn literal_to_string(sre: &Hir) -> String {
+    if let HirKind::Literal(lit) = sre.kind() {
+        return String::from_utf8(lit.0.to_vec()).unwrap_or_default();
+    }
+    "".to_string()
+}
+
+/// Checks if the given Hir enum variant represents an empty match.
+///
+/// # Arguments
+///
+/// * `hir` - A reference to an Hir instance.
+///
+/// # Returns
+///
+/// Returns true if the Hir variant is an empty match, false otherwise.
+pub fn is_empty_match(hir: &Hir) -> bool {
+    // Use the is_empty method on the kind of Hir
+    matches!(hir.kind(), HirKind::Empty)
+}
+
+
 pub fn get_literal(sre: &Hir) -> Option<String> {
     match sre.kind() {
         HirKind::Literal(lit) => {
@@ -145,6 +186,13 @@ pub fn get_literal(sre: &Hir) -> Option<String> {
 
 pub fn build_hir(pattern: &str) -> Result<Hir, RegexError> {
     parse_regex(pattern).map_err(|err| RegexError::Syntax(err.to_string()))
+}
+
+pub fn get_or_values(pattern: &str) -> Result<Vec<String>, RegexError> {
+    let mut values = Vec::new();
+    let sre = build_hir(pattern)?;
+    get_or_values_ext(&sre, &mut values);
+    Ok(values)
 }
 
 pub fn get_or_values_ext(sre: &Hir, dest: &mut Vec<String>) -> bool {
@@ -242,6 +290,8 @@ pub fn get_or_values_ext(sre: &Hir, dest: &mut Vec<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_is_dot_star() {
         fn check(s: &str, expected: bool) {
@@ -272,8 +322,8 @@ mod tests {
     #[test]
     fn test_is_dot_plus() {
         fn check(s: &str, expected: bool) {
-            let sre = super::build_hir(s).unwrap();
-            let got = super::is_dot_plus(&sre);
+            let sre = build_hir(s).unwrap();
+            let got = is_dot_plus(&sre);
             assert_eq!(
                 got, expected,
                 "unexpected is_dot_plus for s={:?}; got {:?}; want {:?}",
@@ -294,4 +344,46 @@ mod tests {
         check(".*foo.*bar.*baz.*qux.*quux.*quuz.*corge.*grault", false);
         check(".*foo.*bar.*baz.*qux.*quux.*quuz.*corge.*grault.*", false);
     }
+
+    #[test]
+    fn test_get_or_values_regex() {
+        let test_cases = vec![
+            ("", vec![""]),
+            ("foo", vec!["foo"]),
+            ("^foo$", vec![]),
+            ("|foo", vec!["", "foo"]),
+            ("|foo|", vec!["", "", "foo"]),
+            ("foo.+", vec![]),
+            ("foo.*", vec![]),
+            (".*", vec![]),
+            ("foo|.*", vec![]),
+            ("(fo((o)))|(bar)", vec!["bar", "foo"]),
+            ("foobar", vec!["foobar"]),
+            ("z|x|c", vec!["c", "x", "z"]),
+            ("foo|bar", vec!["bar", "foo"]),
+            ("(foo|bar)", vec!["bar", "foo"]),
+            ("(foo|bar)baz", vec!["barbaz", "foobaz"]),
+            ("[a-z][a-z]", vec![]),
+            ("[a-d]", vec!["a", "b", "c", "d"]),
+            ("x[a-d]we", vec!["xawe", "xbwe", "xcwe", "xdwe"]),
+            ("foo(bar|baz)", vec!["foobar", "foobaz"]),
+            ("foo(ba[rz]|(xx|o))", vec!["foobar", "foobaz", "fooo", "fooxx"]),
+            ("foo(?:bar|baz)x(qwe|rt)", vec!["foobarxqwe", "foobarxrt", "foobazxqwe", "foobazxrt"]),
+            ("foo(bar||baz)", vec!["foo", "foobar", "foobaz"]),
+            ("(a|b|c)(d|e|f|0|1|2)(g|h|k|x|y|z)", vec![]),
+            ("(?i)foo", vec![]),
+            ("(?i)(foo|bar)", vec![]),
+            ("^foo|bar$", vec![]),
+            ("^(foo|bar)$", vec![]),
+            ("^a(foo|b(?:a|r))$", vec![]),
+            ("^a(foo$|b(?:a$|r))$", vec![]),
+            ("^a(^foo|bar$)z$", vec![]),
+        ];
+
+        for (s, expected) in test_cases {
+            let result = get_or_values(s).unwrap();
+            assert_eq!(result, expected, "unexpected values for s={}", s);
+        }
+    }
+
 }

@@ -67,7 +67,7 @@ pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, us
     }
 
     if expr.is_empty() {
-        return Ok((StringMatchHandler::Empty, LITERAL_MATCH_COST))
+        return Ok((StringMatchHandler::MatchAll, FULL_MATCH_COST))
     }
 
     if expr == ".*" {
@@ -91,9 +91,9 @@ pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, us
     let mut anchor_start = false;
     let mut anchor_end = false;
 
-    let debug_str = format!("{:?}, {}", sre, hir_to_string(&sre));
-
-    println!("expr {}", debug_str);
+    // let debug_str = format!("{:?}, {}", sre, hir_to_string(&sre));
+    //
+    // println!("expr {}", debug_str);
 
     if let HirKind::Concat(subs) = sre.kind() {
         let mut concat = &subs[..];
@@ -433,7 +433,13 @@ fn get_quantifier(sre: &Hir) -> Option<Quantifier> {
             if let HirKind::Class(clazz) = repetition.sub.kind() {
                 if is_empty_class(clazz) {
                     return match repetition.min {
-                        0 => Some(Quantifier::ZeroOrMore),
+                        0 => {
+                            if repetition.max == Some(1) {
+                                Some(Quantifier::ZeroOrOne)
+                            } else {
+                                Some(Quantifier::ZeroOrMore)
+                            }
+                        },
                         1 => Some(Quantifier::OneOrMore),
                         _ => None,
                     };
@@ -502,8 +508,8 @@ mod test {
             test_optimized_regex(expr, s, result_expected);
         }
 
+        f("", "foo", true);
         f("", "", true);
-        //   f("", "foo", true);
         f("foo", "", false);
         f(".*", "", true);
         f(".*", "foo", true);

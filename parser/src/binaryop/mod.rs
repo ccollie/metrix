@@ -158,6 +158,7 @@ pub const fn to_comparison_value(b: bool, x: f64) -> f64 {
 
 macro_rules! make_comparison_func {
     ($name: ident, $func: expr) => {
+        #[inline]
         pub const fn $name(left: f64, right: f64) -> f64 {
             to_comparison_value($func(left, right), left)
         }
@@ -166,6 +167,7 @@ macro_rules! make_comparison_func {
 
 macro_rules! make_comparison_func_bool {
     ($name: ident, $func: expr) => {
+        #[inline]
         pub const fn $name(left: f64, right: f64) -> f64 {
             if left.is_nan() {
                 return f64::NAN;

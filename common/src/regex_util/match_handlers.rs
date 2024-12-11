@@ -1,12 +1,14 @@
+use std::any::Any;
 use crate::bytes_util::FastRegexMatcher;
 use regex::Regex;
 use std::fmt::{Display, Formatter};
+use crate::regex_util::fast_matcher::StringMatcher;
 
 pub type MatchFn = fn(pattern: &str, candidate: &str) -> bool;
 
 #[derive(Copy, Clone)]
 pub enum Quantifier {
-//  ZeroOrOne, // ?
+    ZeroOrOne, // ?
     ZeroOrMore, // *
     OneOrMore, // +
 }
@@ -19,12 +21,65 @@ pub struct StringMatchOptions {
     pub suffix_quantifier: Option<Quantifier>
 }
 
+impl StringMatchOptions {
+    pub fn is_default(&self) -> bool {
+        self.anchor_end == false &&
+        self.anchor_start == false &&
+        self.prefix_quantifier.is_none() &&
+        self.suffix_quantifier.is_none()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ZeroOrOneCharsMatcher {
+    match_nl: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct LiteralPrefixStringMatcher {
+    prefix: String,
+    right: Option<Box<StringMatchHandler>>,
+}
+
+impl LiteralPrefixStringMatcher {
+    fn matches(&self, s: &str) -> bool {
+        if !s.starts_with(&self.prefix) {
+            return false;
+        }
+        if let Some(right) = &self.right {
+            right.matches(&s[self.prefix.len()..])
+        } else {
+            true
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LiteralSuffixStringMatcher {
+    left: Option<Box<StringMatchHandler>>,
+    suffix: String,
+}
+
+impl LiteralSuffixStringMatcher {
+    fn matches(&self, s: &str) -> bool {
+        if !s.ends_with(&self.suffix) {
+            return false;
+        }
+        if let Some(left) = &self.left {
+            left.matches(&s[..s.len() - self.suffix.len()])
+        } else {
+            true
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum StringMatchHandler {
     MatchAll,
     MatchNone,
     Empty,
     NotEmpty,
+    EqualMultiString(Vec<String>),
     Literal(String),
     Contains(String),
     StartsWith(String),
@@ -34,6 +89,8 @@ pub enum StringMatchHandler {
     MatchFn(MatchFnHandler),
     Alternates(Vec<String>, MatchFn),
     And(Box<StringMatchHandler>, Box<StringMatchHandler>),
+    Or(Vec<Box<StringMatchHandler>>),
+    ZeroOrOneChars(ZeroOrOneCharsMatcher),
 }
 
 impl Default for StringMatchHandler {
@@ -57,9 +114,15 @@ impl StringMatchHandler {
     }
 
     pub fn alternates(alts: Vec<String>, options: &StringMatchOptions) -> Self {
+        let mut alts = alts;
+        if options.is_default() {
+            if alts.len() == 1 {
+                return Self::Literal(alts.pop().unwrap());
+            }
+            return Self::Alternates(alts, contains_fn);
+        }
         let match_fn = get_literal_match_fn(options);
         if alts.len() == 1 {
-            let mut alts = alts;
             let pattern = alts.pop().unwrap();
             return Self::MatchFn(MatchFnHandler{
                 pattern,
@@ -67,6 +130,15 @@ impl StringMatchHandler {
             });
         }
         Self::Alternates(alts, match_fn)
+    }
+
+    pub fn literal_alternates(alts: Vec<String>) -> Self {
+        if alts.len() == 1 {
+            let mut alts = alts;
+            Self::Literal(alts.pop().unwrap())
+        } else {
+            Self::Alternates(alts, equals_fn)
+        }
     }
 
     pub fn literal(value: String, options: &StringMatchOptions) -> Self {
@@ -97,6 +169,19 @@ impl StringMatchHandler {
             StringMatchHandler::Literal(val) => s == val,
             StringMatchHandler::Empty => s.is_empty(),
             StringMatchHandler::NotEmpty => !s.is_empty(),
+            StringMatchHandler::Or(matchers) => {
+                matchers.iter().any(|m| m.matches(s))
+            }
+            StringMatchHandler::ZeroOrOneChars(m) => {
+                if m.match_nl {
+                    s.is_empty() || s.chars().count() == 1
+                } else {
+                    s.is_empty() || (s.chars().count() == 1 && s.chars().next().unwrap() != '\n')
+                }
+            }
+            StringMatchHandler::EqualMultiString(values) => {
+                values.iter().any(|v| s == *v)
+            }
         }
     }
 }
@@ -147,6 +232,70 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
         haystack.len() > needle.len() && haystack.starts_with(needle)
     }
 
+    // ^.?foo
+    fn start_with_zero_or_one_chars_fn(needle: &str, haystack: &str) -> bool {
+        if haystack.is_empty() || haystack.chars().count() == 1 {
+            if needle.is_empty() {
+                return true;
+            }
+            if let Some(pos) = haystack.find(needle) {
+                return pos == 0 || pos == 1;
+            }
+        }
+        false
+    }
+
+    fn ends_with_zero_or_one_chars_fn(needle: &str, haystack: &str) -> bool {
+        if haystack.len() < needle.len() {
+            return false;
+        }
+        if let Some(pos) = haystack.rfind(needle) {
+            let end = pos + needle.len();
+            end == haystack.len() || end == haystack.len() - 1
+        } else {
+            false
+        }
+    }
+
+    // .?foo.?$
+    fn zero_or_one_chars_anchors_fn(needle: &str, haystack: &str) -> bool {
+        if haystack.len() < needle.len() {
+            return false;
+        }
+        if let Some(pos) = haystack.find(needle) {
+            let end = pos + needle.len();
+            end == haystack.len() || end == haystack.len() - 1
+        } else {
+            false
+        }
+    }
+
+    // xxx.?foo
+    fn zero_or_one_contains_left_fn(needle: &str, haystack: &str) -> bool {
+        let mut haystack = haystack;
+        while let Some(pos) = haystack.find(needle) {
+            if pos >= 0 {
+                return true;
+            }
+            haystack = &haystack[pos + 1..];
+        }
+        if let Some(pos) = haystack.find(needle) {
+            pos == 0 || pos == 1
+        } else {
+            false
+        }
+    }
+
+    // foo.?
+    fn zero_or_one_contains_right_fn(needle: &str, haystack: &str) -> bool {
+        if let Some(pos) = haystack.rfind(needle) {
+            let end = pos + needle.len();
+            end <= haystack.len() - 1
+        } else {
+            false
+        }
+    }
+
     // something like .*foo.+$
     fn contains_dot_plus_fn(needle: &str, haystack: &str) -> bool {
         if let Some(pos) = haystack.find(needle) {
@@ -167,9 +316,9 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
 
     if *anchor_start && *anchor_end {
         match (prefix_quantifier, suffix_quantifier) {
-            (Some(Quantifier::ZeroOrMore), Some(Quantifier::ZeroOrMore)) => {
-                // ^.*foo.*$
-                contains_fn
+            (Some(Quantifier::ZeroOrOne), Some(Quantifier::ZeroOrOne)) => {
+                // ^.?foo.?$
+                zero_or_one_chars_anchors_fn
             }
             (Some(Quantifier::ZeroOrMore), Some(Quantifier::OneOrMore)) => {
                 // ^.*foo.+$
@@ -182,6 +331,10 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
             (Some(Quantifier::OneOrMore), Some(Quantifier::OneOrMore)) => {
                 // ^.+foo.+$
                 dot_plus_dot_plus_fn
+            }
+            (Some(Quantifier::ZeroOrOne), None) => {
+                // ^.?foo$
+                start_with_zero_or_one_chars_fn
             }
             (Some(Quantifier::ZeroOrMore), None) => {
                 // ^.*foo$
@@ -199,6 +352,10 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
                 // ^foo.+$
                 start_with_dot_plus_fn
             }
+            (None, Some(Quantifier::ZeroOrOne)) => {
+                // ^foo.?$
+                ends_with_zero_or_one_chars_fn
+            }
             _ => {
                 // ^foobar$
                 equals_fn
@@ -206,6 +363,10 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
         }
     } else if *anchor_start {
         match (prefix_quantifier, suffix_quantifier) {
+            (Some(Quantifier::ZeroOrOne), Some(Quantifier::ZeroOrOne)) => {
+                // ^.?foo.?
+                start_with_zero_or_one_chars_fn
+            }
             (Some(Quantifier::ZeroOrMore), Some(Quantifier::ZeroOrMore)) => {
                 // ^.*foo.*
                 contains_fn
@@ -222,9 +383,15 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
                 // ^.+foo.+
                 dot_plus_dot_plus_fn
             }
+            (Some(Quantifier::ZeroOrOne), None) => {
+                start_with_zero_or_one_chars_fn
+            }
             (Some(Quantifier::ZeroOrMore), None) => {
                 // ^.*foo
                 contains_fn
+            }
+            (None, Some(Quantifier::ZeroOrOne)) => {
+                ends_with_zero_or_one_chars_fn
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // ^foo.*
@@ -245,6 +412,10 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
         }
     } else if *anchor_end {
         match (prefix_quantifier, suffix_quantifier) {
+            (Some(Quantifier::ZeroOrOne), Some(Quantifier::ZeroOrOne)) => {
+                // .?foo.?$
+                contains_fn
+            }
             (Some(Quantifier::ZeroOrMore), Some(Quantifier::ZeroOrMore)) => {
                 // .*foo.*$
                 contains_fn
@@ -261,9 +432,17 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
                 // .+foo.+$
                 dot_plus_dot_plus_fn
             }
+            (Some(Quantifier::ZeroOrOne), None) => {
+                // .?foo$
+                ends_with_fn
+            }
             (Some(Quantifier::ZeroOrMore), None) => {
                 // .*foo$
                 ends_with_fn
+            }
+            (None, Some(Quantifier::ZeroOrOne)) => {
+                // foo.?$
+                ends_with_zero_or_one_chars_fn
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // foo.*$
@@ -285,6 +464,10 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
     } else {
         // no anchors
         match(prefix_quantifier, suffix_quantifier) {
+            (Some(Quantifier::ZeroOrOne), Some(Quantifier::ZeroOrOne)) => {
+                // .?foo.?
+                contains_fn
+            }
             (Some(Quantifier::ZeroOrMore), Some(Quantifier::ZeroOrMore)) => {
                 // .*foo.*
                 contains_fn
