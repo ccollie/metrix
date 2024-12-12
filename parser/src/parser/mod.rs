@@ -80,10 +80,13 @@ pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
 /// It returns milliseconds for the parsed timestamp.
 pub fn parse_numeric_timestamp(s: &str) -> Result<i64, Box<dyn std::error::Error>> {
     const CHARS_TO_CHECK: &[char] = &['.', 'e', 'E'];
+    const NANOSECONDS_THRESHOLD: i64 = u32::MAX.saturating_mul(1_000_000) as i64;
+    const MICROSECONDS_THRESHOLD: i64 = u32::MAX.saturating_mul(1_000) as i64;
+
     if s.contains(CHARS_TO_CHECK) {
         // The timestamp is a floating-point number
         let ts: f64 = s.parse()?;
-        if ts >= (1 << 32) as f64 {
+        if ts >= u32::MAX as f64 {
             // The timestamp is in milliseconds
             return Ok(ts as i64);
         }
@@ -92,15 +95,15 @@ pub fn parse_numeric_timestamp(s: &str) -> Result<i64, Box<dyn std::error::Error
     // The timestamp is an integer number
     let ts: i64 = s.parse()?;
     match ts {
-        ts if ts >= (1 << 32) * 1_000_000 => {
+        ts if ts >= NANOSECONDS_THRESHOLD => {
             // The timestamp is in nanoseconds
             Ok(ts / 1_000_000)
         }
-        ts if ts >= (1 << 32) * 1_000 => {
+        ts if ts >= MICROSECONDS_THRESHOLD => {
             // The timestamp is in microseconds
             Ok(ts / 1_000)
         }
-        ts if ts >= (1 << 32) => {
+        ts if ts >= u32::MAX as i64 => {
             // The timestamp is in milliseconds
             Ok(ts)
         }
