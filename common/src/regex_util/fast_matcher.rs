@@ -21,7 +21,6 @@ use crate::regex_util::hir_utils::{
     literal_to_string,
     matches_any_char,
 };
-use get_size::GetSize;
 use regex::Regex;
 use regex_syntax::hir::{Class, Hir, HirKind, Look, Repetition};
 
@@ -501,12 +500,71 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
         }
         HirKind::Alternation(hirs ) => {
             let mut or_matchers = Vec::new();
+            let mut is_literal = true;
+            let mut num_values: usize = 0;
+            let mut num_prefixes: usize = 0;
+            let mut min_prefix_length: usize = 0;
+
             for sub_hir in hirs {
                 if let Some(matcher) = string_matcher_from_regex_internal(sub_hir) {
+                    match &matcher {
+                        StringMatchHandler::Literal(_) => {
+                            num_values += 1;
+                        },
+                        StringMatchHandler::EqualsMulti(values) => {
+                            num_values += values.len();
+                        },
+                        StringMatchHandler::StartsWith(prefix) => {
+                            num_prefixes += 1;
+                            is_literal = false;
+                            min_prefix_length = min_prefix_length.min(prefix.len());
+                        },
+                        StringMatchHandler::Prefix(prefix_matcher) => {
+                            num_prefixes += 1;
+                            is_literal = false;
+                            min_prefix_length = min_prefix_length.min(prefix_matcher.prefix.len());
+                        },
+                        _ => is_literal = false,
+                    }
                     or_matchers.push(Box::new(matcher));
                 } else {
                     return None;
                 }
+            }
+            // optimize the case where all the alternatives are literals
+            if is_literal {
+                if num_values >= MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD {
+                    let mut res = EqualMultiStringMapMatcher::new(min_prefix_length);
+                    for matcher in or_matchers.into_iter() {
+                        match *matcher {
+                            StringMatchHandler::Literal(lit) => {
+                                res.values.insert(lit);
+                            },
+                            StringMatchHandler::EqualsMulti(values) => {
+                                for value in values {
+                                    res.values.insert(value);
+                                }
+                            },
+                            _ => unreachable!(),
+                        }
+                    }
+                    return Some(StringMatchHandler::EqualMultiMap(res));
+                }
+                let mut values = Vec::with_capacity(num_values);
+                for matcher in or_matchers.into_iter() {
+                    match *matcher {
+                        StringMatchHandler::Literal(lit) => {
+                            values.push(lit);
+                        },
+                        StringMatchHandler::EqualsMulti(_values) => {
+                            for value in _values {
+                                values.push(value);
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                return Some(StringMatchHandler::EqualsMulti(values))
             }
             Some(StringMatchHandler::Or(or_matchers))
         }
@@ -620,6 +678,9 @@ fn get_equal_or_prefix_string_matchers_counts(
                 get_equal_or_prefix_string_matchers_counts(&matcher, num_values, num_prefixes, min_prefix_length);
             }
         },
+        StringMatchHandler::EqualsMulti(values) => {
+            *num_values += values.len();
+        },
         StringMatchHandler::Literal(_) => {
             *num_values += 1;
         },
@@ -643,6 +704,11 @@ fn find_equal_or_prefix_string_matchers(
         StringMatchHandler::Or(or_matchers) => {
             for matcher in or_matchers {
                 find_equal_or_prefix_string_matchers(&matcher, res)
+            }
+        },
+        StringMatchHandler::EqualsMulti(values) => {
+            for value in values {
+                res.values.insert(value.clone());
             }
         },
         StringMatchHandler::Literal(s) => {
