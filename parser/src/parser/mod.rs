@@ -61,7 +61,7 @@ pub fn expand_with_exprs(q: &str) -> Result<String, ParseError> {
 /// Parses a string into a unix timestamp (milliseconds). Accepts a positive integer or an RFC3339 timestamp.
 /// Included here only to avoid having to include chrono in the public API
 pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
-    let value = if let Ok(dt) = s.parse::<i64>() {
+    let value = if let Ok(dt) = parse_numeric_timestamp(s) {
         dt
     } else {
         let value = DateTime::parse_from_rfc3339(s)
@@ -72,4 +72,45 @@ pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
         return Err(ParseError::InvalidTimestamp(s.to_string()));
     }
     Ok(value)
+}
+
+
+/// parse_numeric_timestamp parses timestamp at s in seconds, milliseconds, microseconds or nanoseconds.
+///
+/// It returns milliseconds for the parsed timestamp.
+pub fn parse_numeric_timestamp(s: &str) -> Result<i64, Box<dyn std::error::Error>> {
+    const CHARS_TO_CHECK: &[char] = &['.', 'e', 'E'];
+    if s.contains(CHARS_TO_CHECK) {
+        // The timestamp is a floating-point number
+        let ts: f64 = s.parse()?;
+        if ts >= (1 << 32) as f64 {
+            // The timestamp is in milliseconds
+            return Ok(ts as i64);
+        }
+        return Ok(ts.round() as i64);
+    }
+    // The timestamp is an integer number
+    let ts: i64 = s.parse()?;
+    match ts {
+        ts if ts >= (1 << 32) * 1_000_000 => {
+            // The timestamp is in nanoseconds
+            Ok(ts / 1_000_000)
+        }
+        ts if ts >= (1 << 32) * 1_000 => {
+            // The timestamp is in microseconds
+            Ok(ts / 1_000)
+        }
+        ts if ts >= (1 << 32) => {
+            // The timestamp is in milliseconds
+            Ok(ts)
+        }
+        _ => Ok(ts * 1_000),
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+
 }
