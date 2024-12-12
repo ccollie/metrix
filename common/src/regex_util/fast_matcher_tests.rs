@@ -8,41 +8,6 @@ trait StringMatcher {
     fn matches(&self, s: &str) -> bool;
 }
 
-// Implement the trait for different matchers
-struct TrueMatcher;
-impl StringMatcher for TrueMatcher {
-    fn matches(&self, _s: &str) -> bool {
-        true
-    }
-}
-
-struct EqualStringMatcher {
-    s: String,
-    case_sensitive: bool,
-}
-impl StringMatcher for EqualStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if self.case_sensitive {
-            s == self.s
-        } else {
-            s.to_lowercase() == self.s.to_lowercase()
-        }
-    }
-}
-
-struct ContainsStringMatcher {
-    substrings: Vec<String>,
-    left: Option<Box<dyn StringMatcher>>,
-    right: Option<Box<dyn StringMatcher>>,
-}
-impl StringMatcher for ContainsStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        self.substrings.iter().all(|sub| s.contains(sub))
-            && self.left.as_ref().map_or(true, |m| m.matches(s))
-            && self.right.as_ref().map_or(true, |m| m.matches(s))
-    }
-}
-
 
 // Helper function to generate random values
 fn generate_random_values() -> Vec<String> {
@@ -69,7 +34,7 @@ mod tests {
             let matcher = FastRegexMatcher::new(r).unwrap();
             for v in &test_values {
                 let re = Regex::new(&format!("^(?s:{})$", r)).unwrap();
-                assert_eq!(re.is_match(v), matcher.match_string(v));
+                assert_eq!(re.is_match(v), matcher.matches(v));
             }
         }
     }
@@ -113,7 +78,7 @@ mod tests {
     fn test_fast_regex_matcher_match_string_inner(r: &str, v: &str, test_name: &str) {
         let m = FastRegexMatcher::new(r).unwrap();
         let re = Regex::new(&format!("^(?s:{})$", r)).unwrap();
-        assert_eq!(re.is_match(v), m.match_string(v), "{}", test_name);
+        assert_eq!(re.is_match(v), m.matches(v), "{}", test_name);
     }
 
 
