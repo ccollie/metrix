@@ -1,8 +1,10 @@
-use std::any::Any;
 use crate::bytes_util::FastRegexMatcher;
+use get_size::GetSize;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
-use crate::regex_util::fast_matcher::StringMatcher;
+
+const MAX_SET_MATCHES: usize = 256;
 
 pub type MatchFn = fn(pattern: &str, candidate: &str) -> bool;
 
@@ -30,14 +32,45 @@ impl StringMatchOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
+pub struct NonEmptyStringMatcher {
+    match_nl: bool,
+}
+
+impl NonEmptyStringMatcher {
+    pub fn new(match_nl: bool) -> Self {
+        Self {
+            match_nl
+        }
+    }
+
+    fn matches(&self, s: &str) -> bool {
+        if self.match_nl {
+            !s.is_empty()
+        } else {
+            !s.is_empty() && !s.contains('\n')
+        }
+    }
+}
+
+#[derive(Clone, Debug, GetSize)]
 pub struct ZeroOrOneCharsMatcher {
     match_nl: bool,
 }
 
-#[derive(Clone, Debug)]
+impl ZeroOrOneCharsMatcher {
+    fn matches(&self, s: &str) -> bool {
+        if self.match_nl {
+            s.is_empty() || s.chars().count() == 1
+        } else {
+            s.is_empty() || (s.chars().count() == 1 && s.chars().next().unwrap() != '\n')
+        }
+    }
+}
+
+#[derive(Clone, Debug, GetSize)]
 pub struct LiteralPrefixStringMatcher {
-    prefix: String,
+    pub(crate) prefix: String,
     right: Option<Box<StringMatchHandler>>,
 }
 
@@ -54,7 +87,7 @@ impl LiteralPrefixStringMatcher {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
 pub struct LiteralSuffixStringMatcher {
     left: Option<Box<StringMatchHandler>>,
     suffix: String,
@@ -73,21 +106,166 @@ impl LiteralSuffixStringMatcher {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
+pub struct ContainsMultiStringMatcher {
+    substrings: Vec<String>,
+    left: Option<Box<StringMatchHandler>>,
+    right: Option<Box<StringMatchHandler>>,
+}
+
+impl ContainsMultiStringMatcher {
+    pub(crate) fn new(substrings: Vec<String>, left: Option<StringMatchHandler>, right: Option<StringMatchHandler>) -> Self {
+        let left = left.map(|l| Box::new(l));
+        let right = right.map(|r| Box::new(r));
+        Self {
+            substrings,
+            left,
+            right,
+        }
+    }
+
+    fn matches(&self, s: &str) -> bool {
+        for substr in &self.substrings {
+            match (self.left.as_ref(), self.right.as_ref()) {
+                (Some(left), Some(right)) => {
+                    let mut search_start_pos = 0;
+                    while let Some(pos) = s[search_start_pos..].find(substr) {
+                        let pos = pos + search_start_pos;
+                        if left.matches(&s[..pos]) && right.matches(&s[pos + substr.len()..]) {
+                            return true;
+                        }
+                        search_start_pos = pos + 1;
+                    }
+                }
+                (Some(left), None) => {
+                    if s.ends_with(substr) && left.matches(&s[..s.len() - substr.len()]) {
+                        return true;
+                    }
+                }
+                (None, Some(right)) => {
+                    if s.starts_with(substr) && right.matches(&s[substr.len()..]) {
+                        return true;
+                    }
+                }
+                (None, None) => {
+                    if s.contains(substr) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+#[derive(Clone, Debug, GetSize)]
+pub struct EqualMultiStringMapMatcher {
+    pub(crate) values: HashSet<String>,
+    pub(crate) prefixes: HashMap<String, Vec<Box<StringMatchHandler>>>,
+    pub(crate) min_prefix_len: usize,
+}
+
+impl EqualMultiStringMapMatcher {
+    pub(crate) fn new(min_prefix_len: usize) -> Self {
+        Self {
+            values: Default::default(),
+            prefixes: Default::default(),
+            min_prefix_len,
+        }
+    }
+
+    pub(crate) fn add(&mut self, s: String) {
+        self.values.insert(s);
+    }
+
+    pub(crate) fn add_prefix(&mut self, prefix: String, matcher: Box<StringMatchHandler>) {
+        if self.min_prefix_len == 0 {
+            panic!("add_prefix called when no prefix length defined");
+        }
+        if prefix.len() < self.min_prefix_len {
+            panic!("add_prefix called with a too short prefix");
+        }
+
+        let s = get_prefix(&prefix, self.min_prefix_len);
+
+        self.prefixes
+            .entry(s)
+            .or_insert_with(Vec::new)
+            .push(matcher);
+    }
+
+    pub fn set_matches(&self) -> Vec<String> {
+        if self.values.len() >= MAX_SET_MATCHES || !self.prefixes.is_empty() {
+            return Vec::new();
+        }
+
+        self.values.iter().cloned().collect::<Vec<String>>()
+    }
+
+    fn matches(&self, s: &str) -> bool {
+        if self.values.contains(s) {
+            return true;
+        }
+
+        if self.min_prefix_len > 0 && s.len() >= self.min_prefix_len {
+            let prefix = &s[..self.min_prefix_len];
+            if let Some(matchers) = self.prefixes.get(prefix) {
+                for matcher in matchers {
+                    if matcher.matches(s) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct AlternatesMatcher {
+    alts: Vec<String>,
+    match_fn: MatchFn,
+}
+
+impl GetSize for AlternatesMatcher {
+    fn get_size(&self) -> usize {
+        self.alts.get_size() + size_of::<MatchFn>()
+    }
+}
+impl AlternatesMatcher {
+    pub fn new(alts: Vec<String>, match_fn: MatchFn) -> Self {
+        Self {
+            alts,
+            match_fn,
+        }
+    }
+
+    pub fn matches(&self, s: &str) -> bool {
+        self.alts.iter().any(|alt| (self.match_fn)(alt, s))
+    }
+}
+
+#[derive(Clone, Debug, GetSize)]
 pub enum StringMatchHandler {
     MatchAll,
     MatchNone,
     Empty,
-    NotEmpty,
-    EqualMultiString(Vec<String>),
+    AnyWithoutNewline,
+    NotEmpty(NonEmptyStringMatcher),
+    EqualsMulti(Vec<String>),
+    EqualMultiMap(EqualMultiStringMapMatcher),
+    ContainsMulti(ContainsMultiStringMatcher),
     Literal(String),
     Contains(String),
     StartsWith(String),
+    Prefix(LiteralPrefixStringMatcher),
+    Suffix(LiteralSuffixStringMatcher),
     EndsWith(String),
     FastRegex(FastRegexMatcher),
     OrderedAlternates(Vec<String>),
     MatchFn(MatchFnHandler),
-    Alternates(Vec<String>, MatchFn),
+    Alternates(AlternatesMatcher),
     And(Box<StringMatchHandler>, Box<StringMatchHandler>),
     Or(Vec<Box<StringMatchHandler>>),
     ZeroOrOneChars(ZeroOrOneCharsMatcher),
@@ -119,7 +297,7 @@ impl StringMatchHandler {
             if alts.len() == 1 {
                 return Self::Literal(alts.pop().unwrap());
             }
-            return Self::Alternates(alts, contains_fn);
+            return Self::Alternates(AlternatesMatcher { alts, match_fn: contains_fn });
         }
         let match_fn = get_literal_match_fn(options);
         if alts.len() == 1 {
@@ -129,7 +307,7 @@ impl StringMatchHandler {
                 match_fn
             });
         }
-        Self::Alternates(alts, match_fn)
+        Self::Alternates(AlternatesMatcher{ alts, match_fn })
     }
 
     pub fn literal_alternates(alts: Vec<String>) -> Self {
@@ -137,8 +315,16 @@ impl StringMatchHandler {
             let mut alts = alts;
             Self::Literal(alts.pop().unwrap())
         } else {
-            Self::Alternates(alts, equals_fn)
+            Self::Alternates(AlternatesMatcher { alts, match_fn: equals_fn })
         }
+    }
+
+    pub fn zero_or_one_chars(match_nl: bool) -> Self {
+        StringMatchHandler::ZeroOrOneChars(ZeroOrOneCharsMatcher { match_nl })
+    }
+
+    pub fn not_empty(match_nl: bool) -> Self {
+        StringMatchHandler::NotEmpty(NonEmptyStringMatcher::new(match_nl))
     }
 
     pub fn literal(value: String, options: &StringMatchOptions) -> Self {
@@ -147,6 +333,20 @@ impl StringMatchHandler {
 
     pub fn equals(value: String) -> Self {
         StringMatchHandler::Literal(value)
+    }
+
+    pub fn prefix(value: String, right: Option<StringMatchHandler>) -> Self {
+        StringMatchHandler::Prefix(LiteralPrefixStringMatcher {
+            prefix: value,
+            right: right.map(Box::new),
+        })
+    }
+
+    pub fn suffix(left: Option<StringMatchHandler>, value: String) -> Self {
+        StringMatchHandler::Suffix(LiteralSuffixStringMatcher {
+            left: left.map(Box::new),
+            suffix: value,
+        })
     }
 
     pub fn and(self, b: StringMatchHandler) -> Self {
@@ -158,7 +358,7 @@ impl StringMatchHandler {
         match self {
             StringMatchHandler::MatchAll => true,
             StringMatchHandler::MatchNone => false,
-            StringMatchHandler::Alternates(alts, match_fn) => matches_alternates(alts, s, match_fn),
+            StringMatchHandler::Alternates(alts) => alts.matches(s),
             StringMatchHandler::MatchFn(m) => m.matches(s),
             StringMatchHandler::FastRegex(r) => r.matches(s),
             StringMatchHandler::OrderedAlternates(m) => match_ordered_alternates(m, s),
@@ -168,20 +368,19 @@ impl StringMatchHandler {
             StringMatchHandler::EndsWith(suffix) => s.ends_with(suffix),
             StringMatchHandler::Literal(val) => s == val,
             StringMatchHandler::Empty => s.is_empty(),
-            StringMatchHandler::NotEmpty => !s.is_empty(),
+            StringMatchHandler::NotEmpty(opts) => opts.matches(s),
             StringMatchHandler::Or(matchers) => {
                 matchers.iter().any(|m| m.matches(s))
             }
-            StringMatchHandler::ZeroOrOneChars(m) => {
-                if m.match_nl {
-                    s.is_empty() || s.chars().count() == 1
-                } else {
-                    s.is_empty() || (s.chars().count() == 1 && s.chars().next().unwrap() != '\n')
-                }
-            }
-            StringMatchHandler::EqualMultiString(values) => {
+            StringMatchHandler::ZeroOrOneChars(m) => m.matches(s),
+            StringMatchHandler::EqualsMulti(values) => {
                 values.iter().any(|v| s == *v)
             }
+            StringMatchHandler::ContainsMulti(m) => m.matches(s),
+            StringMatchHandler::Prefix(m) => m.matches(s),
+            StringMatchHandler::Suffix(m) => m.matches(s),
+            StringMatchHandler::AnyWithoutNewline => !s.contains('\n'),
+            StringMatchHandler::EqualMultiMap(m) => m.matches(s),
         }
     }
 }
@@ -191,6 +390,12 @@ impl StringMatchHandler {
 pub struct MatchFnHandler {
     pattern: String,
     pub(super) match_fn: MatchFn,
+}
+
+impl GetSize for MatchFnHandler {
+    fn get_size(&self) -> usize {
+        self.pattern.get_size() + size_of::<MatchFn>()
+    }
 }
 
 impl MatchFnHandler {
@@ -671,6 +876,9 @@ fn match_ordered_alternates(or_values: &[String], s: &str) -> bool {
     true
 }
 
+fn get_prefix(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
 
 #[cfg(test)]
 mod tests {

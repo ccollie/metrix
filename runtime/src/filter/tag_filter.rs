@@ -114,7 +114,7 @@ impl TagFilter {
                 is_negative: false,
                 is_regexp: true,
                 match_cost: FULL_MATCH_COST,
-                matcher: StringMatchHandler::NotEmpty,
+                matcher: StringMatchHandler::not_empty(true),
                 is_empty_match: true,
             })
         }

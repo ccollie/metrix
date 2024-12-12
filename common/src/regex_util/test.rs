@@ -1,10 +1,10 @@
-use crate::regex_util::fast_matcher::{find_set_matches, EmptyStringMatcher, AnyNonEmptyStringMatcher, FastRegexMatcher, EqualStringMatcher, OrStringMatcher};
+use crate::prelude::StringMatchHandler;
+use crate::regex_util::fast_matcher::{find_set_matches, FastRegexMatcher};
 use crate::regex_util::hir_utils::build_hir;
 
 // Refer to https://github.com/prometheus/prometheus/issues/2651.
 #[test]
 fn test_find_set_matches() {
-
     type Case = (&'static str, Vec<&'static str>, bool);
     let cases = vec![
         // Single value, coming from a `bar=~"foo"` selector.
@@ -71,9 +71,8 @@ fn test_find_set_matches() {
 
     for (pattern, exp_matches, exp_case_sensitive) in cases {
         let parsed = build_hir(&format!("^(?s:{})$", pattern)).unwrap();
-        let (matches, actual_case_sensitive) = find_set_matches(&parsed);
+        let (matches) = find_set_matches(&parsed);
         assert_eq!(exp_matches, matches);
-        assert_eq!(exp_case_sensitive, actual_case_sensitive);
 
         if exp_case_sensitive {
             // When the regexp is case sensitive, we want to ensure that the
@@ -104,95 +103,186 @@ struct TrueMatcher {}
 
 #[test]
 fn test_string_matcher_from_regexp() {
+    fn literal(s: &str) -> StringMatchHandler {
+        StringMatchHandler::Literal(s.to_owned())
+    }
+
+    fn boxed_literal(s: &str) -> Box<StringMatchHandler> {
+        boxed_literal(s)
+    }
+
+    fn true_matcher() -> StringMatchHandler {
+        StringMatchHandler::MatchAll
+    }
+
+    fn suffix(s: &str, left: Option<StringMatchHandler>) -> StringMatchHandler {
+        StringMatchHandler::suffix(s, left)
+    }
+
+    fn prefix(s: &str, right: Option<StringMatchHandler>) -> StringMatchHandler {
+        StringMatchHandler::prefix(s, right)
+    }
+
+    fn contains_multi(substrings: &[&str], left: Option<StringMatchHandler>, right: Option<StringMatchHandler>) -> StringMatchHandler {
+        let matches = substrings.iter().map(|s| s.to_string()).collect();
+        let matcher = ContainsMultiStringMatcher::new(matches, left, right);
+        StringMatchHandler::ContainsMulti(matcher)
+    }
+    fn not_empty(b: bool) -> StringMatchHandler {
+        StringMatchHandler::not_empty(b)
+    }
+
+    fn empty() -> StringMatchHandler {
+        StringMatchHandler::Empty
+    }
+
+    fn or_matcher(matchers: &[StringMatchHandler]) -> StringMatchHandler {
+        let handlers = matchers.iter().map(|m| Box::new(m.clone())).collect();
+        StringMatchHandler::Or(handlers)
+    }
+
+    fn zero_or_one_chars(b: bool) -> StringMatchHandler {
+        StringMatchHandler::zero_or_one_chars(b)
+    }
+
     let cases = vec![
-        (".*", Some(TrueMatcher {})),
-        (".*?", Some(TrueMatcher {})),
-        ("(?s:.*)", Some(TrueMatcher {})),
-        ("(.*)", Some(TrueMatcher {})),
-        ("^.*$", Some(TrueMatcher {})),
-        (".+", Some(AnyNonEmptyStringMatcher{match_nl: true} )),
-        ("(?s:.+)", Some( AnyNonEmptyStringMatcher{match_nl: true} )),
-        ("^.+$", Some(AnyNonEmptyStringMatcher{match_nl: true} )),
-        ("(.+)", Some(AnyNonEmptyStringMatcher{match_nl: true} )),
-        ("", Some(EmptyStringMatcher {})),
-        ("^$", Some(EmptyStringMatcher {})),
-        ("^foo$", Some(EqualStringMatcher{s: "foo", case_sensitive: true})),
-        ("^(?i:foo)$", Some(EqualStringMatcher{s: "FOO".to_string(), case_sensitive: false})),
-        ("^((?i:foo)|(bar))$", OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "FOO", case_sensitive: false}, EqualStringMatcher{s: "bar", case_sensitive: true}})),
-        ("(?i:((foo|bar)))",
+        (".*", Some(StringMatchHandler::MatchAll)),
+        (".*?", Some(StringMatchHandler::MatchAll)),
+        ("(?s:.*)", Some(StringMatchHandler::MatchAll)),
+        ("(.*)", Some(StringMatchHandler::MatchAll)),
+        ("^.*$", Some(StringMatchHandler::MatchAll)),
+        (".+", Some(not_empty(true))),
+        ("(?s:.+)", Some(not_empty(true))),
+        ("^.+$", Some(not_empty(true))),
+        ("(.+)", Some(not_empty(true))),
+        ("", Some(StringMatchHandler::Empty)),
+        ("^$", Some(StringMatchHandler::Empty)),
+        ("^foo$", Some(literal("foo")),
+         ("^(?i:foo)$", Some(literal("FOO"))), // todo: wrong - just to compile
+         ("^((?i:foo)|(bar))$", Some(
+             or_matcher(&[literal("FOO"), literal("bar")])
+         ),
+          ("(?i:((foo|bar)))",
+           Some(
+               or_matcher(&[literal("FOO"), literal("BAR")])
+           )
+          ),
+          ("(?i:((foo1|foo2|bar)))",
+           Some(
+               or_matcher(&[
+                    or_matcher(&[literal("FOO1"), literal("FOO2"), literal("BAR")])
+                ])
+           )),
+          ("^((?i:foo|oo)|(bar))$",
             Some(
-                OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "FOO", case_sensitive: false}, EqualStringMatcher{s: "BAR", case_sensitive: false}})
+                or_matcher(&[literal("FOO"), literal("OO"), literal("bar")])
             )
-        ),
-        ("(?i:((foo1|foo2|bar)))", OrStringMatcher([]StringMatcher{OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "FOO1", case_sensitive: false}, EqualStringMatcher{s: "FOO2", case_sensitive: false}}), EqualStringMatcher{s: "BAR", case_sensitive: false}})},
-        ("^((?i:foo|oo)|(bar))$", OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "FOO", case_sensitive: false}, EqualStringMatcher{s: "OO", case_sensitive: false}, EqualStringMatcher{s: "bar", case_sensitive: true}})},
-        ("(?i:(foo1|foo2|bar))", OrStringMatcher([]StringMatcher{OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "FOO1", case_sensitive: false}, EqualStringMatcher{s: "FOO2", case_sensitive: false}}), EqualStringMatcher{s: "BAR", case_sensitive: false}})},
-        (".*foo.*", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(TrueMatcher{}), right: Some(TrueMatcher{}))),
-        ("(.*)foo.*", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(TrueMatcher{}), right: Some(TrueMatcher{})}},
-        ("(.*)foo(.*)", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(TrueMatcher{}), right: Some(TrueMatcher{})}},
-        ("(.+)foo(.*)", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(AnyNonEmptyStringMatcher{match_nl: true}), right: Some(TrueMatcher{})}},
-        ("^.+foo.+", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(AnyNonEmptyStringMatcher{match_nl: true}), right: Some(AnyNonEmptyStringMatcher{match_nl: true})}},
-        ("^(.*)(foo)(.*)$", Some(ContainsStringMatcher{substrings: vec!["foo".to_string()], left: Some(TrueMatcher{}), right: Some(TrueMatcher{})}},
-        ("^(.*)(foo|foobar)(.*)$",
-                Some(ContainsStringMatcher{
-                        substrings: vec!["foo".to_string(), "foobar".to_string()],
-                        left: Some(TrueMatcher{}),
-                        right: Some(TrueMatcher{})
-                })
-        ),
-        ("^(.*)(bar|b|buzz)(.*)$",  ))),
-        ("^(.*)(foo|foobar)(.+)$", Some(ContainsStringMatcher{substrings: vec!["foo".to_string(), "foobar".to_string()], left: Some(TrueMatcher{}), right: Some(AnyNonEmptyStringMatcher{match_nl: true})}},
-        ("^(.*)(bar|b|buzz)(.+)$", Some(ContainsStringMatcher{substrings: vec!["bar".to_string(), "b".to_string(), "buzz".to_string()], left: Some(TrueMatcher{}), right: Some(AnyNonEmptyStringMatcher{match_nl: true})}},
-        ("10\\.0\\.(1|2)\\.+", None),
-        ("10\\.0\\.(1|2).+", Some(ContainsStringMatcher{substrings: vec!["10.0.1", "10.0.2"], left: None, right: Some(AnyNonEmptyStringMatcher{match_nl: true})}},
-        ("^.+foo", Some(
-            LiteralSuffixStringMatcher{ left: Some(AnyNonEmptyStringMatcher{match_nl: true}), 
-            suffix: "foo"}}),
-        ("foo-.*$", &literalPrefixSensitiveStringMatcher{prefix: "foo-", right: Some(TrueMatcher{})}},
-        ("(prometheus|api_prom)_api_v1_.+", Some(ContainsStringMatcher{substrings: vec!["prometheus_api_v1_", "api_prom_api_v1_"], left: None, right: Some(AnyNonEmptyStringMatcher{match_nl: true})}},
-        ("^((.*)(bar|b|buzz)(.+)|foo)$", OrStringMatcher([]StringMatcher{Some(ContainsStringMatcher{substrings: vec!["bar", "b", "buzz"], left: trueMatcher{}, right: Some(AnyNonEmptyStringMatcher{match_nl: true)), EqualStringMatcher{s: "foo", case_sensitive: true}})},
-        ("((fo(bar))|.+foo)", OrStringMatcher([]StringMatcher{OrStringMatcher([]StringMatcher{EqualStringMatcher{s: "fobar", case_sensitive: true}}), &literalSuffixStringMatcher{suffix: "foo", suffixcase_sensitive: true, left: Some(AnyNonEmptyStringMatcher{match_nl: true})}})},
-        ("(.+)/(gateway|cortex-gw|cortex-gw-internal)", Some(
-                ContainsStringMatcher{
-                    substrings: vec!["/gateway".to_string(), "/cortex-gw".to_string(), "/cortex-gw-internal".to_string()],
-                    left: Some(AnyNonEmptyStringMatcher{match_nl: true}),
-                    right: None
-                })
-        ),
-        // we don't support case insensitive matching for contains.
-        // This is because there's no strings.IndexOfFold function.
-        // We can revisit later if this is really popular by using strings.ToUpper.
-        ("^(.*)((?i)foo|foobar)(.*)$", None),
-        ("(api|rpc)_(v1|prom)_((?i)push|query)", None),
-        ("[a-z][a-z]", None),
-        ("[1^3]", None),
-        (".*foo.*bar.*", None),
-        {`\d*`, None),
-        (".", None),
-        ("/|/bar.*", &literalPrefixSensitiveStringMatcher{prefix: "/", right: orStringMatcher{EmptyStringMatcher{}, &literalPrefixSensitiveStringMatcher{prefix: "bar", right: Some(TrueMatcher{})}}}},
-        // This one is not supported because  `stringMatcherFromRegexp` is not reentrant for syntax.OpConcat.
-        // It would make the code too complex to handle it.
-        ("(.+)/(foo.*|bar$)", None),
-        // Case sensitive alternate with same literal prefix and .* suffix.
-        ("(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)", &literalPrefixSensitiveStringMatcher{prefix: "xyz-016a-ixb-", right: orStringMatcher{&literalPrefixSensitiveStringMatcher{prefix: "dp", right: Some(TrueMatcher {})), &literalPrefixSensitiveStringMatcher{prefix: "op", right: Some(TrueMatcher{})}}}},
-        // Case insensitive alternate with same literal prefix and .* suffix.
-        ("(?i:(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*))", &literalPrefixInsensitiveStringMatcher{prefix: "XYZ-016A-IXB-", right: orStringMatcher{&literalPrefixInsensitiveStringMatcher{prefix: "DP", right: Some(TrueMatcher {})), &literalPrefixInsensitiveStringMatcher{prefix: "OP", right: Some(TrueMatcher{})}}}},
-        ("(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)", &literalPrefixInsensitiveStringMatcher{prefix: "XYZ-016A-IXB-", right: orStringMatcher{&literalPrefixInsensitiveStringMatcher{prefix: "DP", right: Some(TrueMatcher {})), &literalPrefixInsensitiveStringMatcher{prefix: "OP", right: Some(TrueMatcher{})}}}},
-        // Concatenated variable length selectors are not supported.
-        ("foo.*.*", None),
-        ("foo.+.+", None),
-        (".*.*foo", None),
-        (".+.+foo", None),
-        ("aaa.?.?", None),
-        ("aaa.?.*", None),
-        // Regexps with ".?".
-        ("ext.?|xfs", orStringMatcher{&literalPrefixSensitiveStringMatcher{prefix: "ext", right: &zeroOrOneCharacterStringMatcher{match_nl: true}}, EqualStringMatcher{s: "xfs", case_sensitive: true}}},
-        ("(?s)(ext.?|xfs)", orStringMatcher{&literalPrefixSensitiveStringMatcher{prefix: "ext", right: &zeroOrOneCharacterStringMatcher{match_nl: true}}, EqualStringMatcher{s: "xfs", case_sensitive: true}}},
-        ("foo.?", &literalPrefixSensitiveStringMatcher{prefix: "foo", right: &zeroOrOneCharacterStringMatcher{match_nl: true}}},
-        ("f.?o", None)
+          ),
+          ("(?i:(foo1|foo2|bar))",
+           Some(
+               or_matcher(
+                   &[
+                       or_matcher(&[literal("FOO1"), literal("FOO2"), literal("BAR")])
+                   ]
+               )
+           )
+          ),
+          (".*foo.*", Some(contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher()))),
+           ("(.*)foo.*", Some(contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher())))),
+           ("(.*)foo(.*)", Some(contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher())))),
+           ("(.+)foo(.*)", Some(contains_multi(&["foo"], Some(not_empty(true)), Some(true_matcher())))),
+           ("^.+foo.+", Some(contains_multi(&["foo"], Some(not_empty(true)), Some(not_empty(true))))),
+           ("^(.*)(foo)(.*)$", Some(contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher())))),
+           ("^(.*)(foo|foobar)(.*)$",
+            Some(contains_multi(&["foo", "foobar"], Some(true_matcher()), Some(true_matcher())))),
+          ),
+          //("^(.*)(bar|b|buzz)(.*)$",  ))),
+          ("^(.*)(foo|foobar)(.+)$", Some(contains_multi(&["foo", "foobar"], Some(true_matcher()), Some(not_empty(true))))),
+          ("^(.*)(bar|b|buzz)(.+)$", Some(contains_multi(&["bar", "b", "buzz"], Some(true_matcher()), Some(not_empty(true))))),
+          ("10\\.0\\.(1|2)\\.+", None),
+          ("10\\.0\\.(1|2).+", Some(contains_multi(&["10.0.1", "10.0.2"], None, Some(not_empty(true))))),
+          ("^.+foo", Some(suffix("foo", Some(not_empty(true))))),
+          ("foo-.*$", Some(prefix("foo-", None))),
+          ("(prometheus|api_prom)_api_v1_.+", Some(contains_multi(&["prometheus_api_v1_", "api_prom_api_v1_"], None, Some(not_empty(true))))),
+          ("^((.*)(bar|b|buzz)(.+)|foo)$", Some(
+              or_matcher(&[
+                  contains_multi(&["bar", "b", "buzz"], Some(true_matcher()), Some(AnyNonEmptyStringMatcher { match_nl: true })),
+                  literal("foo")
+              ])
+          ),
+          ),
+          ("((fo(bar))|.+foo)", Some(
+              or_matchers(&[or_matchers(&[literal("fobar"), suffix("foo", Some(not_empty(true)))])])
+          )
+          ),
+          ("(.+)/(gateway|cortex-gw|cortex-gw-internal)", Some(
+              contains_multi(&["/gateway", "/cortex-gw", "/cortex-gw-internal"], Some(not_empty(true)), Some(true_matcher()))
+          ),
+           // we don't support case insensitive matching for contains.
+           // This is because there's no strings.IndexOfFold function.
+           // We can revisit later if this is really popular by using strings.ToUpper.
+           ("^(.*)((?i)foo|foobar)(.*)$", None),
+           ("(api|rpc)_(v1|prom)_((?i)push|query)", None),
+           ("[a-z][a-z]", None),
+           ("[1^3]", None),
+           (".*foo.*bar.*", None),
+           ("\\d*", None),
+           (".", None),
+           ("/|/bar.*", Some(
+               prefix("/",
+                      Some(or_matcher(&[empty(), prefix("bar", Some(true_matcher()))]))
+               )
+           )),
+           // This one is not supported because  `stringMatcherFromRegexp` is not reentrant for syntax.OpConcat.
+           // It would make the code too complex to handle it.
+           ("(.+)/(foo.*|bar$)", None),
+           // Case sensitive alternate with same literal prefix and .* suffix.
+           ("(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)", Some(
+               prefix("xyz-016a-ixb-",
+                      Some(or_matchers(prefix("dp", Some(true_matcher())), prefix("op", Some(true_matcher()))))
+               )
+           ),
+            // Case insensitive alternate with same literal prefix and .* suffix.
+            ("(?i:(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*))",
+             Some(
+                 prefix("XYZ-016A-IXB-",
+                        Some(
+                            or_matchers(&[prefix("DP", Some(true_matcher())), prefix("OP", Some(true_matcher()))])
+                        )
+                 )
+             ),
+            ),
+            ("(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)",
+             Some(
+                 prefix("XYZ-016A-IXB-",
+                        or_matchers(&[prefix("DP", Some(StringMatchHandler::MatchAll)), prefix("OP", right: Some(true_matcher()))])
+                 )
+             )
+            ),
+            // Concatenated variable length selectors are not supported.
+            ("foo.*.*", None),
+            ("foo.+.+", None),
+            (".*.*foo", None),
+            (".+.+foo", None),
+            ("aaa.?.?", None),
+            ("aaa.?.*", None),
+            // Regexps with ".?".
+            ("ext.?|xfs", Some(
+                or_matcher(&[
+                    prefix("ext", Some(zero_or_one_chars(true))),
+                    literal("xfs"),
+                ])
+            )
+            ),
+            ("(?s)(ext.?|xfs)", Some(
+                or_matcher(&[prefix("ext", Some(zero_or_one_chars(true))), literal("xfs")])
+            )),
+            ("foo.?", Some(prefix("foo", Some(zero_or_one_chars(true))))),
+            ("f.?o", None)
     ];
     for c in cases {
-        let parsed = syntax.Parse(c.pattern, syntax.Perl|syntax.DotNL)
+        let parsed = build_hir(c.0).unwrap();
         let matches = string_matcher_from_regexp(parsed);
+        assert_eq!(c.1, matches);
     }
 }

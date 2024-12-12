@@ -11,12 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::hash::{FastHashMap, FastHashSet};
-use crate::regex_util::hir_utils::{build_hir, is_end_anchor, is_literal, is_start_anchor, literal_to_string};
-use crate::regex_util::hir_utils::{is_dot_question, matches_any_char};
+use super::{ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
+use crate::regex_util::hir_utils::{
+    build_hir,
+    is_dot_question,
+    is_end_anchor,
+    is_literal,
+    is_start_anchor,
+    literal_to_string,
+    matches_any_char,
+};
+use get_size::GetSize;
 use regex::Regex;
 use regex_syntax::hir::{Class, Hir, HirKind, Look, Repetition};
-use std::any::Any;
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -25,22 +32,16 @@ const MAX_SET_MATCHES: usize = 256;
 /// to match values instead of iterating over a list.
 const MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD: usize = 16;
 
-pub trait MultiStringMatcherBuilder: StringMatcher {
-    fn add(&mut self, s: String);
-    fn add_prefix(&mut self, prefix: String, prefix_case_sensitive: bool, matcher: Box<dyn StringMatcher>);
-    fn set_matches(&self) -> Vec<String>;
-}
-
+// #[derive(GetSize)]
 pub struct FastRegexMatcher {
     _optimized: bool,
     re_string: String,
     re: Option<Regex>,
     set_matches: Vec<String>,
-    string_matcher: Option<Box<dyn StringMatcher>>,
+    string_matcher: Option<StringMatchHandler>,
     prefix: String,
     suffix: String,
     contains: Vec<String>,
-    match_string: Box<dyn Fn(&str) -> bool>,
 }
 
 impl FastRegexMatcher {
@@ -53,7 +54,6 @@ impl FastRegexMatcher {
             prefix: String::new(),
             suffix: String::new(),
             contains: Vec::new(),
-            match_string: Box::new(|_| false),
             _optimized: false,
         };
 
@@ -78,7 +78,6 @@ impl FastRegexMatcher {
             }
 
             matcher.string_matcher = string_matcher_from_regex(&mut parsed);
-            matcher.match_string = matcher.compile_match_string_function();
             matcher._optimized = matcher.is_optimized();
         }
 
@@ -95,7 +94,7 @@ impl FastRegexMatcher {
             return Box::new(|s| self.string_matcher.as_ref().unwrap().matches(&s));
         }
 
-        Box::new(|s| { self.match_string(&s) })
+        Box::new(|s| { self.matches(&s) })
     }
 
     pub fn is_optimized(&self) -> bool {
@@ -104,10 +103,6 @@ impl FastRegexMatcher {
             || !self.prefix.is_empty()
             || !self.suffix.is_empty()
             || !self.contains.is_empty()
-    }
-
-    pub fn match_string(&self, s: &str) -> bool {
-        (self.match_string)(s)
     }
 
     pub fn set_matches(&self) -> Vec<String> {
@@ -120,7 +115,7 @@ impl FastRegexMatcher {
 
     pub fn matches(&self, s: &str) -> bool {
         if !self._optimized && self.string_matcher.is_some() {
-            //return self.string_matcher.as_ref().unwrap().is_match(s);
+            return self.string_matcher.as_ref().unwrap().matches(s);
         }
         if !self.set_matches.is_empty() {
             for match_str in &self.set_matches {
@@ -149,36 +144,31 @@ impl FastRegexMatcher {
     }
 }
 
-fn optimize_alternating_literals(s: &str) -> Option<(Box<dyn StringMatcher>, Vec<String>)> {
+fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, Vec<String>)> {
     if s.is_empty() {
-        return Some((Box::new(EmptyStringMatcher {}), Vec::new()));
+        return Some((StringMatchHandler::Empty, Vec::new()));
     }
 
     let estimated_alternates = s.matches('|').count() + 1;
 
     if estimated_alternates == 1 {
-        if Regex::new(s).is_ok() {
-            return Some((
-                Box::new(EqualStringMatcher {
-                    s: s.to_string(),
-                }),
-                vec![s.to_string()],
-            ));
+        if regex::escape(s) == s {
+            return Some((StringMatchHandler::Literal(s.to_string()), vec![s.to_string()]));
         }
         return None;
     }
 
-    let mut multi_matcher = EqualMultiStringMatcher::new(estimated_alternates);
-
+    let mut sub_matches = Vec::with_capacity(estimated_alternates);
     for sub_match in s.split('|') {
-        if Regex::new(sub_match).is_err() {
+        if regex::escape(sub_match) != sub_match {
             return None;
         }
-        multi_matcher.add(sub_match.to_string());
+        sub_matches.push(sub_match.to_string());
     }
 
-    let multi = multi_matcher.set_matches().clone(); // todo: avoid clone below
-    Some((Box::new(multi_matcher), multi))
+
+    let multi = StringMatchHandler::EqualsMulti(sub_matches.clone()); // todo: avoid clone below
+    Some((multi, sub_matches))
 }
 
 pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<String>, Vec<Hir>) {
@@ -389,314 +379,20 @@ fn too_many_matches(matches: &[String], added: &[String]) -> bool {
     matches.len() + added.len() > MAX_SET_MATCHES
 }
 
-pub trait StringMatcher: Any {
+pub trait StringMatcher {
     fn matches(&self, s: &str) -> bool;
-    fn as_any(&self) -> &dyn Any;
-}
-
-pub struct EmptyStringMatcher;
-
-impl StringMatcher for EmptyStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        s.is_empty()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub(super) struct OrStringMatcher {
-    matchers: Vec<Box<dyn StringMatcher>>,
-}
-
-impl StringMatcher for OrStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        self.matchers.iter().any(|matcher| matcher.matches(s))
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct EqualStringMatcher {
-    s: String,
-}
-
-impl StringMatcher for EqualStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        self.s == s
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 const EMPTY_SET_MATCHES: Vec<String> = Vec::new();
 
-pub struct EqualMultiStringMatcher {
-    values: Vec<String>,
-}
-
-impl EqualMultiStringMatcher {
-    fn new(estimated_size: usize) -> Self {
-        Self {
-            values: Vec::with_capacity(estimated_size),
-        }
-    }
-
-    fn add(&mut self, s: String) {
-        self.values.push(s);
-    }
-
-    pub fn set_matches(&self) -> &Vec<String> {
-        &self.values
-    }
-}
-
-impl StringMatcher for EqualMultiStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        self.values.iter().any(|v| v == s)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct EqualMultiStringMapMatcher {
-    values: FastHashSet<String>,
-    prefixes: FastHashMap<String, Vec<Box<dyn StringMatcher>>>,
-    min_prefix_len: usize,
-}
-
-impl EqualMultiStringMapMatcher {
-    fn add(&mut self, s: String) {
-        self.values.insert(s);
-    }
-
-    fn add_prefix(&mut self, prefix: String, matcher: Box<dyn StringMatcher>) {
-        if self.min_prefix_len == 0 {
-            panic!("add_prefix called when no prefix length defined");
-        }
-        if prefix.len() < self.min_prefix_len {
-            panic!("add_prefix called with a too short prefix");
-        }
-
-        let s = get_prefix(&prefix, self.min_prefix_len);
-
-        self.prefixes
-            .entry(s)
-            .or_insert_with(Vec::new)
-            .push(matcher);
-    }
-
-    fn set_matches(&self) -> Vec<String> {
-        if self.values.len() >= MAX_SET_MATCHES || !self.prefixes.is_empty() {
-            return Vec::new();
-        }
-
-        self.values.iter().collect()
-    }
-}
-
-impl StringMatcher for EqualMultiStringMapMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if !self.values.is_empty() {
-            if self.values.contains(&s) {
-                return true;
-            }
-        }
-
-        if self.min_prefix_len > 0 && s.len() >= self.min_prefix_len {
-            let prefix = &s[..self.min_prefix_len];
-            if let Some(matchers) = self.prefixes.get(prefix) {
-                for matcher in matchers {
-                    if matcher.matches(s) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-fn get_prefix(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
-
-impl MultiStringMatcherBuilder for EqualMultiStringMapMatcher {
-    fn add(&mut self, s: String) {
-        self.add(s);
-    }
-
-    fn add_prefix(&mut self, prefix: String, prefix_case_sensitive: bool, matcher: Box<dyn StringMatcher>) {
-        todo!()
-    }
-
-    fn set_matches(&self) -> Vec<String> {
-        self.set_matches()
-    }
-}
-
-pub struct ContainsStringMatcher {
-    substrings: Vec<String>,
-    left: Option<Box<dyn StringMatcher>>,
-    right: Option<Box<dyn StringMatcher>>,
-}
-
-impl StringMatcher for ContainsStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        for substr in &self.substrings {
-            match (self.left.as_ref(), self.right.as_ref()) {
-                (Some(left), Some(right)) => {
-                    let mut search_start_pos = 0;
-                    while let Some(pos) = s[search_start_pos..].find(substr) {
-                        let pos = pos + search_start_pos;
-                        if left.matches(&s[..pos]) && right.matches(&s[pos + substr.len()..]) {
-                            return true;
-                        }
-                        search_start_pos = pos + 1;
-                    }
-                }
-                (Some(left), None) => {
-                    if s.ends_with(substr) && left.matches(&s[..s.len() - substr.len()]) {
-                        return true;
-                    }
-                }
-                (None, Some(right)) => {
-                    if s.starts_with(substr) && right.matches(&s[substr.len()..]) {
-                        return true;
-                    }
-                }
-                (None, None) => {
-                    if s.contains(substr) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct LiteralPrefixStringMatcher {
-    prefix: String,
-    right: Option<Box<dyn StringMatcher>>,
-}
-
-impl StringMatcher for LiteralPrefixStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if !s.starts_with(&self.prefix) {
-            return false;
-        }
-        if let Some(right) = &self.right {
-            right.matches(&s[self.prefix.len()..])
-        } else {
-            true
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct LiteralSuffixStringMatcher {
-    left: Option<Box<dyn StringMatcher>>,
-    suffix: String,
-}
-
-impl StringMatcher for LiteralSuffixStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if !s.ends_with(&self.suffix) {
-            return false;
-        }
-        if let Some(left) = &self.left {
-            left.matches(&s[..s.len() - self.suffix.len()])
-        } else {
-            true
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct AnyStringWithoutNewlineMatcher;
-
-impl StringMatcher for AnyStringWithoutNewlineMatcher {
-    fn matches(&self, s: &str) -> bool {
-        !s.contains('\n')
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct AnyNonEmptyStringMatcher {
-    match_nl: bool,
-}
-
-impl StringMatcher for AnyNonEmptyStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if self.match_nl {
-            !s.is_empty()
-        } else {
-            !s.is_empty() && !s.contains('\n')
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct ZeroOrOneCharacterStringMatcher {
-    match_nl: bool,
-}
-
-impl StringMatcher for ZeroOrOneCharacterStringMatcher {
-    fn matches(&self, s: &str) -> bool {
-        if self.match_nl {
-            s.is_empty() || s.chars().count() == 1
-        } else {
-            s.is_empty() || (s.chars().count() == 1 && s.chars().next().unwrap() != '\n')
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct TrueMatcher;
-
-impl StringMatcher for TrueMatcher {
-    fn matches(&self, _s: &str) -> bool {
-        true
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-fn string_matcher_from_regex(hir: &mut Hir) -> Option<Box<dyn StringMatcher>> {
+fn string_matcher_from_regex(hir: &mut Hir) -> Option<StringMatchHandler> {
     clear_begin_end_text(hir);
     let matcher = string_matcher_from_regex_internal(hir);
-    optimize_equal_or_prefix_string_matchers(matcher, MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD)
+    if let Some(matcher) = matcher {
+        Some(optimize_equal_or_prefix_string_matchers(matcher, MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD))
+    } else {
+        None
+    }
 }
 
 fn rep_is_zero_or_one(rep: &Repetition) -> bool {
@@ -752,7 +448,7 @@ fn matches_any_character_except_newline(hir: &Hir) -> bool {
     }
 }
 
-fn string_matcher_from_regex_internal(hir: &Hir) -> Option<Box<dyn StringMatcher>> {
+fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
     // Correctly handling anchors inside a regex is tricky,
     // so in this case we fallback to the regex engine.
     if is_start_anchor(hir) || is_end_anchor(hir) {
@@ -777,46 +473,46 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<Box<dyn StringMatcher
                     return None;
                 }
                 let match_nl = matches_any_char(&rep.sub);
-                Some(Box::new(ZeroOrOneCharacterStringMatcher { match_nl }))
+                Some(StringMatchHandler::zero_or_one_chars(match_nl))
             } else if rep_is_dot_plus(rep) {
                 if !validate_repetition(rep) {
                     return None;
                 }
                 let match_nl = matches_any_char(&rep.sub);
-                Some(Box::new(AnyNonEmptyStringMatcher { match_nl }))
+                Some(StringMatchHandler::not_empty(match_nl))
             } else if rep_is_dot_star(rep) {
                 if !validate_repetition(rep) {
                     return None;
                 }
                 // If the newline is valid, then this matcher literally match any string (even empty).
                 if matches_any_char(&rep.sub) {
-                    Some(Box::new(TrueMatcher))
+                    Some(StringMatchHandler::MatchAll)
                 } else {
                     // Any string is fine (including an empty one), as far as it doesn't contain any newline.
-                    return Some(Box::new(AnyStringWithoutNewlineMatcher{}))
+                    return Some(StringMatchHandler::AnyWithoutNewline)
                 }
             } else {
                 None
             }
         }
-        HirKind::Empty => Some(Box::new(EmptyStringMatcher)),
+        HirKind::Empty => Some(StringMatchHandler::Empty),
         HirKind::Literal(_) => {
-            Some(Box::new(EqualStringMatcher { s: literal_to_string(hir) }))
+            Some(StringMatchHandler::Literal(literal_to_string(hir)))
         }
         HirKind::Alternation(hirs ) => {
             let mut or_matchers = Vec::new();
             for sub_hir in hirs {
                 if let Some(matcher) = string_matcher_from_regex_internal(sub_hir) {
-                    or_matchers.push(matcher);
+                    or_matchers.push(Box::new(matcher));
                 } else {
                     return None;
                 }
             }
-            Some(Box::new(OrStringMatcher { matchers: or_matchers }))
+            Some(StringMatchHandler::Or(or_matchers))
         }
         HirKind::Concat(hirs) => {
             if hirs.is_empty() {
-                return Some(Box::new(EmptyStringMatcher));
+                return Some(StringMatchHandler::Empty);
             }
             if hirs.len() == 1 {
                 return string_matcher_from_regex_internal(&hirs[0]);
@@ -860,10 +556,7 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<Box<dyn StringMatcher
                     if right.is_none() {
                         right = string_matcher_from_regex_internal(second);
                         if right.is_some() {
-                            return Some(Box::new(LiteralPrefixStringMatcher {
-                                prefix: literal_to_string(first),
-                                right,
-                            }));
+                            return Some(StringMatchHandler::prefix(literal_to_string(first), right));
                         }
                     }
                 }
@@ -872,10 +565,7 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<Box<dyn StringMatcher
                     if left.is_none() {
                         left = string_matcher_from_regex_internal(second);
                         if left.is_some() {
-                            return Some(Box::new(LiteralSuffixStringMatcher {
-                                left,
-                                suffix: literal_to_string(second),
-                            }));
+                            return Some(StringMatchHandler::prefix(literal_to_string(second), left));
                         }
                     }
                 }
@@ -885,82 +575,87 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<Box<dyn StringMatcher
                 return None;
             }
 
-            Some(Box::new(ContainsStringMatcher {
-                substrings: matches,
-                left,
-                right,
-            }))
+            if matches.len() == 1 {
+
+            }
+
+            let matcher = ContainsMultiStringMatcher::new(matches, left, right);
+
+            Some(StringMatchHandler::ContainsMulti(matcher))
         }
         _ => None,
     }
 }
 
 fn optimize_equal_or_prefix_string_matchers(
-    input: Option<Box<dyn StringMatcher>>,
+    input: StringMatchHandler,
     threshold: usize,
-) -> Option<Box<dyn StringMatcher>> {
+) -> StringMatchHandler {
     let mut num_values = 0;
     let mut num_prefixes = 0;
     let mut min_prefix_length = 0;
 
-    let analyse_prefix_matcher_callback = |prefix: &str, _matcher: &dyn StringMatcher| -> bool {
-        if num_prefixes == 0 || prefix.len() < min_prefix_length {
-            min_prefix_length = prefix.len();
-        }
-        num_prefixes += 1;
-        true
-    };
-
-    if !find_equal_or_prefix_string_matchers(&input,
-                                             analyse_equal_matcher_callback,
-                                             analyse_prefix_matcher_callback) {
-        return input;
-    }
+    get_equal_or_prefix_string_matchers_counts(&input, &mut num_values, &mut num_prefixes, &mut min_prefix_length);
 
     if (num_values + num_prefixes) < threshold {
         return input;
     }
 
-    let mut multi_matcher = EqualMultiStringMatcher::new(num_values);
+    let mut multi_matcher = EqualMultiStringMapMatcher::new(min_prefix_length);
 
-    let add_equal_matcher_callback = |matcher: &EqualStringMatcher| {
-        multi_matcher.add(matcher.s.clone());
-    };
+    find_equal_or_prefix_string_matchers(&input, &mut multi_matcher);
 
-    let add_prefix_matcher_callback = |prefix: &str, prefix_case_sensitive: bool, matcher: &dyn StringMatcher| {
-        multi_matcher.add_prefix(prefix.to_string(), prefix_case_sensitive, Box::new(matcher.clone()));
-    };
+    StringMatchHandler::EqualMultiMap(multi_matcher)
+}
 
-    find_equal_or_prefix_string_matchers(&input,
-                                         add_equal_matcher_callback,
-                                         add_prefix_matcher_callback);
-
-    Some(Box::new(multi_matcher))
+fn get_equal_or_prefix_string_matchers_counts(
+    input: &StringMatchHandler,
+    num_values: &mut usize,
+    num_prefixes: &mut usize,
+    min_prefix_length: &mut usize,
+) {
+    match input {
+        StringMatchHandler::Or(or_matchers) => {
+            for matcher in or_matchers {
+                get_equal_or_prefix_string_matchers_counts(&matcher, num_values, num_prefixes, min_prefix_length);
+            }
+        },
+        StringMatchHandler::Literal(_) => {
+            *num_values += 1;
+        },
+        StringMatchHandler::StartsWith(prefix) => {
+            *min_prefix_length = *min_prefix_length.min(&mut prefix.len());
+            *num_prefixes += 1;
+        },
+        StringMatchHandler::Prefix(prefix_matcher) => {
+            *min_prefix_length = *min_prefix_length.min(&mut prefix_matcher.prefix.len());
+            *num_prefixes += 1;
+        },
+        _ => (),
+    }
 }
 
 fn find_equal_or_prefix_string_matchers(
-    input: &impl StringMatcher,
-    equal_matcher_callback: fn(&EqualStringMatcher) -> bool,
-    prefix_matcher_callback: fn(&str, bool, &dyn StringMatcher) -> bool,
-) -> bool {
-    if let Some(or_matcher) = input.as_any().downcast_ref::<OrStringMatcher>() {
-        for matcher in &or_matcher.matchers {
-            if !find_equal_or_prefix_string_matchers(&matcher, equal_matcher_callback, prefix_matcher_callback) {
-                return false;
+    input: &StringMatchHandler,
+    res: &mut EqualMultiStringMapMatcher,
+) {
+    match input {  // TODO: optimize this recursion with tail call optimization.
+        StringMatchHandler::Or(or_matchers) => {
+            for matcher in or_matchers {
+                find_equal_or_prefix_string_matchers(&matcher, res)
             }
-        }
-        return true;
+        },
+        StringMatchHandler::Literal(s) => {
+            res.values.insert(s.to_string());
+        },
+        StringMatchHandler::StartsWith(prefix) => {
+            res.add_prefix(prefix.to_string(), Box::new(input.clone()));
+        },
+        StringMatchHandler::Prefix(prefix_matcher) => {
+            res.add_prefix(prefix_matcher.prefix.clone(), Box::new(input.clone()));
+        },
+        _ => (),
     }
-
-    if let Some(equal_matcher) = input.as_any().downcast_ref::<EqualStringMatcher>() {
-        return equal_matcher_callback(equal_matcher);
-    }
-
-    if let Some(prefix_matcher) = input.as_any().downcast_ref::<LiteralPrefixStringMatcher>() {
-        return prefix_matcher_callback(&prefix_matcher.prefix, true, prefix_matcher);
-    }
-
-    false
 }
 
 fn has_prefix_case_insensitive(s: &str, prefix: &str) -> bool {

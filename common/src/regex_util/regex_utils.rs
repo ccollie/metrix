@@ -5,6 +5,11 @@ use regex::{Error as RegexError, Regex};
 use regex_syntax::hir::{Hir, HirKind};
 use regex_syntax::parse as parse_regex;
 
+const META_CHARS: &str = ".^$*+?{}[]|()\\/%~";
+pub fn contains_regex_meta_chars(s: &str) -> bool {
+    s.chars().any(|c| META_CHARS.contains(c))
+}
+
 /// remove_start_end_anchors removes '^' at the start of expr and '$' at the end of the expr.
 pub fn remove_start_end_anchors(expr: &str) -> &str {
     let mut cursor = expr;
@@ -75,7 +80,7 @@ pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, us
     }
 
     if expr == ".+" {
-        return Ok((StringMatchHandler::NotEmpty, FULL_MATCH_COST));
+        return Ok((StringMatchHandler::not_empty(false), FULL_MATCH_COST));
     }
 
     let mut sre = match build_hir(expr) {
@@ -181,7 +186,7 @@ fn get_optimized_re_match_func_ext(
 
     if is_dot_plus(sre) {
         // '.+'
-        return Ok(Some((StringMatchHandler::NotEmpty, FULL_MATCH_COST)));
+        return Ok(Some((StringMatchHandler::not_empty(true), FULL_MATCH_COST)));
     }
 
     match sre.kind() {
@@ -197,7 +202,7 @@ fn get_optimized_re_match_func_ext(
             let suffix_quantifier = get_quantifier(suffix);
 
             if len >= 2 {
-                // possible .+foo|bar|baz|quux.+  or  .+foo|bar|baz|quux  or  foo|bar|baz|quux.+
+                // possible .+foo|bar|baz|quux.+ or .+foo|bar|baz|quux or foo|bar|baz|quux.+
                 if prefix_quantifier.is_some() {
                     has_quantifier = true;
                     items = &items[1..];

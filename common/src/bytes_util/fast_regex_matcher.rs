@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 
 use dynamic_lru_cache::DynamicCache;
+use get_size::GetSize;
 use regex::Regex;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -15,6 +16,13 @@ const DEFAULT_CACHE_SIZE: usize = 64;
 pub struct FastRegexMatcher {
     regex: Regex,
     cache: DynamicCache<String, bool>,
+}
+
+// TODO !!!!!
+impl GetSize for FastRegexMatcher {
+    fn get_size(&self) -> usize {
+        1024
+    }
 }
 
 impl FastRegexMatcher {

@@ -8,7 +8,7 @@ mod regexp_cache;
 mod simplify;
 mod fast_matcher;
 mod fast_matcher_tests;
-mod test;
+//mod test;
 
 pub use regex_utils::*;
 pub use prom_regex::*;

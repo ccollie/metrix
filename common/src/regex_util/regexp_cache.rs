@@ -86,13 +86,15 @@ fn matcher_size_bytes(m: &StringMatchHandler) -> usize {
     use StringMatchHandler::*;
     let base = size_of::<StringMatchHandler>();
     let extra = match m {
-        Alternates(alts, _) | OrderedAlternates(alts) => {
+        Alternates(alts) => alts.get_size(),
+        OrderedAlternates(alts) => {
             alts.get_size()
         },
         And(first, second) => {
             matcher_size_bytes(first) + matcher_size_bytes(second)
         }
-        MatchAll | MatchNone | Empty | NotEmpty => 0,
+        MatchAll | MatchNone | Empty  => 0,
+        NotEmpty(m) => 1,
         Literal(s) |
         Contains(s) |
         StartsWith(s) |
@@ -101,6 +103,14 @@ fn matcher_size_bytes(m: &StringMatchHandler) -> usize {
         MatchFn(_) => {
             size_of::<fn(&str, &str) -> bool>()
         }
+        AnyWithoutNewline => 1,
+        EqualsMulti(m) => m.get_size(),
+        EqualMultiMap(m) => m.get_size(),
+        ContainsMulti(m) => m.get_size(),
+        Prefix(p) => size_of::<String>() + p.get_size(),
+        Suffix(s) => s.get_size(),
+        Or(m) => m.get_size(),
+        ZeroOrOneChars(m) => m.get_size()
     };
     base + extra
 }
