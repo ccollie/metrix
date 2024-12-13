@@ -11,16 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
-use crate::regex_util::hir_utils::{
-    build_hir,
-    is_dot_question,
-    is_end_anchor,
-    is_literal,
-    is_start_anchor,
-    literal_to_string,
-    matches_any_char,
-};
+use super::{contains_in_order, ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
+use crate::regex_util::hir_utils::{build_hir, is_dot_question, is_end_anchor, is_literal, is_start_anchor, literal_to_string, matches_any_char, matches_any_character_except_newline};
 use regex::Regex;
 use regex_syntax::hir::{Class, Hir, HirKind, Look, Repetition};
 
@@ -32,15 +24,16 @@ const MAX_SET_MATCHES: usize = 256;
 const MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD: usize = 16;
 
 // #[derive(GetSize)]
+#[derive(Clone, Debug)]
 pub struct FastRegexMatcher {
     _optimized: bool,
     re_string: String,
     re: Option<Regex>,
     set_matches: Vec<String>,
-    string_matcher: Option<StringMatchHandler>,
-    prefix: String,
-    suffix: String,
-    contains: Vec<String>,
+    pub string_matcher: Option<StringMatchHandler>,
+    pub prefix: String,
+    pub suffix: String,
+    pub contains: Vec<String>,
 }
 
 impl FastRegexMatcher {
@@ -48,11 +41,11 @@ impl FastRegexMatcher {
         let mut matcher = FastRegexMatcher {
             re_string: v.to_string(),
             re: None,
-            set_matches: Vec::new(),
+            set_matches: vec![],
             string_matcher: None,
             prefix: String::new(),
             suffix: String::new(),
-            contains: Vec::new(),
+            contains: vec![],
             _optimized: false,
         };
 
@@ -117,12 +110,7 @@ impl FastRegexMatcher {
             return self.string_matcher.as_ref().unwrap().matches(s);
         }
         if !self.set_matches.is_empty() {
-            for match_str in &self.set_matches {
-                if match_str == &s {
-                    return true;
-                }
-            }
-            return false;
+            return self.set_matches.iter().any(|match_str| match_str == s);
         }
         if !self.prefix.is_empty() && !s.starts_with(&self.prefix) {
             return false;
@@ -378,13 +366,9 @@ fn too_many_matches(matches: &[String], added: &[String]) -> bool {
     matches.len() + added.len() > MAX_SET_MATCHES
 }
 
-pub trait StringMatcher {
-    fn matches(&self, s: &str) -> bool;
-}
-
 const EMPTY_SET_MATCHES: Vec<String> = Vec::new();
 
-fn string_matcher_from_regex(hir: &mut Hir) -> Option<StringMatchHandler> {
+pub fn string_matcher_from_regex(hir: &mut Hir) -> Option<StringMatchHandler> {
     clear_begin_end_text(hir);
     let matcher = string_matcher_from_regex_internal(hir);
     if let Some(matcher) = matcher {
@@ -418,34 +402,6 @@ fn is_quantifier(hir: &Hir) -> bool {
     }
 }
 
-fn matches_any_character_except_newline(hir: &Hir) -> bool {
-    match hir.kind() {
-        HirKind::Literal(lit) => {
-            // Check if the literal is not a newline
-            !lit.0.contains(&b'\n')
-        },
-        HirKind::Class(class) => {
-            match class {
-                // Check if the class does not include newline
-                Class::Unicode(class) => {
-                    let nl = '\n';
-                    class.ranges().iter()
-                        .all(|range| !(range.start() .. range.end()).contains(&nl))
-                },
-                Class::Bytes(class) => {
-                    let nl = b'\n';
-                    class.ranges().iter()
-                        .all(|range| !(range.start() .. range.end()).contains(&nl))
-                },
-            }
-        },
-        HirKind::Repetition(repetition) => {
-            // Check the sub-expression of repetition
-            matches_any_character_except_newline(&repetition.sub)
-        },
-        _ => false, // Other node types do not match any character except newlines
-    }
-}
 
 fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
     // Correctly handling anchors inside a regex is tricky,
@@ -723,34 +679,6 @@ fn find_equal_or_prefix_string_matchers(
         _ => (),
     }
 }
-
-fn has_prefix_case_insensitive(s: &str, prefix: &str) -> bool {
-    s.len() >= prefix.len() && s[..prefix.len()].eq_ignore_ascii_case(prefix)
-}
-
-fn has_suffix_case_insensitive(s: &str, suffix: &str) -> bool {
-    s.len() >= suffix.len() && s[s.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
-}
-
 fn has_suffix(s: &str, suffix: &str) -> bool {
     s.len() >= suffix.len() && s.ends_with(suffix)
-}
-
-fn contains_in_order(s: &str, contains: &[String]) -> bool {
-    if contains.len() == 1 {
-        return s.contains(&contains[0]);
-    }
-    contains_in_order_multi(s, contains)
-}
-
-fn contains_in_order_multi(s: &str, contains: &[String]) -> bool {
-    let mut offset = 0;
-    for substr in contains {
-        if let Some(pos) = s[offset..].find(substr) {
-            offset += pos + substr.len();
-        } else {
-            return false;
-        }
-    }
-    true
 }

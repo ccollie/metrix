@@ -321,7 +321,6 @@ fn get_optimized_re_match_func_ext(
                 let prefix = &subs[0];
                 let suffix = &subs[len - 1];
 
-
                 // Note: at this point, .* has been removed from both ends of the regexp.
                 let prefix_quantifier = get_quantifier(prefix);
                 let suffix_quantifier = get_quantifier(suffix);

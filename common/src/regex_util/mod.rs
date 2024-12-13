@@ -13,5 +13,5 @@ mod fast_matcher_tests;
 pub use regex_utils::*;
 pub use prom_regex::*;
 pub use match_handlers::*;
-pub use prom_regex::*;
 pub use regexp_cache::*;
+pub use fast_matcher::*;

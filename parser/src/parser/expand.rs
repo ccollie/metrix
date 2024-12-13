@@ -225,11 +225,8 @@ fn expand_with_selector_expression(
 
             // convert lfe to LabelFilter.
             let se = expand_string_expr(symbols, was, &lfe.value)?;
-            let lf = LabelFilter {
-                label,
-                op: lfe.op,
-                value: get_expr_as_string(&se)?,
-            };
+            let value = get_expr_as_string(&se)?;
+            let lf = LabelFilter::new(lfe.op, label, value)?;
 
             new_selector = new_selector.append(lf);
         }

@@ -288,6 +288,35 @@ pub fn get_or_values_ext(sre: &Hir, dest: &mut Vec<String>) -> bool {
     }
 }
 
+pub(super) fn matches_any_character_except_newline(hir: &Hir) -> bool {
+    match hir.kind() {
+        HirKind::Literal(lit) => {
+            // Check if the literal is not a newline
+            !lit.0.contains(&b'\n')
+        },
+        HirKind::Class(class) => {
+            match class {
+                // Check if the class does not include newline
+                Unicode(class) => {
+                    let nl = '\n';
+                    class.ranges().iter()
+                        .all(|range| !(range.start() .. range.end()).contains(&nl))
+                },
+                Bytes(class) => {
+                    let nl = b'\n';
+                    class.ranges().iter()
+                        .all(|range| !(range.start() .. range.end()).contains(&nl))
+                },
+            }
+        },
+        HirKind::Repetition(repetition) => {
+            // Check the sub-expression of repetition
+            matches_any_character_except_newline(&repetition.sub)
+        },
+        _ => false, // Other node types do not match any character except newlines
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

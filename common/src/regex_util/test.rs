@@ -95,11 +95,9 @@ fn test_fast_regex_matcher_set_matches_should_return_acopy() {
     matches[0] = "xxx".to_string();
     matches[1] = "yyy".to_string();
 
-    // Ensure that if we call SetMatches() again we get the original one.
+    // Ensure that if we call set_matches() again we get the original one.
     assert_eq!(expected, m.set_matches());
 }
-
-struct TrueMatcher {}
 
 #[test]
 fn test_string_matcher_from_regexp() {

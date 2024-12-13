@@ -2,13 +2,12 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use crate::common::join_vector;
+use crate::parser::{escape_ident, is_empty_regex, quote, ParseError, ParseResult};
 use ahash::AHashMap;
-use regex::Regex;
+use metricsql_common::regex_util::FastRegexMatcher;
 use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3;
-
-use crate::common::join_vector;
-use crate::parser::{compile_regexp, escape_ident, is_empty_regex, quote, ParseError, ParseResult};
 
 pub const NAME_LABEL: &str = "__name__";
 pub type LabelName = String;
@@ -16,75 +15,6 @@ pub type LabelName = String;
 pub type LabelValue = String;
 
 // NOTE: https://github.com/rust-lang/regex/issues/668
-#[derive(Debug, Default, Clone)]
-pub enum MatchOp {
-    #[default]
-    Equal,
-    NotEqual,
-    Re(Regex),
-    NotRe(Regex),
-}
-
-impl MatchOp {
-    pub fn is_negative(&self) -> bool {
-        matches!(self, MatchOp::NotEqual | MatchOp::NotRe(_))
-    }
-
-    pub fn is_regex(&self) -> bool {
-        matches!(self, Self::NotRe(_) | Self::Re(_))
-    }
-}
-
-impl fmt::Display for MatchOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MatchOp::Equal => write!(f, "="),
-            MatchOp::NotEqual => write!(f, "!="),
-            MatchOp::Re(reg) => write!(f, "=~{reg}"),
-            MatchOp::NotRe(reg) => write!(f, "!~{reg}"),
-        }
-    }
-}
-
-impl PartialEq for MatchOp {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (MatchOp::Equal, MatchOp::Equal) => true,
-            (MatchOp::NotEqual, MatchOp::NotEqual) => true,
-            (MatchOp::Re(s), MatchOp::Re(o)) => s.as_str().eq(o.as_str()),
-            (MatchOp::NotRe(s), MatchOp::NotRe(o)) => s.as_str().eq(o.as_str()),
-            _ => false,
-        }
-    }
-}
-
-impl Eq for MatchOp {}
-
-impl Hash for MatchOp {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            MatchOp::Equal => "eq".hash(state),
-            MatchOp::NotEqual => "ne".hash(state),
-            MatchOp::Re(s) => format!("re:{}", s.as_str()).hash(state),
-            MatchOp::NotRe(s) => format!("nre:{}", s.as_str()).hash(state),
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for MatchOp {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            MatchOp::Equal => serializer.serialize_str("="),
-            MatchOp::NotEqual => serializer.serialize_str("=~"),
-            MatchOp::Re(_reg) => serializer.serialize_str("=~"),
-            MatchOp::NotRe(_reg) => serializer.serialize_str("!~"),
-        }
-    }
-}
 
 #[derive(
     Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, Serialize, Deserialize,
@@ -152,6 +82,9 @@ pub struct LabelFilter {
 
     /// value contains unquoted value for the filter.
     pub value: String,
+
+    #[serde(skip)]
+    re: Option<Box<FastRegexMatcher>> // boxed to reduce struct size
 }
 
 impl LabelFilter {
@@ -161,25 +94,22 @@ impl LabelFilter {
         V: Into<LabelValue>,
     {
         let label = label.into();
+        let value = value.into();
 
-        assert!(!label.is_empty());
-        let value = match match_op {
+        let re: Option<Box<FastRegexMatcher>> = match match_op {
             LabelFilterOp::RegexEqual | LabelFilterOp::RegexNotEqual => {
-                let label_value = value.into();
-                let converted = try_escape_for_repeat_re(&label_value);
-                let re_anchored = format!("^(?:{})$", converted);
-                if compile_regexp(&re_anchored).is_err() {
-                    return Err(ParseError::InvalidRegex(label_value));
-                }
-                converted
+                let fre = FastRegexMatcher::new(&value)
+                    .map_err(|_e| ParseError::InvalidRegex(value.clone()))?;
+                Some(Box::new(fre))
             }
-            _ => value.into(),
+            _ => None
         };
 
         Ok(Self {
             label,
             op: match_op,
             value,
+            re,
         })
     }
 
@@ -188,6 +118,7 @@ impl LabelFilter {
             op: LabelFilterOp::Equal,
             label: key.into(),
             value: value.into(),
+            re: None,
         }
     }
 
@@ -196,6 +127,7 @@ impl LabelFilter {
             op: LabelFilterOp::NotEqual,
             label: key.into(),
             value: value.into(),
+            re: None,
         }
     }
 
@@ -252,17 +184,17 @@ impl LabelFilter {
                 if str.is_empty() {
                     return is_empty_regex(&self.value);
                 }
-                if let Ok(re) = compile_regexp(&self.value) {
-                    re.is_match(str)
+                if let Some(re) = &self.re {
+                    re.matches(str)
                 } else {
-                    false
+                    unreachable!("regex_equal without compiled regex");
                 }
             }
             LabelFilterOp::RegexNotEqual => {
-                if let Ok(re) = compile_regexp(&self.value) {
-                    !re.is_match(str)
+                if let Some(re) = &self.re {
+                    !re.matches(str)
                 } else {
-                    false
+                    unreachable!("regex_not_equal without compiled regex");
                 }
             }
         }
@@ -295,7 +227,35 @@ impl LabelFilter {
         }
         self.label.clone()
     }
+
+    pub fn is_optimized(&self) -> bool {
+        if let Some(re) = &self.re {
+            re.is_optimized()
+        } else { false }
+    }
+
+    /// `prefix()` returns the required prefix of the value to match, if possible.
+    /// It will be empty if it's an equality matcher or if the prefix can't be determined.
+    pub fn prefix(&self) -> &str {
+        if let Some(re) = &self.re {
+            re.prefix.as_str()
+        } else {
+            EMPTY_STRING
+        }
+    }
+
+    /// set_matches returns a set of equality matchers for the current regex matchers if possible.
+    /// For examples the regexp `a(b|f)` will returns "ab" and "af".
+    /// Returns nil if we can't replace the regexp by only equality matchers.
+    pub fn set_matches(&self) -> Vec<String> {
+        if let Some(matcher) = &self.re {
+            return matcher.set_matches();
+        }
+        vec![]
+    }
 }
+
+const EMPTY_STRING: &str = "";
 
 impl PartialEq<LabelFilter> for LabelFilter {
     fn eq(&self, other: &Self) -> bool {

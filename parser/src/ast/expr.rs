@@ -706,11 +706,8 @@ pub struct MetricExpr {
 
 impl MetricExpr {
     pub fn new<S: Into<String>>(name: S) -> MetricExpr {
-        let name_filter = LabelFilter {
-            op: LabelFilterOp::Equal,
-            label: NAME_LABEL.to_string(),
-            value: name.into(),
-        };
+        // SAFETY: safe to unwrap since only regex errors are possible
+        let name_filter = LabelFilter::new(LabelFilterOp::Equal, NAME_LABEL, name.into()).unwrap();
         MetricExpr {
             // name: Some(name.into()),
             name: None,

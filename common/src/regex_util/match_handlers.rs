@@ -1,4 +1,3 @@
-use crate::bytes_util::FastRegexMatcher;
 use get_size::GetSize;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -32,7 +31,7 @@ impl StringMatchOptions {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct NonEmptyStringMatcher {
     match_nl: bool,
 }
@@ -53,7 +52,7 @@ impl NonEmptyStringMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct ZeroOrOneCharsMatcher {
     match_nl: bool,
 }
@@ -68,10 +67,10 @@ impl ZeroOrOneCharsMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct LiteralPrefixStringMatcher {
-    pub(crate) prefix: String,
-    right: Option<Box<StringMatchHandler>>,
+    pub prefix: String,
+    pub right: Option<Box<StringMatchHandler>>,
 }
 
 impl LiteralPrefixStringMatcher {
@@ -87,10 +86,10 @@ impl LiteralPrefixStringMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct LiteralSuffixStringMatcher {
-    left: Option<Box<StringMatchHandler>>,
-    suffix: String,
+    pub left: Option<Box<StringMatchHandler>>,
+    pub suffix: String,
 }
 
 impl LiteralSuffixStringMatcher {
@@ -106,11 +105,11 @@ impl LiteralSuffixStringMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct ContainsMultiStringMatcher {
-    substrings: Vec<String>,
-    left: Option<Box<StringMatchHandler>>,
-    right: Option<Box<StringMatchHandler>>,
+    pub substrings: Vec<String>,
+    pub left: Option<Box<StringMatchHandler>>,
+    pub right: Option<Box<StringMatchHandler>>,
 }
 
 impl ContainsMultiStringMatcher {
@@ -158,11 +157,11 @@ impl ContainsMultiStringMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct EqualMultiStringMapMatcher {
-    pub(crate) values: HashSet<String>,
-    pub(crate) prefixes: HashMap<String, Vec<Box<StringMatchHandler>>>,
-    pub(crate) min_prefix_len: usize,
+    pub values: HashSet<String>,
+    pub prefixes: HashMap<String, Vec<Box<StringMatchHandler>>>,
+    pub min_prefix_len: usize,
 }
 
 impl EqualMultiStringMapMatcher {
@@ -210,10 +209,8 @@ impl EqualMultiStringMapMatcher {
         if self.min_prefix_len > 0 && s.len() >= self.min_prefix_len {
             let prefix = &s[..self.min_prefix_len];
             if let Some(matchers) = self.prefixes.get(prefix) {
-                for matcher in matchers {
-                    if matcher.matches(s) {
-                        return true;
-                    }
+                if matchers.iter().any(|m| m.matches(s)) {
+                    return true;
                 }
             }
         }
@@ -222,7 +219,7 @@ impl EqualMultiStringMapMatcher {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AlternatesMatcher {
     alts: Vec<String>,
     match_fn: MatchFn,
@@ -246,7 +243,58 @@ impl AlternatesMatcher {
     }
 }
 
-#[derive(Clone, Debug, GetSize)]
+#[derive(Debug, Clone)]
+pub struct RegexMatcher {
+    pub regex: Regex,
+    pub prefix: String,
+    pub suffix: String,
+    pub contains: Vec<String>,
+}
+
+impl GetSize for RegexMatcher {
+    fn get_size(&self) -> usize {
+        // TODO: properly calculate a value for the bookkeeping overhead of the regex object
+        const REGEX_OVERHEAD: usize = 256;
+        REGEX_OVERHEAD + self.regex.as_str().get_size() + self.prefix.get_size() + self.suffix.get_size()
+    }
+}
+
+impl PartialEq for RegexMatcher {
+    fn eq(&self, other: &Self) -> bool {
+        self.regex.as_str() == other.regex.as_str() &&
+            self.prefix == other.prefix &&
+            self.suffix == other.suffix &&
+            self.contains == other.contains
+    }
+}
+
+impl Eq for RegexMatcher {}
+
+impl RegexMatcher {
+    fn new(regex: Regex, prefix: String, suffix: String) -> Self {
+        Self {
+            regex,
+            prefix,
+            suffix,
+            contains: Vec::new(),
+        }
+    }
+
+    fn matches(&self, s: &str) -> bool {
+        if !self.prefix.is_empty() && !s.starts_with(&self.prefix) {
+            return false;
+        }
+        if !self.suffix.is_empty() && !s.ends_with(&self.suffix) {
+            return false;
+        }
+        if !self.contains.is_empty() && !contains_in_order(s, &self.contains) {
+            return false;
+        }
+        self.regex.is_match(s)
+    }
+}
+
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub enum StringMatchHandler {
     MatchAll,
     MatchNone,
@@ -262,7 +310,7 @@ pub enum StringMatchHandler {
     Prefix(LiteralPrefixStringMatcher),
     Suffix(LiteralSuffixStringMatcher),
     EndsWith(String),
-    FastRegex(FastRegexMatcher),
+    Regex(RegexMatcher),
     OrderedAlternates(Vec<String>),
     MatchFn(MatchFnHandler),
     Alternates(AlternatesMatcher),
@@ -288,12 +336,13 @@ impl StringMatchHandler {
     }
 
     pub fn fast_regex(regex: Regex) -> Self {
-        Self::FastRegex(FastRegexMatcher::new(regex))
+        Self::Regex(RegexMatcher::new(regex, String::new(), String::new()))
     }
 
     pub fn alternates(alts: Vec<String>, options: &StringMatchOptions) -> Self {
         let mut alts = alts;
-        if options.is_default() {
+        let is_default = options.is_default();
+        if is_default {
             if alts.len() == 1 {
                 return Self::Literal(alts.pop().unwrap());
             }
@@ -360,7 +409,7 @@ impl StringMatchHandler {
             StringMatchHandler::MatchNone => false,
             StringMatchHandler::Alternates(alts) => alts.matches(s),
             StringMatchHandler::MatchFn(m) => m.matches(s),
-            StringMatchHandler::FastRegex(r) => r.matches(s),
+            StringMatchHandler::Regex(r) => r.matches(s),
             StringMatchHandler::OrderedAlternates(m) => match_ordered_alternates(m, s),
             StringMatchHandler::And(a, b) => a.matches(s) && b.matches(s),
             StringMatchHandler::Contains(value) => s.contains(value),
@@ -386,7 +435,7 @@ impl StringMatchHandler {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchFnHandler {
     pattern: String,
     pub(super) match_fn: MatchFn,
@@ -880,6 +929,24 @@ fn get_prefix(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
+pub fn contains_in_order(s: &str, contains: &[String]) -> bool {
+    if contains.len() == 1 {
+        return s.contains(&contains[0]);
+    }
+    contains_in_order_multi(s, contains)
+}
+
+fn contains_in_order_multi(s: &str, contains: &[String]) -> bool {
+    let mut offset = 0;
+    for substr in contains {
+        if let Some(pos) = s[offset..].find(substr) {
+            offset += pos + substr.len();
+        } else {
+            return false;
+        }
+    }
+    true
+}
 #[cfg(test)]
 mod tests {
     use super::*;
