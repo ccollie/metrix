@@ -9,8 +9,8 @@ use regex_syntax::{hir::{
 }, parse as parse_regex};
 use regex_syntax::hir::Dot;
 
-const AnyCharExceptLF: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyCharExceptLF));
-const AnyChar: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyChar));
+const ANY_CHAR_EXCEPT_LF: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyCharExceptLF));
+const ANY_CHAR: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyChar));
 
 // Beyond this, it's better to use regexp.
 const MAX_OR_VALUES: usize = 32;
@@ -130,7 +130,7 @@ pub fn is_empty_class(class: &Class) -> bool {
 }
 
 pub fn is_dot_question(sre: &Hir) -> bool {
-    sre.eq(&AnyChar)
+    sre.eq(&ANY_CHAR)
 }
 
 pub fn matches_any_char(hir: &Hir) -> bool {
@@ -324,8 +324,8 @@ mod tests {
     #[test]
     fn test_is_dot_star() {
         fn check(s: &str, expected: bool) {
-            let sre = super::build_hir(s).unwrap();
-            let got = super::is_dot_star(&sre);
+            let sre = build_hir(s).unwrap();
+            let got = is_dot_star(&sre);
             assert_eq!(
                 got, expected,
                 "unexpected is_dot_star for s={:?}; got {:?}; want {:?}",

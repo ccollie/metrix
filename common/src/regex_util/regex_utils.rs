@@ -455,10 +455,54 @@ fn get_quantifier(sre: &Hir) -> Option<Quantifier> {
     }
 }
 
+pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<String>, Vec<Hir>) {
+    let mut new_subs = subs.clone();
+
+    if new_subs.is_empty() {
+        return (String::new(), String::new(), Vec::new(), new_subs);
+    }
+
+    if is_start_anchor(&new_subs[0])  {
+        new_subs.remove(0);
+    }
+
+    if let Some(last) = new_subs.last() {
+        if is_end_anchor(&last) {
+            new_subs.pop();
+        }
+    }
+
+    let mut prefix = String::new();
+    let mut suffix = String::new();
+    let mut contains = Vec::new();
+
+    if let Some(first) = new_subs.first() {
+        if is_literal(&first) {
+            prefix = literal_to_string(&first);
+        }
+    }
+
+    if let Some(last) = new_subs.last() {
+        if is_literal(last) {
+            suffix = literal_to_string(&last);
+        }
+    }
+
+    for hir in new_subs.iter().skip(1).take(new_subs.len() - 2) {
+        if is_literal(hir) {
+            contains.push(literal_to_string(hir));
+        }
+    }
+
+    (prefix, suffix, contains, new_subs)
+}
 #[cfg(test)]
 mod test {
+    use regex_syntax::hir::HirKind;
     use super::remove_start_end_anchors;
     use crate::prelude::get_optimized_re_match_func;
+    use crate::prelude::regex_utils::optimize_concat_regex;
+    use crate::regex_util::hir_utils::build_hir;
 
     #[test]
     fn test_remove_start_end_anchors() {
@@ -504,6 +548,45 @@ mod test {
         let s = "foobaza";
         let result_expected = true;
         test_optimized_regex(expr, s, result_expected);
+    }
+
+    #[test]
+    fn test_optimize_concat_regex() {
+        let cases = vec![
+            ("foo(hello|bar)", "foo", "", vec![]),
+            ("foo(hello|bar)world", "foo", "world", vec![]),
+            ("foo.*", "foo", "", vec![]),
+            ("foo.*hello.*bar", "foo", "bar", vec!["hello"]),
+            (".*foo", "", "foo", vec![]),
+            ("^.*foo$", "", "foo", vec![]),
+            (".*foo.*", "", "", vec!["foo"]),
+            (".*foo.*bar.*", "", "", vec!["foo", "bar"]),
+            (".*(foo|bar).*", "", "", vec![]),
+            (".*[abc].*", "", "", vec![]),
+            (".*((?i)abc).*", "", "", vec![]),
+            (".*(?i:abc).*", "", "", vec![]),
+            ("(?i:abc).*", "", "", vec![]),
+            (".*(?i:abc)", "", "", vec![]),
+            (".*(?i:abc)def.*", "", "", vec!["def"]),
+            ("(?i).*(?-i:abc)def", "", "", vec!["abc"]),
+            (".*(?msU:abc).*", "", "", vec!["abc"]),
+            ("[aA]bc.*", "", "", vec!["bc"]),
+            ("^5..$", "5", "", vec![]),
+            ("^release.*", "release", "", vec![]),
+            ("^env-[0-9]+laio[1]?[^0-9].*", "env-", "", vec!["laio"]),
+        ];
+
+        for (regex, prefix, suffix, contains) in cases {
+            let parsed = build_hir(&format!("^(?s:{})$", regex)).unwrap();
+            if let HirKind::Concat(hirs) = &parsed.kind() {
+                let (actual_prefix, actual_suffix, actual_contains, _) = optimize_concat_regex(hirs);
+                assert_eq!(prefix, actual_prefix);
+                assert_eq!(suffix, actual_suffix);
+                assert_eq!(contains, actual_contains);
+            } else {
+                panic!("Expected HirKind::Concat, got {:?}", parsed.kind());
+            }
+        }
     }
 
     #[test]

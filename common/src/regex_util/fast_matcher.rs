@@ -11,10 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::optimize_concat_regex;
 use super::{contains_in_order, ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
-use crate::regex_util::hir_utils::{build_hir, is_dot_question, is_end_anchor, is_literal, is_start_anchor, literal_to_string, matches_any_char, matches_any_character_except_newline};
-use regex::Regex;
-use regex_syntax::hir::{Class, Hir, HirKind, Look, Repetition};
+use crate::regex_util::hir_utils::{build_hir, is_dot_question, is_end_anchor, is_start_anchor, literal_to_string, matches_any_char, matches_any_character_except_newline};
+use regex::{
+    Regex,
+    Error as RegexError,
+};
+use regex_syntax::hir::{
+    Class,
+    Hir,
+    HirKind,
+    Look,
+    Repetition
+};
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -69,24 +79,11 @@ impl FastRegexMatcher {
                 matcher.set_matches = matches;
             }
 
-            matcher.string_matcher = string_matcher_from_regex(&mut parsed);
+            matcher.string_matcher = string_matcher_from_hir(&mut parsed);
             matcher._optimized = matcher.is_optimized();
         }
 
         Ok(matcher)
-    }
-
-    fn compile_match_string_function(&self) -> Box<dyn Fn(String) -> bool + '_> {
-        if self.set_matches.is_empty()
-            && self.prefix.is_empty()
-            && self.suffix.is_empty()
-            && self.contains.is_empty()
-            && self.string_matcher.is_some()
-        {
-            return Box::new(|s| self.string_matcher.as_ref().unwrap().matches(&s));
-        }
-
-        Box::new(|s| { self.matches(&s) })
     }
 
     pub fn is_optimized(&self) -> bool {
@@ -158,47 +155,6 @@ fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, Vec<Str
     Some((multi, sub_matches))
 }
 
-pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<String>, Vec<Hir>) {
-    let mut new_subs = subs.clone();
-
-    if new_subs.is_empty() {
-        return (String::new(), String::new(), Vec::new(), new_subs);
-    }
-
-    if is_start_anchor(&new_subs[0])  {
-        new_subs.remove(0);
-    }
-
-    if let Some(last) = new_subs.last() {
-        if is_end_anchor(&last) {
-            new_subs.pop();
-        }
-    }
-
-    let mut prefix = String::new();
-    let mut suffix = String::new();
-    let mut contains = Vec::new();
-
-    if let Some(first) = new_subs.first() {
-        if is_literal(&first) {
-            prefix = literal_to_string(&first);
-        }
-    }
-
-    if let Some(last) = new_subs.last() {
-        if is_literal(last) {
-            suffix = literal_to_string(&last);
-        }
-    }
-
-    for hir in new_subs.iter().skip(1).take(new_subs.len() - 2) {
-        if is_literal(hir) {
-            contains.push(literal_to_string(hir));
-        }
-    }
-
-    (prefix, suffix, contains, new_subs)
-}
 
 pub(super) fn find_set_matches(hir: &mut Hir) -> Option<Vec<String>> {
     clear_begin_end_text(hir);
@@ -368,7 +324,12 @@ fn too_many_matches(matches: &[String], added: &[String]) -> bool {
 
 const EMPTY_SET_MATCHES: Vec<String> = Vec::new();
 
-pub fn string_matcher_from_regex(hir: &mut Hir) -> Option<StringMatchHandler> {
+pub fn string_matcher_from_regex(pattern: &str) -> Result<Option<StringMatchHandler>, RegexError> {
+    let mut hir = build_hir(pattern)?;
+    Ok(string_matcher_from_hir(&mut hir))
+}
+
+pub(super) fn string_matcher_from_hir(hir: &mut Hir) -> Option<StringMatchHandler> {
     clear_begin_end_text(hir);
     let matcher = string_matcher_from_regex_internal(hir);
     if let Some(matcher) = matcher {
@@ -678,7 +639,4 @@ fn find_equal_or_prefix_string_matchers(
         },
         _ => (),
     }
-}
-fn has_suffix(s: &str, suffix: &str) -> bool {
-    s.len() >= suffix.len() && s.ends_with(suffix)
 }

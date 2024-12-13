@@ -68,12 +68,12 @@ impl ZeroOrOneCharsMatcher {
 }
 
 #[derive(Clone, Debug, GetSize, Eq, PartialEq)]
-pub struct LiteralPrefixStringMatcher {
+pub struct LiteralPrefixMatcher {
     pub prefix: String,
     pub right: Option<Box<StringMatchHandler>>,
 }
 
-impl LiteralPrefixStringMatcher {
+impl LiteralPrefixMatcher {
     fn matches(&self, s: &str) -> bool {
         if !s.starts_with(&self.prefix) {
             return false;
@@ -87,12 +87,12 @@ impl LiteralPrefixStringMatcher {
 }
 
 #[derive(Clone, Debug, GetSize, Eq, PartialEq)]
-pub struct LiteralSuffixStringMatcher {
+pub struct LiteralSuffixMatcher {
     pub left: Option<Box<StringMatchHandler>>,
     pub suffix: String,
 }
 
-impl LiteralSuffixStringMatcher {
+impl LiteralSuffixMatcher {
     fn matches(&self, s: &str) -> bool {
         if !s.ends_with(&self.suffix) {
             return false;
@@ -307,8 +307,8 @@ pub enum StringMatchHandler {
     Literal(String),
     Contains(String),
     StartsWith(String),
-    Prefix(LiteralPrefixStringMatcher),
-    Suffix(LiteralSuffixStringMatcher),
+    Prefix(LiteralPrefixMatcher),
+    Suffix(LiteralSuffixMatcher),
     EndsWith(String),
     Regex(RegexMatcher),
     OrderedAlternates(Vec<String>),
@@ -385,14 +385,14 @@ impl StringMatchHandler {
     }
 
     pub fn prefix(value: String, right: Option<StringMatchHandler>) -> Self {
-        StringMatchHandler::Prefix(LiteralPrefixStringMatcher {
+        StringMatchHandler::Prefix(LiteralPrefixMatcher {
             prefix: value,
             right: right.map(Box::new),
         })
     }
 
     pub fn suffix(left: Option<StringMatchHandler>, value: String) -> Self {
-        StringMatchHandler::Suffix(LiteralSuffixStringMatcher {
+        StringMatchHandler::Suffix(LiteralSuffixMatcher {
             left: left.map(Box::new),
             suffix: value,
         })
@@ -528,9 +528,6 @@ const fn get_literal_match_fn(options: &StringMatchOptions) -> MatchFn {
     fn zero_or_one_contains_left_fn(needle: &str, haystack: &str) -> bool {
         let mut haystack = haystack;
         while let Some(pos) = haystack.find(needle) {
-            if pos >= 0 {
-                return true;
-            }
             haystack = &haystack[pos + 1..];
         }
         if let Some(pos) = haystack.find(needle) {
@@ -958,4 +955,53 @@ mod tests {
         assert!(handler.matches("ba"));
         assert!(!handler.matches("b"));
     }
+
+    #[test]
+    fn test_zero_or_one_character_string_matcher() {
+        // Test case: match newline
+        let matcher_match_nl = ZeroOrOneCharsMatcher { match_nl: true };
+        assert!(matcher_match_nl.matches(""));
+        assert!(matcher_match_nl.matches("x"));
+        assert!(matcher_match_nl.matches("\n"));
+        assert!(!matcher_match_nl.matches("xx"));
+        assert!(!matcher_match_nl.matches("\n\n"));
+
+        // Test case: do not match newline
+        let matcher_no_match_nl = ZeroOrOneCharsMatcher { match_nl: false };
+        assert!(matcher_no_match_nl.matches(""));
+        assert!(matcher_no_match_nl.matches("x"));
+        assert!(!matcher_no_match_nl.matches("\n"));
+        assert!(!matcher_no_match_nl.matches("xx"));
+        assert!(!matcher_no_match_nl.matches("\n\n"));
+
+        // Test case: unicode
+        let emoji1 = "😀"; // 1 rune
+        let emoji2 = "❤️"; // 2 runes
+        assert_eq!(emoji1.chars().count(), 1);
+        assert_eq!(emoji2.chars().count(), 2);
+
+        let matcher_unicode = ZeroOrOneCharsMatcher { match_nl: true };
+        assert!(matcher_unicode.matches(emoji1));
+        assert!(!matcher_unicode.matches(emoji2));
+        assert!(!matcher_unicode.matches(&format!("{}{}", emoji1, emoji1)));
+        assert!(!matcher_unicode.matches(&format!("x{}", emoji1)));
+        assert!(!matcher_unicode.matches(&format!("{}{}", emoji1, "x")));
+        assert!(!matcher_unicode.matches(&format!("{}{}", emoji1, emoji2)));
+
+        // Test case: invalid unicode
+        let re = regex::Regex::new(r"^.?$").unwrap();
+        let matcher_invalid_unicode = ZeroOrOneCharsMatcher { match_nl: true };
+
+        let require_matches = |s: &str, expected: bool| {
+            assert_eq!(matcher_invalid_unicode.matches(s), expected, "String: {}", s);
+            assert_eq!(re.is_match(s), matcher_invalid_unicode.matches(s), "String: {}", s);
+        };
+
+        require_matches("\u{FF}", true);
+        let value = "x\u{FF}";
+        require_matches(value, false);
+        require_matches("x\u{FF}x", false);
+        require_matches("\u{FF}\u{FE}", false);
+    }
+
 }
