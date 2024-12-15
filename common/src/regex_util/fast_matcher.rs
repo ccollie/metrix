@@ -13,7 +13,15 @@
 
 use super::optimize_concat_regex;
 use super::{contains_in_order, ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
-use crate::regex_util::hir_utils::{build_hir, is_dot_question, is_end_anchor, is_start_anchor, literal_to_string, matches_any_char, matches_any_character_except_newline};
+use crate::regex_util::hir_utils::{
+    build_hir,
+    is_dot_question,
+    is_end_anchor,
+    is_start_anchor,
+    literal_to_string,
+    matches_any_char,
+    matches_any_character_except_newline
+};
 use regex::{
     Regex,
     Error as RegexError,

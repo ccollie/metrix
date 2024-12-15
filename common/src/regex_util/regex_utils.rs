@@ -456,19 +456,25 @@ fn get_quantifier(sre: &Hir) -> Option<Quantifier> {
 }
 
 pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<String>, Vec<Hir>) {
-    let mut new_subs = subs.clone();
-
-    if new_subs.is_empty() {
-        return (String::new(), String::new(), Vec::new(), new_subs);
+    if subs.is_empty() {
+        return (String::new(), String::new(), Vec::new(), Vec::new());
     }
 
-    if is_start_anchor(&new_subs[0])  {
-        new_subs.remove(0);
+    let mut new_subs = subs.iter().cloned().collect::<Vec<_>>();
+
+    while let Some(first) = new_subs.first() {
+        if is_start_anchor(first) {
+            new_subs.remove(0);
+        } else {
+            break;
+        }
     }
 
-    if let Some(last) = new_subs.last() {
-        if is_end_anchor(&last) {
+    while let Some(last) = new_subs.last() {
+        if is_end_anchor(last) {
             new_subs.pop();
+        } else {
+            break;
         }
     }
 
@@ -476,19 +482,28 @@ pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<Str
     let mut suffix = String::new();
     let mut contains = Vec::new();
 
+    let mut start = 0;
+    let mut end = new_subs.len();
+
     if let Some(first) = new_subs.first() {
-        if is_literal(&first) {
-            prefix = literal_to_string(&first);
+        if is_literal(first) {
+            prefix = literal_to_string(first);
+            start = 1;
         }
+    }
+
+    if !prefix.is_empty() && new_subs.len()  == 1 {
+        return (prefix, suffix, contains, new_subs);
     }
 
     if let Some(last) = new_subs.last() {
         if is_literal(last) {
-            suffix = literal_to_string(&last);
+            suffix = literal_to_string(last);
+            end -= 1;
         }
     }
 
-    for hir in new_subs.iter().skip(1).take(new_subs.len() - 2) {
+    for hir in &new_subs[start..end] {
         if is_literal(hir) {
             contains.push(literal_to_string(hir));
         }
@@ -496,6 +511,7 @@ pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<Str
 
     (prefix, suffix, contains, new_subs)
 }
+
 #[cfg(test)]
 mod test {
     use regex_syntax::hir::HirKind;
@@ -529,7 +545,7 @@ mod test {
     #[test]
     fn test_regex_failure() {
         let s = "a(";
-        let got = super::build_hir(s);
+        let got = build_hir(s);
         assert!(got.is_err());
     }
 
@@ -580,8 +596,8 @@ mod test {
             let parsed = build_hir(&format!("^(?s:{})$", regex)).unwrap();
             if let HirKind::Concat(hirs) = &parsed.kind() {
                 let (actual_prefix, actual_suffix, actual_contains, _) = optimize_concat_regex(hirs);
-                assert_eq!(prefix, actual_prefix);
-                assert_eq!(suffix, actual_suffix);
+                assert_eq!(prefix, actual_prefix, "unexpected prefix for regex={regex}. Expected {prefix}, got {actual_prefix}");
+                assert_eq!(suffix, actual_suffix, "unexpected suffix for regex={regex}. Expected {suffix}, got {actual_suffix}");
                 assert_eq!(contains, actual_contains);
             } else {
                 panic!("Expected HirKind::Concat, got {:?}", parsed.kind());
