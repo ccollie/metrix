@@ -19,7 +19,6 @@ pub const MILLISECONDS: i64 = 1_000;
 pub const MICROSECONDS: i64 = 1_000_000;
 /// Number of nanoseconds in a second
 pub const NANOSECONDS: i64 = 1_000_000_000;
-
 const DAYS_IN_MONTH: [u8; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 pub type Time = Instant;

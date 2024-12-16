@@ -136,7 +136,7 @@ impl FastRegexMatcher {
     }
 }
 
-fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, Vec<String>)> {
+pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, Vec<String>)> {
     if s.is_empty() {
         return Some((StringMatchHandler::Empty, Vec::new()));
     }

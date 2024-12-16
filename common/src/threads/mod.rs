@@ -1,53 +1,5 @@
 use chili::Scope;
 
-macro_rules! join_all {
-    ($e1:expr, $e2:expr) => {
-        Scope::global().join($e1, $e2)
-    };
-    ($e1:expr, $e2:expr, $e3:expr) => {
-        let (x, (y, z)) = Scope::global().join($e1, |s| s.join($e2, $e3));
-        (x, y, z)
-    };
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr) => {{
-        let ((a, b), (c, d)) = Scope::global()
-            .join(|s| s.join($e1, $e2), |s| s.join($e3, $e4));
-        (a, b, c, d)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr) => {{
-        let ((a, b, c, d), e) = Scope::global().join(|| join_all!($e1, $e2, $e3, $e4), $e5);
-        (a, b, c, d, e)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr, $e6:expr) => {{
-        use chili::Scope;
-        let ((a, b, c), (d, e, f)) = Scope::global().join(|| join_all!($e1, $e2, $e3), || join_all!($e4, $e5, $e6));
-        (a, b, c, d, e, f)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr, $e6:expr, $e7:expr) => {{
-        use chili::Scope;
-        let ((a, b, c, d), (e, f, g)) = Scope::global()
-            .join(|| join_all!($e1, $e2, $e3, $e4), join_all!($e5, $e6, $e7));
-        (a, b, c, d, e, f, g)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr, $e6:expr, $e7:expr, $e8:expr) => {{
-        use chili::Scope;
-        let ((a, b, c, d), (e, f, g, h)) = Scope::global()
-            .join(|| join_all!($e1, $e2, $e3, $e4), join_all!($e5, $e6, $e7, $e8));
-        (a, b, c, d, e, f, g, h)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr, $e6:expr, $e7:expr, $e8:expr, $e9: expr) => {{
-        use chili::Scope;
-        let ((a, b, c, d, e), (f, g, h, i)) = Scope::global()
-            .join(|| join_all!($e1, $e2, $e3, $e4, $e5), join_all!($e6, $e7, $e8, $e9));
-        (a, b, c, d, e, f, g, h, i)
-    }};
-    ($e1:expr, $e2:expr, $e3:expr, $e4:expr, $e5:expr, $e6:expr, $e7:expr, $e8:expr, $e9: expr, $e10:expr) => {{
-        use chili::Scope;
-        let ((a, b, c, d, e), (f, g, h, i, j)) = Scope::global()
-            .join(|| join_all!($e1, $e2, $e3, $e4, $e5), join_all!($e6, $e7, $e8, $e9, $e10));
-        (a, b, c, d, e, f, g, h, i, j)
-    }};
-}
-
 pub fn par_join_slice<T: Send + Sync, F, R>(slice: &[T], f: F) -> Vec<R>
 where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
 {

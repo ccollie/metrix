@@ -1,10 +1,9 @@
-use std::mem::size_of;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use super::StringMatchHandler;
+use crate::prelude::{get_optimized_re_match_func, EMPTY_MATCH_COST};
 use get_size::GetSize;
 use lru_time_cache::LruCache;
-use crate::prelude::{get_optimized_re_match_func, EMPTY_MATCH_COST};
-use super::StringMatchHandler;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
 // todo: read from env
 static USE_REGEXP_CACHE: LazyLock<bool> = LazyLock::new(|| false);
@@ -82,39 +81,6 @@ impl RegexpCache {
     }
 }
 
-fn matcher_size_bytes(m: &StringMatchHandler) -> usize {
-    use StringMatchHandler::*;
-    let base = size_of::<StringMatchHandler>();
-    let extra = match m {
-        Alternates(alts) => alts.get_size(),
-        OrderedAlternates(alts) => {
-            alts.get_size()
-        },
-        And(first, second) => {
-            matcher_size_bytes(first) + matcher_size_bytes(second)
-        }
-        MatchAll | MatchNone | Empty  => 0,
-        NotEmpty(m) => 1,
-        Literal(s) |
-        Contains(s) |
-        StartsWith(s) |
-        EndsWith(s) => s.get_size(),
-        Regex(fr) => fr.get_size(),
-        MatchFn(_) => {
-            size_of::<fn(&str, &str) -> bool>()
-        }
-        AnyWithoutNewline => 1,
-        EqualsMulti(m) => m.get_size(),
-        EqualMultiMap(m) => m.get_size(),
-        ContainsMulti(m) => m.get_size(),
-        Prefix(p) => size_of::<String>() + p.get_size(),
-        Suffix(s) => s.get_size(),
-        Or(m) => m.get_size(),
-        ZeroOrOneChars(m) => m.get_size()
-    };
-    base + extra
-}
-
 pub fn compile_regexp(expr: &str) -> Result<(StringMatchHandler, usize), String> {
     if *USE_REGEXP_CACHE {
         let cached = get_regexp_from_cache(expr)?;
@@ -165,7 +131,7 @@ fn compile_regexp_ex(expr: &str) -> Result<RegexpCacheValue, String> {
             })?;
 
     // heuristic for rcv in-memory size
-    let size_bytes = matcher_size_bytes(&matcher);
+    let size_bytes = matcher.get_size();
 
     // Put the re_match in the cache.
     Ok(RegexpCacheValue {
@@ -185,7 +151,7 @@ pub fn get_regexp_from_cache(expr: &str) -> Result<Arc<RegexpCacheValue>, String
     // Put the re_match in the cache.
     let (re_match, re_cost) = compile_regexp_anchored(expr)?;
     // heuristic for rcv in-memory size
-    let size_bytes = matcher_size_bytes(&re_match);
+    let size_bytes = re_match.get_size();
 
     let rcv = RegexpCacheValue {
         re_match,
