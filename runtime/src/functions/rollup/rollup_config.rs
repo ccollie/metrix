@@ -344,8 +344,12 @@ impl RollupConfig {
         self.validate()?;
         dst_values.reserve(self.timestamps.len());
 
-        let scrape_interval = get_scrape_interval(timestamps);
-        let mut max_prev_interval = get_max_prev_interval(scrape_interval);
+        // Use step as the scrape interval for instant queries (when start == end).
+        let mut max_prev_interval = self.step;
+        if self.start < self.end {
+            let scrape_interval = get_scrape_interval(timestamps);
+            max_prev_interval = get_max_prev_interval(scrape_interval);
+        }
         if !self.lookback_delta.is_zero() && max_prev_interval > self.lookback_delta {
             max_prev_interval = self.lookback_delta;
         }
