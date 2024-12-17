@@ -291,6 +291,7 @@ pub struct RegexMatcher {
     pub regex: Regex,
     pub prefix: String,
     pub suffix: String,
+    pub set_matches: Vec<String>,
     pub contains: Vec<String>,
 }
 
@@ -307,6 +308,7 @@ impl PartialEq for RegexMatcher {
         self.regex.as_str() == other.regex.as_str() &&
             self.prefix == other.prefix &&
             self.suffix == other.suffix &&
+            self.set_matches == other.set_matches &&
             self.contains == other.contains
     }
 }
@@ -314,16 +316,20 @@ impl PartialEq for RegexMatcher {
 impl Eq for RegexMatcher {}
 
 impl RegexMatcher {
-    fn new(regex: Regex, prefix: String, suffix: String) -> Self {
+    pub(crate) fn new(regex: Regex, prefix: String, suffix: String) -> Self {
         Self {
             regex,
             prefix,
             suffix,
-            contains: Vec::new(),
+            set_matches: vec![],
+            contains: vec![],
         }
     }
 
     fn matches(&self, s: &str) -> bool {
+        if !self.set_matches.is_empty() && !self.set_matches.iter().any(|x| x.as_str() == s) {
+            return false;
+        }
         if !self.prefix.is_empty() && !s.starts_with(&self.prefix) {
             return false;
         }

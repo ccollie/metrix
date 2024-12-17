@@ -2,9 +2,9 @@ use super::hir_utils::*;
 use super::match_handlers::{StringMatchHandler, StringMatchOptions};
 use crate::regex_util::{EqualMultiStringMapMatcher, Quantifier};
 use regex::{Error as RegexError, Regex};
-use regex_syntax::hir::{Class, Hir, HirKind, Look};
+use regex_syntax::hir::{Class, Hir, HirKind, Look, Repetition};
 use regex_syntax::parse as parse_regex;
-
+use crate::prelude::{RegexMatcher, RepetitionMatcher};
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -74,14 +74,13 @@ pub const FN_MATCH_COST: usize = 20;
 ///
 /// It also returns literal suffix from the expr.
 pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, usize), RegexError> {
-    fn create_re_match_fn(expr: &str) -> Result<(StringMatchHandler, usize), RegexError> {
-        let re = Regex::new(expr)?;
-        let re_match = StringMatchHandler::fast_regex(re);
+    fn create_re_match_fn(expr: &str, sre: &Hir) -> Result<(StringMatchHandler, usize), RegexError> {
+        let re_match = handle_regex(expr, sre)?;
         Ok((re_match, RE_MATCH_COST))
     }
 
     if expr.is_empty() {
-        return Ok((StringMatchHandler::MatchAll, FULL_MATCH_COST))
+        return Ok((StringMatchHandler::Empty, EMPTY_MATCH_COST))
     }
 
     if expr == ".*" {
@@ -145,7 +144,7 @@ pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, us
     }
 
     // Fall back to re_match_fast.
-    create_re_match_fn(expr)
+    create_re_match_fn(expr, &sre)
 }
 
 fn get_optimized_re_match_func_ext(
@@ -204,6 +203,14 @@ fn get_optimized_re_match_func_ext(
     }
 
     match sre.kind() {
+        HirKind::Empty => Ok(Some((StringMatchHandler::Empty, EMPTY_MATCH_COST))),
+        HirKind::Repetition(rep) => {
+            if let Some(matcher) = get_repetition_matcher(sre, rep) {
+                let cost = calc_match_cost(&matcher);
+                return Ok(Some((matcher, cost)));
+            }
+            Ok(None)
+        }
         HirKind::Alternation(alts) => {
             let len = alts.len();
 
@@ -431,6 +438,55 @@ fn get_optimized_re_match_func_ext(
             Ok(None)
         }
     }
+}
+
+fn get_repetition_matcher(hir: &Hir, rep: &Repetition) -> Option<StringMatchHandler> {
+    fn validate_repetition(rep: &Repetition) -> bool {
+        // if re.sub.Op != syntax.OpAnyChar && re.sub.Op != syntax.OpAnyCharNotNL {
+        //     return nil
+        // }
+        matches_any_char(&rep.sub) || matches_any_character_except_newline(&rep.sub)
+    }
+
+    // .?
+    if is_dot_question(hir) {
+        let match_nl = matches_any_char(&rep.sub);
+        Some(StringMatchHandler::zero_or_one_chars(match_nl))
+    } else if rep_is_dot_plus(rep) {
+        let matches_any = matches_any_char(&rep.sub);
+        let matches_non_newline = matches_any_character_except_newline(&rep.sub);
+        if !matches_any && !matches_non_newline {
+            return None;
+        }
+        Some(StringMatchHandler::not_empty(matches_any))
+    } else if rep_is_dot_star(rep) {
+        if !validate_repetition(rep) {
+            return None;
+        } else if matches_any_char(&rep.sub) {
+            // If the newline is valid, then this matcher literally match any string (even empty).
+            Some(StringMatchHandler::MatchAll)
+        } else {
+            // Any string is fine (including an empty one), as far as it doesn't contain any newline.
+            Some(StringMatchHandler::AnyWithoutNewline)
+        }
+    } else if is_literal(&rep.sub) {
+        let literal = literal_to_string(&rep.sub);
+        let repetition = RepetitionMatcher::new(literal, rep.min, rep.max);
+        return Some(StringMatchHandler::Repetition(repetition));
+    } else {
+        None
+    }
+}
+
+fn rep_is_dot_star(rep: &Repetition) -> bool {
+    rep.min == 0 && rep.max.is_none() && rep.greedy
+    // && !sre.properties().is_literal()
+}
+
+fn rep_is_dot_plus(repetition: &Repetition) -> bool {
+    repetition.min == 1 &&
+        repetition.max.is_none()
+    // rep.min == 1 && rep.max() // && rep.greedy
 }
 
 fn literal_to_string(sre: &Hir) -> String {
@@ -719,6 +775,43 @@ pub(super) fn clear_begin_end_text(hir: &mut Hir) {
         _ => return,
     }
 }
+
+fn handle_regex(expr: &str, hir: &Hir) -> Result<StringMatchHandler, RegexError> {
+    // todo: ensure anchor
+    let regex = Regex::new(&format!("^(?s:{expr})$"))?;
+
+    let mut matches = Vec::new();
+
+    if let HirKind::Concat(hirs) = hir.kind() {
+        let (prefix, suffix, contains, subs) = optimize_concat_regex(&hirs);
+        let sub = Hir::concat(subs);
+        if let Some(sub_matches) = find_set_matches_internal(&sub, "") {
+            matches = sub_matches;
+        }
+        let matcher = RegexMatcher{
+            regex,
+            prefix,
+            suffix,
+            contains,
+            set_matches: matches
+        };
+        Ok(StringMatchHandler::Regex(matcher))
+    } else {
+        if let Some(sub_matches) = find_set_matches_internal(hir, "") {
+            matches = sub_matches;
+        }
+        let matcher = RegexMatcher{
+            regex,
+            prefix: "".to_string(),
+            suffix: "".to_string(),
+            contains: Vec::new(),
+            set_matches: matches
+        };
+        Ok(StringMatchHandler::Regex(matcher))
+    }
+
+}
+
 
 fn calc_match_cost(matcher: &StringMatchHandler) -> usize {
     match matcher {
