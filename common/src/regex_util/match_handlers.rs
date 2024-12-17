@@ -7,7 +7,7 @@ const MAX_SET_MATCHES: usize = 256;
 
 pub type MatchFn = fn(pattern: &str, candidate: &str) -> bool;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Quantifier {
     ZeroOrOne, // ?
     ZeroOrMore, // *
@@ -221,7 +221,7 @@ impl EqualMultiStringMapMatcher {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AlternatesMatcher {
-    alts: Vec<String>,
+    pub alts: Vec<String>,
     match_fn: MatchFn,
 }
 
@@ -240,6 +240,49 @@ impl AlternatesMatcher {
 
     pub fn matches(&self, s: &str) -> bool {
         self.alts.iter().any(|alt| (self.match_fn)(alt, s))
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, GetSize)]
+pub struct RepetitionMatcher {
+    pub sub: String,
+    pub min: u32,
+    pub max: Option<u32>,
+}
+
+impl RepetitionMatcher {
+    pub fn new(sub: String, min: u32, max: Option<u32>) -> Self {
+        Self {
+            sub,
+            min,
+            max
+        }
+    }
+
+    pub fn matches(&self, s: &str) -> bool {
+        if self.min == 0 && s.is_empty(){
+            return true;
+        }
+        if self.min == 1 && s == self.sub {
+            return true;
+        }
+        if let Some(max) = &self.max {
+            let mut cursor = &s[..];
+            let mut i = 0;
+            while cursor.len() >= s.len() {
+                if !cursor.starts_with(&self.sub) {
+                    break;
+                }
+                cursor = &cursor[self.sub.len()..];
+                i += 1;
+
+                if i > *max {
+                    return false;
+                }
+            }
+            return i >= self.min && i <= *max
+        }
+        true
     }
 }
 
@@ -311,6 +354,7 @@ pub enum StringMatchHandler {
     Suffix(LiteralSuffixMatcher),
     EndsWith(String),
     Regex(RegexMatcher),
+    Repetition(RepetitionMatcher),
     OrderedAlternates(Vec<String>),
     MatchFn(MatchFnHandler),
     Alternates(AlternatesMatcher),
@@ -430,6 +474,7 @@ impl StringMatchHandler {
             StringMatchHandler::Suffix(m) => m.matches(s),
             StringMatchHandler::AnyWithoutNewline => !s.contains('\n'),
             StringMatchHandler::EqualMultiMap(m) => m.matches(s),
+            StringMatchHandler::Repetition(m) => m.matches(s),
         }
     }
 }
@@ -974,7 +1019,7 @@ mod tests {
         assert!(!matcher_no_match_nl.matches("xx"));
         assert!(!matcher_no_match_nl.matches("\n\n"));
 
-        // Test case: unicode
+        // Test case: Unicode
         let emoji1 = "😀"; // 1 rune
         let emoji2 = "❤️"; // 2 runes
         assert_eq!(emoji1.chars().count(), 1);
@@ -988,8 +1033,8 @@ mod tests {
         assert!(!matcher_unicode.matches(&format!("{}{}", emoji1, "x")));
         assert!(!matcher_unicode.matches(&format!("{}{}", emoji1, emoji2)));
 
-        // Test case: invalid unicode
-        let re = regex::Regex::new(r"^.?$").unwrap();
+        // Test case: invalid Unicode
+        let re = Regex::new(r"^.?$").unwrap();
         let matcher_invalid_unicode = ZeroOrOneCharsMatcher { match_nl: true };
 
         let require_matches = |s: &str, expected: bool| {

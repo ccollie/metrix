@@ -16,9 +16,10 @@ fn generate_random_values() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regex_util::fast_matcher::{find_set_matches, string_matcher_from_hir, FastRegexMatcher};
+    use crate::regex_util::fast_matcher::{string_matcher_from_hir, FastRegexMatcher};
     use crate::regex_util::hir_utils::build_hir;
     use crate::regex_util::{string_matcher_from_regex, ContainsMultiStringMatcher, StringMatchHandler};
+    use crate::regex_util::regex_utils::find_set_matches;
 
     #[test]
     fn test_fast_regex_matcher_match_string() {
@@ -276,7 +277,7 @@ mod tests {
               ("(.+)/(gateway|cortex-gw|cortex-gw-internal)", Some(
                   contains_multi(&["/gateway", "/cortex-gw", "/cortex-gw-internal"], Some(not_empty(true)), Some(true_matcher()))
               )),
-               // we don't support case insensitive matching for contains.
+               // we don't support case-insensitive matching for contains.
                // This is because there's no strings.IndexOfFold function.
                // We can revisit later if this is really popular by using strings.ToUpper.
                ("^(.*)((?i)foo|foobar)(.*)$", None),
@@ -294,13 +295,13 @@ mod tests {
                // This one is not supported because  `stringMatcherFromRegexp` is not reentrant for syntax.OpConcat.
                // It would make the code too complex to handle it.
                ("(.+)/(foo.*|bar$)", None),
-               // Case sensitive alternate with same literal prefix and .* suffix.
+               // Case-sensitive alternate with same literal prefix and .* suffix.
                ("(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)", Some(
                    prefix("xyz-016a-ixb-",
                           Some(or_matcher(&[prefix("dp", Some(true_matcher())), prefix("op", Some(true_matcher()))]))
                    )
                )),
-                // Case insensitive alternate with same literal prefix and .* suffix.
+                // Case-insensitive alternate with same literal prefix and .* suffix.
                 ("(?i:(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*))",
                  Some(
                      prefix("XYZ-016A-IXB-",
@@ -355,7 +356,7 @@ mod tests {
         }
 
         let test_cases: Vec<TestConfig> = vec![
-            // Case sensitive
+            // Case-sensitive
             TestConfig {
                 pattern: "(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
                 expected_literal_prefix_matchers: 3,
@@ -375,7 +376,7 @@ mod tests {
                     "dp".to_string(),
                 ],
             },
-            // Case insensitive
+            // Case-insensitive
             TestConfig {
                 pattern: "(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
                 expected_literal_prefix_matchers: 3,
@@ -413,7 +414,7 @@ mod tests {
                     "xyz-bbb-111".to_string(),
                 ],
             },
-            // Nested literal prefixes, case insensitive
+            // Nested literal prefixes, case-insensitive
             TestConfig {
                 pattern: "(?i)(xyz-(aaa-(111.*)|bbb-(222.*)))|(xyz-(aaa-(333.*)|bbb-(444.*)))".to_string(),
                 expected_literal_prefix_matchers: 10,
@@ -526,7 +527,7 @@ mod tests {
                     "XYZ-016a-ixb-dp", "yz-016a-ixb-dp", "XYZ-016a-ixb-op", "xyz-016a-ixb-o", "xyz", "dp"
                 ],
             },
-            // Case insensitive.
+            // Case-insensitive.
             TestCase {
                 pattern: "(?i)(.*xyz-016a-ixb-dp|.*xyz-016a-ixb-op)",
                 expected_literal_suffix_matchers: 2,
@@ -542,7 +543,7 @@ mod tests {
                     "yz-016a-ixb-dp", "xyz-016a-ixb-o", "xyz", "dp"
                 ],
             },
-            // Nested literal suffixes, case sensitive.
+            // Nested literal suffixes, case-sensitive.
             TestCase {
                 pattern: "(.*aaa|.*bbb(.*ccc|.*ddd))",
                 expected_literal_suffix_matchers: 3,

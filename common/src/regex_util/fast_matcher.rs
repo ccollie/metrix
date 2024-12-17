@@ -11,28 +11,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::optimize_concat_regex;
-use super::{contains_in_order, ContainsMultiStringMatcher, EqualMultiStringMapMatcher, StringMatchHandler};
-use crate::regex_util::hir_utils::{
+use super::match_handlers::{
+    contains_in_order,
+    ContainsMultiStringMatcher,
+    EqualMultiStringMapMatcher,
+    RepetitionMatcher,
+    StringMatchHandler
+};
+use super::hir_utils::{
     build_hir,
     is_dot_question,
     is_end_anchor,
+    is_literal,
     is_start_anchor,
     literal_to_string,
     matches_any_char,
     matches_any_character_except_newline
 };
+use super::regex_utils::{
+    clear_begin_end_text,
+    find_set_matches,
+    find_set_matches_internal,
+    optimize_concat_regex,
+    optimize_alternating_literals
+};
 use regex::{
-    Regex,
     Error as RegexError,
+    Regex,
 };
 use regex_syntax::hir::{
-    Class,
     Hir,
     HirKind,
-    Look,
     Repetition
 };
+
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -67,9 +79,18 @@ impl FastRegexMatcher {
             _optimized: false,
         };
 
-        if let Some((string_matcher, set_matches)) = optimize_alternating_literals(v) {
-            matcher.string_matcher = Some(string_matcher);
+        if let Some(string_matcher) = optimize_alternating_literals(v) {
+            let set_matches = match &string_matcher {
+                StringMatchHandler::EqualsMulti(values) => {
+                    values.clone()
+                },
+                StringMatchHandler::Literal(lit) => {
+                    vec![lit.clone()]
+                },
+                _ => vec![],
+            };
             matcher.set_matches = set_matches;
+            matcher.string_matcher = Some(string_matcher);
         } else {
             let mut parsed = build_hir(v)?;
             let re = Regex::new(&format!("^(?s:{v})$"))?;
@@ -136,196 +157,6 @@ impl FastRegexMatcher {
     }
 }
 
-pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, Vec<String>)> {
-    if s.is_empty() {
-        return Some((StringMatchHandler::Empty, Vec::new()));
-    }
-
-    let estimated_alternates = s.matches('|').count() + 1;
-
-    if estimated_alternates == 1 {
-        if regex::escape(s) == s {
-            return Some((StringMatchHandler::Literal(s.to_string()), vec![s.to_string()]));
-        }
-        return None;
-    }
-
-    let mut sub_matches = Vec::with_capacity(estimated_alternates);
-    for sub_match in s.split('|') {
-        if regex::escape(sub_match) != sub_match {
-            return None;
-        }
-        sub_matches.push(sub_match.to_string());
-    }
-
-
-    let multi = StringMatchHandler::EqualsMulti(sub_matches.clone()); // todo: avoid clone below
-    Some((multi, sub_matches))
-}
-
-
-pub(super) fn find_set_matches(hir: &mut Hir) -> Option<Vec<String>> {
-    clear_begin_end_text(hir);
-    find_set_matches_internal(hir, "")
-}
-
-fn find_set_matches_internal(hir: &Hir, base: &str) -> Option<Vec<String>> {
-    match hir.kind() {
-        HirKind::Look(Look::Start) | HirKind::Look(Look::End) => None,
-        HirKind::Literal(_) => {
-            let literal = format!("{}{}", base, literal_to_string(hir));
-            Some(vec![literal])
-        },
-        HirKind::Empty => {
-            if !base.is_empty() {
-                Some(vec![base.to_string()])
-            } else {
-                None
-            }
-        }
-        HirKind::Alternation(_) => find_set_matches_from_alternate(hir, base),
-        HirKind::Capture(hir) => {
-            find_set_matches_internal(&hir.sub, base)
-        }
-        HirKind::Concat(_) => find_set_matches_from_concat(hir, base),
-        HirKind::Class(class) => {
-            match class {
-                Class::Unicode(ranges) => {
-                    let total_set = ranges.iter()
-                        .map(|r| 1 + (r.end() as usize - r.start() as usize))
-                        .sum::<usize>();
-
-                    if total_set > MAX_SET_MATCHES {
-                        return None;
-                    }
-
-                    let mut matches = Vec::new();
-                    for urange in ranges.iter().flat_map(|r| r.start()..=r.end()) {
-                        matches.push(format!("{base}{urange}"));
-                    }
-
-                    Some(matches)
-                }
-                Class::Bytes(ranges) => {
-                    let total_set = ranges.iter()
-                        .map(|r| 1 + (r.end() as usize - r.start() as usize))
-                        .sum::<usize>();
-
-                    if total_set > MAX_SET_MATCHES {
-                        return None;
-                    }
-
-                    let mut matches = Vec::new();
-
-                    for ch in ranges.iter().flat_map(|r| r.start()..=r.end()) {
-                        matches.push(format!("{base}{ch}"));
-                    }
-
-                    Some(matches)
-                }
-            }
-        }
-        _ => None,
-    }
-}
-
-fn find_set_matches_from_concat(hir: &Hir, base: &str) -> Option<Vec<String>> {
-
-    if let HirKind::Concat(hirs) = hir.kind() {
-        let mut matches = vec![base.to_string()];
-
-        for hir in hirs.iter() {
-            let mut new_matches = Vec::new();
-            for b in &matches {
-                if let Some(m) = find_set_matches_internal(hir, b) {
-                    if m.is_empty() {
-                        return None;
-                    }
-                    if matches.len() + m.len() > MAX_SET_MATCHES {
-                        return None;
-                    }
-                    new_matches.extend(m);
-                } else {
-                    return None;
-                }
-            }
-            matches = new_matches;
-        }
-
-        return Some(matches)
-    }
-
-    None
-}
-
-fn find_set_matches_from_alternate(hir: &Hir, base: &str) -> Option<Vec<String>> {
-    let mut matches = Vec::new();
-
-    match hir.kind() {
-        HirKind::Alternation(hirs) => {
-            for sub in hirs.iter() {
-                if let Some(found) = find_set_matches_internal(sub, base) {
-                    if found.is_empty() {
-                        return None;
-                    }
-                    if matches.len() + found.len() > MAX_SET_MATCHES {
-                        return None;
-                    }
-                    matches.extend(found);
-                } else {
-                    return None;
-                }
-            }
-        },
-        _ => return None,
-    }
-
-    Some(matches)
-}
-
-
-fn clear_begin_end_text(hir: &mut Hir) {
-
-    fn handle_concat(hirs: &Vec<Hir>) -> Option<Hir> {
-        if !hirs.is_empty() {
-            let mut start: usize = 0;
-            let mut end: usize = hirs.len() - 1;
-
-            if is_start_anchor(&hirs[0]) {
-                start += 1;
-            }
-
-            if is_end_anchor(&hirs[end]) {
-                end -= 1;
-            }
-            let slice = &hirs[start..=end];
-            if slice.is_empty() {
-                return Some(Hir::empty());
-            }
-            let hirs: Vec<Hir> = slice.iter().cloned().collect();
-            return Some(Hir::concat(hirs))
-        }
-        None
-    }
-
-    match hir.kind() {
-        HirKind::Alternation(_) => return,
-        HirKind::Concat(hirs) => {
-            if let Some(modified) = handle_concat(hirs) {
-                *hir = modified;
-            }
-        },
-        HirKind::Capture(capture) => {
-            if let HirKind::Concat(hirs) = capture.sub.kind() {
-                if let Some(modified) = handle_concat(hirs) {
-                    *hir = modified;
-                }
-            }
-        },
-        _ => return,
-    }
-}
-
 fn too_many_matches(matches: &[String], added: &[String]) -> bool {
     matches.len() + added.len() > MAX_SET_MATCHES
 }
@@ -374,7 +205,7 @@ fn is_quantifier(hir: &Hir) -> bool {
 
 fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
     // Correctly handling anchors inside a regex is tricky,
-    // so in this case we fallback to the regex engine.
+    // so in this case we fall back to the regex engine.
     if is_start_anchor(hir) || is_end_anchor(hir) {
         return None;
     }
@@ -392,18 +223,16 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
         }
         HirKind::Repetition(rep) => {
             // .?
-            if rep_is_zero_or_one(rep) {
-                if !is_dot_question(&rep.sub) && !validate_repetition(rep) {
-                    return None;
-                }
+            if is_dot_question(hir) {
                 let match_nl = matches_any_char(&rep.sub);
                 Some(StringMatchHandler::zero_or_one_chars(match_nl))
             } else if rep_is_dot_plus(rep) {
-                if !validate_repetition(rep) {
+                let matches_any = matches_any_char(&rep.sub);
+                let matches_non_newline = matches_any_character_except_newline(&rep.sub);
+                if !matches_any && !matches_non_newline {
                     return None;
                 }
-                let match_nl = matches_any_char(&rep.sub);
-                Some(StringMatchHandler::not_empty(match_nl))
+                Some(StringMatchHandler::not_empty(matches_any))
             } else if rep_is_dot_star(rep) {
                 if !validate_repetition(rep) {
                     return None;
@@ -415,6 +244,10 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
                     // Any string is fine (including an empty one), as far as it doesn't contain any newline.
                     return Some(StringMatchHandler::AnyWithoutNewline)
                 }
+            } else if is_literal(&rep.sub) {
+                let literal = literal_to_string(&rep.sub);
+                let repetition = RepetitionMatcher::new(literal, rep.min, rep.max);
+                return Some(StringMatchHandler::Repetition(repetition));
             } else {
                 None
             }
@@ -527,14 +360,15 @@ fn string_matcher_from_regex_internal(hir: &Hir) -> Option<StringMatchHandler> {
                 }
             }
 
+            let new_len = hirs_new.len();
             let hir = Hir::concat(hirs_new.to_vec());
-            let matches= find_set_matches_internal(&hir, "")?;
+            let matches = find_set_matches_internal(&hir, "")?;
 
-            if matches.is_empty() && hirs.len() == 2 {
+            if matches.is_empty() && new_len == 2 {
                 // We have not found fixed set matches. We look for other known cases that
                 // we can optimize.
-                let first = &hirs[0];
-                let second = &hirs[1];
+                let first = &hirs_new[0];
+                let second = &hirs_new[1];
                 if let HirKind::Literal(_) = first.kind() {
                     if right.is_none() {
                         right = string_matcher_from_regex_internal(second);

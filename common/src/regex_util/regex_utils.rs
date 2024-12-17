@@ -1,9 +1,17 @@
 use super::hir_utils::*;
 use super::match_handlers::{StringMatchHandler, StringMatchOptions};
-use crate::regex_util::Quantifier;
+use crate::regex_util::{EqualMultiStringMapMatcher, Quantifier};
 use regex::{Error as RegexError, Regex};
-use regex_syntax::hir::{Hir, HirKind};
+use regex_syntax::hir::{Class, Hir, HirKind, Look};
 use regex_syntax::parse as parse_regex;
+
+
+const MAX_SET_MATCHES: usize = 256;
+
+/// The minimum number of alternate values a regex should have to trigger
+/// the optimization done by `optimize_equal_or_prefix_string_matchers()` and so use a map
+/// to match values instead of iterating over a list.
+const MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD: usize = 16;
 
 const META_CHARS: &str = ".^$*+?{}[]|()\\/%~";
 pub fn contains_regex_meta_chars(s: &str) -> bool {
@@ -44,6 +52,7 @@ pub const LITERAL_MATCH_COST: usize = 3;
 pub const SUFFIX_MATCH_COST: usize = 4;
 pub const MIDDLE_MATCH_COST: usize = 6;
 pub const RE_MATCH_COST: usize = 100;
+pub const FN_MATCH_COST: usize = 20;
 
 /// get_optimized_re_match_func tries returning optimized function for matching the given expr.
 ///
@@ -81,6 +90,11 @@ pub fn get_optimized_re_match_func(expr: &str) -> Result<(StringMatchHandler, us
 
     if expr == ".+" {
         return Ok((StringMatchHandler::not_empty(false), FULL_MATCH_COST));
+    }
+
+    if let Some(string_matcher) = optimize_alternating_literals(expr) {
+        let cost = calc_match_cost(&string_matcher);
+        return Ok((string_matcher, cost));
     }
 
     let mut sre = match build_hir(expr) {
@@ -344,11 +358,7 @@ fn get_optimized_re_match_func_ext(
                             suffix_quantifier,
                         };
                         let matcher = StringMatchHandler::literal(literal, &options);
-                        let cost = match matcher {
-                            StringMatchHandler::StartsWith(_) => PREFIX_MATCH_COST,
-                            StringMatchHandler::EndsWith(_) => SUFFIX_MATCH_COST,
-                            _ => MIDDLE_MATCH_COST,
-                        };
+                        let cost =  calc_match_cost(&matcher);
                         return Ok(Some((matcher, cost)));
                     }
 
@@ -455,6 +465,45 @@ fn get_quantifier(sre: &Hir) -> Option<Quantifier> {
     }
 }
 
+pub(super) fn optimize_alternating_literals(s: &str) -> Option<StringMatchHandler> {
+    if s.is_empty() {
+        return Some(StringMatchHandler::Empty);
+    }
+
+    let estimated_alternates = s.matches('|').count() + 1;
+
+    if estimated_alternates == 1 {
+        if regex::escape(s) == s {
+            return Some(StringMatchHandler::Literal(s.to_string()));
+        }
+        return None;
+    }
+
+    let use_map = estimated_alternates >= MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD;
+    if use_map {
+        let mut map = EqualMultiStringMapMatcher::new(0);
+        for sub_match in s.split('|') {
+            if regex::escape(sub_match) != sub_match {
+                return None;
+            }
+            map.values.insert(sub_match.to_string());
+        }
+
+        Some(StringMatchHandler::EqualMultiMap(map))
+    } else {
+        let mut sub_matches = Vec::with_capacity(estimated_alternates);
+        for sub_match in s.split('|') {
+            if regex::escape(sub_match) != sub_match {
+                return None;
+            }
+            sub_matches.push(sub_match.to_string());
+        }
+
+        let multi = StringMatchHandler::EqualsMulti(sub_matches);
+        Some(multi)
+    }
+}
+
 pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<String>, Vec<Hir>) {
     if subs.is_empty() {
         return (String::new(), String::new(), Vec::new(), Vec::new());
@@ -510,6 +559,210 @@ pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<Str
     }
 
     (prefix, suffix, contains, new_subs)
+}
+
+pub(super) fn find_set_matches(hir: &mut Hir) -> Option<Vec<String>> {
+    clear_begin_end_text(hir);
+    find_set_matches_internal(hir, "")
+}
+
+pub(super) fn find_set_matches_internal(hir: &Hir, base: &str) -> Option<Vec<String>> {
+    match hir.kind() {
+        HirKind::Look(Look::Start) | HirKind::Look(Look::End) => None,
+        HirKind::Literal(_) => {
+            let literal = format!("{}{}", base, crate::regex_util::hir_utils::literal_to_string(hir));
+            Some(vec![literal])
+        },
+        HirKind::Empty => {
+            if !base.is_empty() {
+                Some(vec![base.to_string()])
+            } else {
+                None
+            }
+        }
+        HirKind::Alternation(_) => find_set_matches_from_alternate(hir, base),
+        HirKind::Capture(hir) => {
+            find_set_matches_internal(&hir.sub, base)
+        }
+        HirKind::Concat(_) => find_set_matches_from_concat(hir, base),
+        HirKind::Class(class) => {
+            match class {
+                Class::Unicode(ranges) => {
+                    let total_set = ranges.iter()
+                        .map(|r| 1 + (r.end() as usize - r.start() as usize))
+                        .sum::<usize>();
+
+                    if total_set > MAX_SET_MATCHES {
+                        return None;
+                    }
+
+                    let mut matches = Vec::new();
+                    for range in ranges.iter().flat_map(|r| r.start()..=r.end()) {
+                        matches.push(format!("{base}{range}"));
+                    }
+
+                    Some(matches)
+                }
+                Class::Bytes(ranges) => {
+                    let total_set = ranges.iter()
+                        .map(|r| 1 + (r.end() as usize - r.start() as usize))
+                        .sum::<usize>();
+
+                    if total_set > MAX_SET_MATCHES {
+                        return None;
+                    }
+
+                    let mut matches = Vec::new();
+
+                    for ch in ranges.iter().flat_map(|r| r.start()..=r.end()) {
+                        matches.push(format!("{base}{ch}"));
+                    }
+
+                    Some(matches)
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+fn find_set_matches_from_concat(hir: &Hir, base: &str) -> Option<Vec<String>> {
+
+    if let HirKind::Concat(hirs) = hir.kind() {
+        let mut matches = vec![base.to_string()];
+
+        for hir in hirs.iter() {
+            let mut new_matches = Vec::new();
+            for b in &matches {
+                if let Some(items) = find_set_matches_internal(hir, b) {
+                    if matches.len() + items.len() > MAX_SET_MATCHES {
+                        return None;
+                    }
+                    new_matches.extend(items);
+                } else {
+                    return None;
+                }
+            }
+            matches = new_matches;
+        }
+
+        return Some(matches)
+    }
+
+    None
+}
+
+fn find_set_matches_from_alternate(hir: &Hir, base: &str) -> Option<Vec<String>> {
+    let mut matches = Vec::new();
+
+    match hir.kind() {
+        HirKind::Alternation(alternates) => {
+            for sub in alternates.iter() {
+                if let Some(found) = find_set_matches_internal(sub, base) {
+                    if found.is_empty() {
+                        return None;
+                    }
+                    if matches.len() + found.len() > MAX_SET_MATCHES {
+                        return None;
+                    }
+                    matches.extend(found);
+                } else {
+                    return None;
+                }
+            }
+        }
+        _ => return None,
+    }
+
+    Some(matches)
+}
+
+
+pub(super) fn clear_begin_end_text(hir: &mut Hir) {
+
+    fn handle_concat(items: &Vec<Hir>) -> Option<Hir> {
+        if !items.is_empty() {
+            let mut start: usize = 0;
+            let mut end: usize = items.len() - 1;
+
+            if is_start_anchor(&items[0]) {
+                start += 1;
+            }
+
+            if is_end_anchor(&items[end]) {
+                end -= 1;
+            }
+            let slice = &items[start..=end];
+            if slice.is_empty() {
+                return Some(Hir::empty());
+            }
+            let hirs: Vec<Hir> = slice.iter().cloned().collect();
+            return Some(Hir::concat(hirs))
+        }
+        None
+    }
+
+    match hir.kind() {
+        HirKind::Alternation(_) => return,
+        HirKind::Concat(hirs) => {
+            if let Some(modified) = handle_concat(hirs) {
+                *hir = modified;
+            }
+        },
+        HirKind::Capture(capture) => {
+            if let HirKind::Concat(hirs) = capture.sub.kind() {
+                if let Some(modified) = handle_concat(hirs) {
+                    *hir = modified;
+                }
+            }
+        },
+        _ => return,
+    }
+}
+
+fn calc_match_cost(matcher: &StringMatchHandler) -> usize {
+    match matcher {
+        StringMatchHandler::MatchAll => FULL_MATCH_COST,
+        StringMatchHandler::NotEmpty(_) => FULL_MATCH_COST,
+        StringMatchHandler::Literal(_) => LITERAL_MATCH_COST,
+        StringMatchHandler::StartsWith(_) => PREFIX_MATCH_COST,
+        StringMatchHandler::EndsWith(_) => SUFFIX_MATCH_COST,
+        StringMatchHandler::Contains(_) => MIDDLE_MATCH_COST,
+        StringMatchHandler::OrderedAlternates(m) => m.len() * MIDDLE_MATCH_COST,
+        StringMatchHandler::EqualsMulti(m) => m.len() * LITERAL_MATCH_COST,
+        StringMatchHandler::EqualMultiMap(_) => LITERAL_MATCH_COST,
+        StringMatchHandler::Alternates(m) => {
+            m.alts.len() * LITERAL_MATCH_COST
+        },
+        StringMatchHandler::Regex(_) => RE_MATCH_COST,
+        _ => todo!(),
+        StringMatchHandler::MatchNone => 0,
+        StringMatchHandler::Empty => FULL_MATCH_COST,
+        StringMatchHandler::AnyWithoutNewline => FULL_MATCH_COST,
+        StringMatchHandler::ContainsMulti(m) => {
+            let mut base = m.substrings.len() * MIDDLE_MATCH_COST;
+            if let Some(l) = &m.left {
+                base += calc_match_cost(l);
+            }
+            if let Some(r) = &m.right {
+                base += calc_match_cost(r);
+            }
+            base
+        }
+        StringMatchHandler::Prefix(_) => PREFIX_MATCH_COST,
+        StringMatchHandler::Suffix(_) => SUFFIX_MATCH_COST,
+        StringMatchHandler::Repetition(r) => {
+            LITERAL_MATCH_COST * r.min as usize // ??
+        }
+        StringMatchHandler::MatchFn(_) => FN_MATCH_COST,
+        StringMatchHandler::And(a, b) => {
+            calc_match_cost(a) + calc_match_cost(b)
+        }
+        StringMatchHandler::Or(items) => {
+            items.iter().map(|x| calc_match_cost(x)).sum()
+        }
+        StringMatchHandler::ZeroOrOneChars(_) => LITERAL_MATCH_COST
+    }
 }
 
 #[cfg(test)]

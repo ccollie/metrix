@@ -1,13 +1,13 @@
-use std::sync::LazyLock;
 use regex::Error as RegexError;
 use regex_syntax::hir::Class::{Bytes, Unicode};
+use regex_syntax::hir::Dot;
 use regex_syntax::{hir::{
     Class,
     Hir,
     HirKind,
     Look
 }, parse as parse_regex};
-use regex_syntax::hir::Dot;
+use std::sync::LazyLock;
 
 const ANY_CHAR_EXCEPT_LF: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyCharExceptLF));
 const ANY_CHAR: LazyLock<Hir> = LazyLock::new(|| Hir::dot(Dot::AnyChar));
@@ -130,7 +130,13 @@ pub fn is_empty_class(class: &Class) -> bool {
 }
 
 pub fn is_dot_question(sre: &Hir) -> bool {
-    sre.eq(&ANY_CHAR)
+    if let HirKind::Repetition(repetition) = sre.kind() {
+        return !repetition.greedy
+            && repetition.min == 0
+            && repetition.max == Some(1)
+            && (ANY_CHAR.eq(&repetition.sub) || ANY_CHAR_EXCEPT_LF.eq(&repetition.sub));
+    }
+    false
 }
 
 pub fn matches_any_char(hir: &Hir) -> bool {
@@ -163,7 +169,7 @@ pub fn literal_to_string(sre: &Hir) -> String {
 ///
 /// # Arguments
 ///
-/// * `hir` - A reference to an Hir instance.
+/// * `hir` - A reference to a Hir instance.
 ///
 /// # Returns
 ///
@@ -264,8 +270,8 @@ pub fn get_or_values_ext(sre: &Hir, dest: &mut Vec<String>) -> bool {
 
             match class {
                 Unicode(uni) => {
-                    for urange in uni.iter().flat_map(|r| r.start()..=r.end()) {
-                        dest.push(format!("{urange}"));
+                    for range in uni.iter().flat_map(|r| r.start()..=r.end()) {
+                        dest.push(format!("{range}"));
                         if dest.len() > MAX_OR_VALUES {
                             // It is cheaper to use regexp here.
                             return false;
