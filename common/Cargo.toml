@@ -30,6 +30,7 @@ rand.workspace = true
 rand_distr.workspace = true
 regex.workspace = true
 regex-syntax.workspace = true
+smallvec.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_regex.workspace = true

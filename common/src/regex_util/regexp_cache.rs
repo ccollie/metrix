@@ -1,5 +1,4 @@
-use super::StringMatchHandler;
-use crate::prelude::{get_optimized_re_match_func, EMPTY_MATCH_COST};
+use super::{string_matcher_from_regex, StringMatchHandler, EMPTY_MATCH_COST};
 use get_size::GetSize;
 use lru_time_cache::LruCache;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -125,7 +124,7 @@ pub fn compile_regexp_anchored(expr: &str) -> Result<(StringMatchHandler, usize)
 
 fn compile_regexp_ex(expr: &str) -> Result<RegexpCacheValue, String> {
     let (matcher, cost) =
-        get_optimized_re_match_func(expr)
+        string_matcher_from_regex(expr)
             .map_err(|_| {
                 format!("cannot build regexp from {}", expr)
             })?;

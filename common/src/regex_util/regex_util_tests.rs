@@ -1,3 +1,16 @@
+// Copyright 2020 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use rand::Rng;
 use regex::Regex;
 
@@ -16,10 +29,8 @@ fn generate_random_values() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regex_util::fast_matcher::{string_matcher_from_hir, FastRegexMatcher};
-    use crate::regex_util::hir_utils::build_hir;
     use crate::regex_util::{string_matcher_from_regex, ContainsMultiStringMatcher, StringMatchHandler};
-    use crate::regex_util::regex_utils::find_set_matches;
+    use crate::regex_util::regex_utils::{build_hir, string_matcher_from_regex_internal};
 
     #[test]
     fn test_fast_regex_matcher_match_string() {
@@ -27,124 +38,12 @@ mod tests {
         let regexes = vec!["foo", "bar", "baz"];
 
         for r in regexes {
-            let matcher = FastRegexMatcher::new(r).unwrap();
+            let (matcher, _) = string_matcher_from_regex(r).unwrap();
             for v in &test_values {
                 let re = Regex::new(&format!("^(?s:{})$", r)).unwrap();
                 assert_eq!(re.is_match(v), matcher.matches(v));
             }
         }
-    }
-
-
-    // Refer to https://github.com/prometheus/prometheus/issues/2651.
-    #[test]
-    fn test_find_set_matches() {
-        let cases = vec![
-            // Single value, coming from a `bar=~"foo"` selector.
-            ("foo", vec!["foo"], true),
-            ("^foo", vec!["foo"], true),
-            ("^foo$", vec!["foo"], true),
-            // Simple sets alternates.
-            ("foo|bar|zz", vec!["foo", "bar", "zz"], true),
-            // Simple sets alternate and concat (bar|baz is parsed as "ba[rz]").
-            ("foo|bar|baz", vec!["foo", "bar", "baz"], true),
-            // Simple sets alternate and concat and capture
-            ("foo|bar|baz|(zz)", vec!["foo", "bar", "baz", "zz"], true),
-            // Simple sets alternate and concat and alternates with empty matches
-            // parsed as  b(ar|(?:)|uzz) where b(?:) means literal b.
-            ("bar|b|buzz", vec!["bar", "b", "buzz"], true),
-            // Skip nested capture groups.
-            ("^((bar|b|buzz))$", vec!["bar", "b", "buzz"], true),
-            // Skip outer anchors (it's enforced anyway at the root).
-            ("^(bar|b|buzz)$", vec!["bar", "b", "buzz"], true),
-            ("^(?:prod|production)$", vec!["prod", "production"], true),
-            // Do not optimize regexp with inner anchors.
-            ("(bar|b|b^uz$z)", vec![], false),
-            // Do not optimize regexp with empty string matcher.
-            ("^$|Running", vec![], false),
-            // Simple sets containing escaped characters.
-            ("fo\\.o|bar\\?|\\^baz", vec!["fo.o", "bar?", "^baz"], true),
-            // using charclass
-            ("[abc]d", vec!["ad", "bd", "cd"], true),
-            // high low charset different => A(B[CD]|EF)|BC[XY]
-            ("ABC|ABD|AEF|BCX|BCY", vec!["ABC", "ABD", "AEF", "BCX", "BCY"], true),
-            // triple concat
-            ("api_(v1|prom)_push", vec!["api_v1_push", "api_prom_push"], true),
-            // triple concat with multiple alternates
-            ("(api|rpc)_(v1|prom)_push", vec!["api_v1_push", "api_prom_push", "rpc_v1_push", "rpc_prom_push"], true),
-            ("(api|rpc)_(v1|prom)_(push|query)", vec!["api_v1_push", "api_v1_query", "api_prom_push", "api_prom_query", "rpc_v1_push", "rpc_v1_query", "rpc_prom_push", "rpc_prom_query"], true),
-            // class starting with "-"
-            ("[-1-2][a-c]", vec!["-a", "-b", "-c", "1a", "1b", "1c", "2a", "2b", "2c"], true),
-            ("[1^3]", vec!["1", "3", "^"], true),
-            // OpPlus with concat
-            ("(.+)/(foo|bar)", vec![], false),
-            // Simple sets containing special characters without escaping.
-            ("fo.o|bar?|^baz", vec![], false),
-            // case-sensitive wrapper.
-            ("(?i)foo", vec!["foo"], false),
-            // case-sensitive wrapper on alternate.
-            ("(?i)foo|bar|baz", vec!["FOO", "BAR", "BAZ", "BAr", "BAz"], false),
-            // mixed case sensitivity.
-            ("(api|rpc)_(v1|prom)_((?i)push|query)", vec![], false),
-            // mixed case sensitivity concatenation only without capture group.
-            ("api_v1_(?i)push", vec![], false),
-            // mixed case sensitivity alternation only without capture group.
-            ("api|(?i)rpc", vec![], false),
-            // case sensitive after unsetting insensitivity.
-            ("rpc|(?i)(?-i)api", vec!["rpc", "api"], true),
-            // case-sensitive after unsetting insensitivity in all alternation options.
-            ("(?i)((?-i)api|(?-i)rpc)", vec!["api", "rpc"], true),
-            // mixed case sensitivity after unsetting insensitivity.
-            ("(?i)rpc|(?-i)api", vec![], false),
-            // too high charset combination
-            ("(api|rpc)_[^0-9]", vec![], false),
-            // too many combinations
-            ("[a-z][a-z]", vec![], false),
-        ];
-
-        for (pattern, exp_matches, exp_case_sensitive) in cases {
-            let mut parsed = build_hir(&format!("^(?s:{})$", pattern)).unwrap();
-            let matches = find_set_matches(&mut parsed).unwrap();
-            assert_eq!(exp_matches, matches);
-
-            if exp_case_sensitive {
-                // When the regexp is case-sensitive, we want to ensure that the
-                // set matches are maintained in the final matcher.
-                let r = FastRegexMatcher::new(pattern).unwrap();
-                assert_eq!(exp_matches, r.set_matches());
-            }
-        }
-    }
-
-
-
-    #[test]
-    fn test_fast_regex_matcher_set_matches_should_return_a_copy() {
-        let m = FastRegexMatcher::new("a|b").unwrap();
-        assert_eq!(vec!["a", "b"], m.set_matches());
-
-        // Manipulate the returned slice.
-        let mut matches = m.set_matches();
-        matches[0] = "xxx".to_string();
-        matches[1] = "yyy".to_string();
-
-        // Ensure that if we call set_matches() again we get the original one.
-        assert_eq!(vec!["a", "b"], m.set_matches());
-    }
-
-    #[test]
-    fn test_fast_regex_matcher_set_matches_should_return_acopy() {
-        let m = FastRegexMatcher::new("a|b").unwrap();
-        let expected = vec!["a", "b"];
-        assert_eq!(expected, m.set_matches());
-
-        // Manipulate the returned slice.
-        let mut matches = m.set_matches();
-        matches[0] = "xxx".to_string();
-        matches[1] = "yyy".to_string();
-
-        // Ensure that if we call set_matches() again we get the original one.
-        assert_eq!(expected, m.set_matches());
     }
 
     #[test]
@@ -158,7 +57,7 @@ mod tests {
         }
 
         fn true_matcher() -> StringMatchHandler {
-            StringMatchHandler::MatchAll
+            StringMatchHandler::any(false)
         }
         
         fn some_true_matcher() -> Option<StringMatchHandler> {
@@ -339,10 +238,18 @@ mod tests {
                 ("foo.?", Some(prefix("foo", Some(zero_or_one_chars(true))))),
                 ("f.?o", None)
         ];
-        for c in cases {
-            let mut parsed = build_hir(c.0).unwrap();
-            let matches = string_matcher_from_hir(&mut parsed);
-            assert_eq!(c.1, matches);
+        for (expr, expected_matcher) in cases {
+            let hir = build_hir(expr).unwrap();
+            let res = string_matcher_from_regex_internal(&hir).unwrap();
+            if expected_matcher.is_none() {
+                assert!(res.is_none(), "Expected None for {}", expr);
+                continue;
+            } else {
+                assert!(res.is_some(), "Expected Some for {}", expr);
+                let expected_matcher = expected_matcher.unwrap();
+                let (matcher, _) = res.unwrap();
+                assert_eq!(matcher, expected_matcher, "Invalid matcher for {expr}");
+            }
         }
     }
 
@@ -359,7 +266,7 @@ mod tests {
             // Case-sensitive
             TestConfig {
                 pattern: "(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
-                expected_literal_prefix_matchers: 3,
+                expected_literal_prefix_matchers: 2,
                 expected_matches: vec![
                     "xyz-016a-ixb-dp".to_string(),
                     "xyz-016a-ixb-dpXXX".to_string(),
@@ -379,7 +286,7 @@ mod tests {
             // Case-insensitive
             TestConfig {
                 pattern: "(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
-                expected_literal_prefix_matchers: 3,
+                expected_literal_prefix_matchers: 2,
                 expected_matches: vec![
                     "xyz-016a-ixb-dp".to_string(),
                     "XYZ-016a-ixb-dpXXX".to_string(),
@@ -457,7 +364,7 @@ mod tests {
 
         for case in test_cases {
             let re = Regex::new(&case.pattern).unwrap();
-            let matcher = string_matcher_from_regex(&case.pattern).unwrap().unwrap();
+            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
 
             // Pre-condition check: ensure it contains literalPrefixSensitiveStringMatcher or literalPrefixInsensitiveStringMatcher.
             let mut num_prefix_matchers = 0;
@@ -468,7 +375,6 @@ mod tests {
             });
 
             // Count literal prefix matchers
-            let num_prefix_matchers = count_literal_prefix_matchers(&case.pattern);
             assert_eq!(
                 num_prefix_matchers, case.expected_literal_prefix_matchers,
                 "Pattern: {}",
@@ -572,7 +478,7 @@ mod tests {
 
         for case in test_cases {
             // Create the matcher
-            let matcher = string_matcher_from_regex(&case.pattern).unwrap().unwrap();
+            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
 
             // Compile the regex
             let re = Regex::new(&format!("^(?s:{})$", &case.pattern)).unwrap();
@@ -669,7 +575,7 @@ mod tests {
 
         for case in test_cases {
             let re = Regex::new(&format!("^(?s:{})$", case.pattern)).unwrap();
-            let matcher = string_matcher_from_regex(&case.pattern).unwrap().unwrap();
+            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
 
             // Pre-condition check: ensure it contains zeroOrOneCharacterStringMatcher.
             let mut num_zero_or_one_matchers = 0;
@@ -749,7 +655,7 @@ mod tests {
                     visit_string_matcher(left, state, callback);
                 }
             }
-            StringMatchHandler::EqualMultiMap(m) => {
+            StringMatchHandler::LiteralMap(m) => {
                 for (_, prefixes) in &m.prefixes {
                     for matcher in prefixes {
                         visit_string_matcher(&matcher, state, callback)

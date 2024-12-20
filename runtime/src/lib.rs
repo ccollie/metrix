@@ -39,12 +39,9 @@ mod common;
 extern crate rs_unit;
 #[cfg(test)]
 mod tests;
-mod filter;
 
 #[cfg(test)]
 pub use tests::utils::*;
-
-pub use filter::*;
 
 pub mod prelude {
     pub use crate::cache::*;
@@ -54,5 +51,4 @@ pub mod prelude {
     pub use crate::runtime_error::*;
     pub use crate::types::*;
     pub use metricsql_common::async_runtime::*;
-    pub use crate::filter::*;
 }

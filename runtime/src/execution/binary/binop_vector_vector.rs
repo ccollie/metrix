@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::hash::Hasher;
-use std::path::Prefix;
 use ahash::AHashMap;
 use tracing::{field, trace_span, Span};
 use metricsql_common::hash::{Signature};

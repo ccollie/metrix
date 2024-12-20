@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -5,7 +6,8 @@ use std::hash::{Hash, Hasher};
 use crate::common::join_vector;
 use crate::parser::{escape_ident, is_empty_regex, quote, ParseError, ParseResult};
 use ahash::AHashMap;
-use metricsql_common::regex_util::FastRegexMatcher;
+use metricsql_common::prelude::{string_matcher_from_regex, LITERAL_MATCH_COST};
+use metricsql_common::regex_util::StringMatchHandler;
 use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3;
 
@@ -14,7 +16,6 @@ pub type LabelName = String;
 
 pub type LabelValue = String;
 
-// NOTE: https://github.com/rust-lang/regex/issues/668
 
 #[derive(
     Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, Serialize, Deserialize,
@@ -84,7 +85,7 @@ pub struct LabelFilter {
     pub value: String,
 
     #[serde(skip)]
-    re: Option<Box<FastRegexMatcher>> // boxed to reduce struct size
+    re: Option<Box<(StringMatchHandler, usize)>> // boxed to reduce struct size
 }
 
 impl LabelFilter {
@@ -96,11 +97,11 @@ impl LabelFilter {
         let label = label.into();
         let value = value.into();
 
-        let re: Option<Box<FastRegexMatcher>> = match match_op {
+        let re: Option<Box<(StringMatchHandler, usize)>> = match match_op {
             LabelFilterOp::RegexEqual | LabelFilterOp::RegexNotEqual => {
-                let fre = FastRegexMatcher::new(&value)
+                let matcher = string_matcher_from_regex(&value)
                     .map_err(|_e| ParseError::InvalidRegex(value.clone()))?;
-                Some(Box::new(fre))
+                Some(Box::new(matcher))
             }
             _ => None
         };
@@ -170,8 +171,8 @@ impl LabelFilter {
         match self.op {
             Equal => self.value.is_empty(),
             NotEqual => !self.value.is_empty() && !is_name_label,
-            RegexEqual => is_empty_regex(&self.value),
-            RegexNotEqual => is_empty_regex(&self.value) && !is_name_label,
+            RegexEqual => is_empty_regex_matcher(&self),
+            RegexNotEqual => is_empty_regex_matcher(&self) && !is_name_label,
         }
     }
 
@@ -185,14 +186,14 @@ impl LabelFilter {
                     return is_empty_regex(&self.value);
                 }
                 if let Some(re) = &self.re {
-                    re.matches(str)
+                    re.0.matches(str)
                 } else {
                     unreachable!("regex_equal without compiled regex");
                 }
             }
             LabelFilterOp::RegexNotEqual => {
                 if let Some(re) = &self.re {
-                    !re.matches(str)
+                    !re.0.matches(str)
                 } else {
                     unreachable!("regex_not_equal without compiled regex");
                 }
@@ -228,34 +229,73 @@ impl LabelFilter {
         self.label.clone()
     }
 
-    pub fn is_optimized(&self) -> bool {
-        if let Some(re) = &self.re {
-            re.is_optimized()
-        } else { false }
-    }
-
     /// `prefix()` returns the required prefix of the value to match, if possible.
     /// It will be empty if it's an equality matcher or if the prefix can't be determined.
-    pub fn prefix(&self) -> &str {
+    pub fn prefix(&self) -> Option<&str> {
         if let Some(re) = &self.re {
-            re.prefix.as_str()
+            match &re.0 {
+                StringMatchHandler::Prefix(p) => return Some(&p.prefix),
+                StringMatchHandler::Regex(re) => {
+                    if re.prefix.is_empty() {
+                        return None;
+                    }
+                    return Some(&re.prefix);
+                }
+                _ => {},
+            }
+        }
+        None
+    }
+
+    pub fn cost(&self) -> usize {
+        if let Some(re) = &self.re {
+            re.1
         } else {
-            EMPTY_STRING
+            LITERAL_MATCH_COST
         }
     }
 
     /// set_matches returns a set of equality matchers for the current regex matchers if possible.
     /// For examples the regexp `a(b|f)` will returns "ab" and "af".
     /// Returns nil if we can't replace the regexp by only equality matchers.
-    pub fn set_matches(&self) -> Vec<String> {
+    pub fn set_matches(&self) -> Option<Cow<Vec<String>>> {
         if let Some(matcher) = &self.re {
-            return matcher.set_matches();
-        }
-        vec![]
+            let m = &matcher.0;
+            return match m {
+                StringMatchHandler::Regex(regex) => {
+                    if regex.set_matches.is_empty() {
+                        return None;
+                    }
+                    return Some(Cow::Borrowed(&regex.set_matches));
+                },
+                StringMatchHandler::Alternates(alts) => Some(Cow::Borrowed(alts)),
+                StringMatchHandler::LiteralMap(map) => {
+                    if map.values.is_empty() {
+                        return None;
+                    }
+                    let values = map.values.iter().cloned().collect();
+                    return Some(Cow::Owned(values));
+                },
+                _ => None
+            }
+        };
+        None
     }
 }
 
-const EMPTY_STRING: &str = "";
+fn is_empty_regex_matcher(m: &LabelFilter) -> bool {
+    if m.op.is_regex() {
+        // cheap check
+        if matches!(m.value.as_str(), "" | "?:" | "^$" | "^.*$" | "^.*" | ".*$" | ".*" | ".^") {
+            return true;
+        }
+        if let Some(re) = &m.re {
+            return re.0.matches("");
+        }
+    }
+    false
+}
+
 
 impl PartialEq<LabelFilter> for LabelFilter {
     fn eq(&self, other: &Self) -> bool {
