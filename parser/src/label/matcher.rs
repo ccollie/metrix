@@ -20,7 +20,7 @@ pub type LabelValue = String;
 #[derive(
     Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, Serialize, Deserialize,
 )]
-pub enum LabelFilterOp {
+pub enum MatchOp {
     #[default]
     Equal,
     NotEqual,
@@ -28,37 +28,37 @@ pub enum LabelFilterOp {
     RegexNotEqual,
 }
 
-impl LabelFilterOp {
+impl MatchOp {
     pub fn is_negative(&self) -> bool {
-        matches!(self, LabelFilterOp::NotEqual | LabelFilterOp::RegexNotEqual)
+        matches!(self, MatchOp::NotEqual | MatchOp::RegexNotEqual)
     }
 
     pub fn is_regex(&self) -> bool {
         matches!(
             self,
-            LabelFilterOp::RegexEqual | LabelFilterOp::RegexNotEqual
+            MatchOp::RegexEqual | MatchOp::RegexNotEqual
         )
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            LabelFilterOp::Equal => "=",
-            LabelFilterOp::NotEqual => "!=",
-            LabelFilterOp::RegexEqual => "=~",
-            LabelFilterOp::RegexNotEqual => "!~",
+            MatchOp::Equal => "=",
+            MatchOp::NotEqual => "!=",
+            MatchOp::RegexEqual => "=~",
+            MatchOp::RegexNotEqual => "!~",
         }
     }
 }
 
-impl TryFrom<&str> for LabelFilterOp {
+impl TryFrom<&str> for MatchOp {
     type Error = ParseError;
 
     fn try_from(op: &str) -> Result<Self, Self::Error> {
         match op {
-            "=" => Ok(LabelFilterOp::Equal),
-            "!=" => Ok(LabelFilterOp::NotEqual),
-            "=~" => Ok(LabelFilterOp::RegexEqual),
-            "!~" => Ok(LabelFilterOp::RegexNotEqual),
+            "=" => Ok(MatchOp::Equal),
+            "!=" => Ok(MatchOp::NotEqual),
+            "=~" => Ok(MatchOp::RegexEqual),
+            "!~" => Ok(MatchOp::RegexNotEqual),
             _ => Err(ParseError::General(format!(
                 "Unexpected match op literal: {op}"
             ))),
@@ -66,7 +66,7 @@ impl TryFrom<&str> for LabelFilterOp {
     }
 }
 
-impl fmt::Display for LabelFilterOp {
+impl fmt::Display for MatchOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }
@@ -74,9 +74,9 @@ impl fmt::Display for LabelFilterOp {
 
 /// LabelFilter represents MetricsQL label filter like `foo="bar"`.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct LabelFilter {
+pub struct Matcher {
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
-    pub op: LabelFilterOp,
+    pub op: MatchOp,
 
     /// label contains label name for the filter.
     pub label: String,
@@ -88,8 +88,8 @@ pub struct LabelFilter {
     re: Option<Box<(StringMatchHandler, usize)>> // boxed to reduce struct size
 }
 
-impl LabelFilter {
-    pub fn new<N, V>(match_op: LabelFilterOp, label: N, value: V) -> Result<Self, ParseError>
+impl Matcher {
+    pub fn new<N, V>(match_op: MatchOp, label: N, value: V) -> Result<Self, ParseError>
     where
         N: Into<LabelName>,
         V: Into<LabelValue>,
@@ -98,7 +98,7 @@ impl LabelFilter {
         let value = value.into();
 
         let re: Option<Box<(StringMatchHandler, usize)>> = match match_op {
-            LabelFilterOp::RegexEqual | LabelFilterOp::RegexNotEqual => {
+            MatchOp::RegexEqual | MatchOp::RegexNotEqual => {
                 let matcher = string_matcher_from_regex(&value)
                     .map_err(|_e| ParseError::InvalidRegex(value.clone()))?;
                 Some(Box::new(matcher))
@@ -115,8 +115,8 @@ impl LabelFilter {
     }
 
     pub fn equal<S: Into<String>>(key: S, value: S) -> Self {
-        LabelFilter {
-            op: LabelFilterOp::Equal,
+        Matcher {
+            op: MatchOp::Equal,
             label: key.into(),
             value: value.into(),
             re: None,
@@ -124,20 +124,20 @@ impl LabelFilter {
     }
 
     pub fn not_equal<S: Into<String>>(key: S, value: S) -> Self {
-        LabelFilter {
-            op: LabelFilterOp::NotEqual,
+        Matcher {
+            op: MatchOp::NotEqual,
             label: key.into(),
             value: value.into(),
             re: None,
         }
     }
 
-    pub fn regex_equal<S: Into<String>>(key: S, value: S) -> Result<LabelFilter, ParseError> {
-        LabelFilter::new(LabelFilterOp::RegexEqual, key, value)
+    pub fn regex_equal<S: Into<String>>(key: S, value: S) -> Result<Matcher, ParseError> {
+        Matcher::new(MatchOp::RegexEqual, key, value)
     }
 
-    pub fn regex_notequal<S: Into<String>>(key: S, value: S) -> Result<LabelFilter, ParseError> {
-        LabelFilter::new(LabelFilterOp::RegexNotEqual, key, value)
+    pub fn regex_notequal<S: Into<String>>(key: S, value: S) -> Result<Matcher, ParseError> {
+        Matcher::new(MatchOp::RegexNotEqual, key, value)
     }
 
     /// is_regexp represents whether the filter is regexp, i.e. `=~` or `!~`.
@@ -151,11 +151,11 @@ impl LabelFilter {
     }
 
     pub fn is_metric_name_filter(&self) -> bool {
-        self.label == NAME_LABEL && self.op == LabelFilterOp::Equal
+        self.label == NAME_LABEL && self.op == MatchOp::Equal
     }
 
     pub fn is_name_label(&self) -> bool {
-        self.label == NAME_LABEL && self.op == LabelFilterOp::Equal
+        self.label == NAME_LABEL && self.op == MatchOp::Equal
     }
 
     /// Vector selectors must either specify a name or at least one label
@@ -164,7 +164,7 @@ impl LabelFilter {
     /// The following expression is illegal:
     /// {job=~".*"} # Bad!
     pub fn is_empty_matcher(&self) -> bool {
-        use LabelFilterOp::*;
+        use MatchOp::*;
         // if we're matching against __name__, a negative comparison against the empty
         // string is valid
         let is_name_label = self.label == NAME_LABEL;
@@ -178,9 +178,9 @@ impl LabelFilter {
 
     pub fn is_match(&self, str: &str) -> bool {
         match self.op {
-            LabelFilterOp::Equal => self.value.eq(str),
-            LabelFilterOp::NotEqual => self.value.ne(str),
-            LabelFilterOp::RegexEqual => {
+            MatchOp::Equal => self.value.eq(str),
+            MatchOp::NotEqual => self.value.ne(str),
+            MatchOp::RegexEqual => {
                 // slight optimization for frequent case
                 if str.is_empty() {
                     return is_empty_regex(&self.value);
@@ -191,7 +191,7 @@ impl LabelFilter {
                     unreachable!("regex_equal without compiled regex");
                 }
             }
-            LabelFilterOp::RegexNotEqual => {
+            MatchOp::RegexNotEqual => {
                 if let Some(re) = &self.re {
                     !re.0.matches(str)
                 } else {
@@ -202,7 +202,7 @@ impl LabelFilter {
     }
 
     pub fn inverse(&self) -> ParseResult<Self> {
-        use LabelFilterOp::*;
+        use MatchOp::*;
         let op = match self.op {
             Equal => NotEqual,
             NotEqual => Equal,
@@ -234,7 +234,12 @@ impl LabelFilter {
     pub fn prefix(&self) -> Option<&str> {
         if let Some(re) = &self.re {
             match &re.0 {
-                StringMatchHandler::Prefix(p) => return Some(&p.prefix),
+                StringMatchHandler::Prefix(p) => {
+                    if re.0.is_case_sensitive() {
+                        return None;
+                    }
+                    return Some(p.prefix.pattern())
+                },
                 StringMatchHandler::Regex(re) => {
                     if re.prefix.is_empty() {
                         return None;
@@ -255,9 +260,9 @@ impl LabelFilter {
         }
     }
 
-    /// set_matches returns a set of equality matchers for the current regex matchers if possible.
-    /// For examples the regexp `a(b|f)` will returns "ab" and "af".
-    /// Returns nil if we can't replace the regexp by only equality matchers.
+    /// `set_matches` returns a set of equality matchers for the current regex matchers if possible.
+    /// For examples the regex `a(b|f)` will return "ab" and "af".
+    /// Returns None if we can't replace the regex by only equality matchers.
     pub fn set_matches(&self) -> Option<Cow<Vec<String>>> {
         if let Some(matcher) = &self.re {
             let m = &matcher.0;
@@ -268,7 +273,12 @@ impl LabelFilter {
                     }
                     return Some(Cow::Borrowed(&regex.set_matches));
                 },
-                StringMatchHandler::Alternates(alts) => Some(Cow::Borrowed(alts)),
+                StringMatchHandler::Alternates(alts) => {
+                    if m.is_case_sensitive() {
+                        return None;
+                    }
+                    Some(Cow::Borrowed(&alts.values))
+                },
                 StringMatchHandler::LiteralMap(map) => {
                     if map.values.is_empty() {
                         return None;
@@ -283,7 +293,7 @@ impl LabelFilter {
     }
 }
 
-fn is_empty_regex_matcher(m: &LabelFilter) -> bool {
+fn is_empty_regex_matcher(m: &Matcher) -> bool {
     if m.op.is_regex() {
         // cheap check
         if matches!(m.value.as_str(), "" | "?:" | "^$" | "^.*$" | "^.*" | ".*$" | ".*" | ".^") {
@@ -297,21 +307,21 @@ fn is_empty_regex_matcher(m: &LabelFilter) -> bool {
 }
 
 
-impl PartialEq<LabelFilter> for LabelFilter {
+impl PartialEq<Matcher> for Matcher {
     fn eq(&self, other: &Self) -> bool {
         self.op.eq(&other.op) && self.label.eq(&other.label) && self.value.eq(&other.value)
     }
 }
 
-impl PartialOrd for LabelFilter {
+impl PartialOrd for Matcher {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Eq for LabelFilter {}
+impl Eq for Matcher {}
 
-impl Ord for LabelFilter {
+impl Ord for Matcher {
     fn cmp(&self, other: &Self) -> Ordering {
         let mut cmp = self.label.cmp(&other.label);
         if cmp == Ordering::Equal {
@@ -324,7 +334,7 @@ impl Ord for LabelFilter {
     }
 }
 
-impl fmt::Display for LabelFilter {
+impl fmt::Display for Matcher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -337,7 +347,7 @@ impl fmt::Display for LabelFilter {
     }
 }
 
-impl Hash for LabelFilter {
+impl Hash for Matcher {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.op.hash(state);
         self.label.hash(state);
@@ -345,17 +355,15 @@ impl Hash for LabelFilter {
     }
 }
 
-pub type Matcher = LabelFilter;
-
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Matchers {
-    pub matchers: Vec<LabelFilter>,
+    pub matchers: Vec<Matcher>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "<[_]>::is_empty"))]
-    pub or_matchers: Vec<Vec<LabelFilter>>,
+    pub or_matchers: Vec<Vec<Matcher>>,
 }
 
 impl Matchers {
-    pub fn new(filters: Vec<LabelFilter>) -> Self {
+    pub fn new(filters: Vec<Matcher>) -> Self {
         Matchers {
             matchers: filters,
             or_matchers: vec![],
@@ -373,14 +381,14 @@ impl Matchers {
         self.matchers.is_empty() && self.or_matchers.is_empty()
     }
 
-    pub fn with_or_matchers(or_matchers: Vec<Vec<LabelFilter>>) -> Self {
+    pub fn with_or_matchers(or_matchers: Vec<Vec<Matcher>>) -> Self {
         Matchers {
             matchers: vec![],
             or_matchers,
         }
     }
 
-    pub fn append(mut self, matcher: LabelFilter) -> Self {
+    pub fn append(mut self, matcher: Matcher) -> Self {
         // Check the latest or_matcher group. If it is not empty,
         // we need to add the current matcher to this group.
         if let Some(last_or_matcher) = self.or_matchers.last_mut() {
@@ -391,7 +399,7 @@ impl Matchers {
         self
     }
 
-    pub fn append_or(mut self, matcher: LabelFilter) -> Self {
+    pub fn append_or(mut self, matcher: Matcher) -> Self {
         if !self.matchers.is_empty() {
             // Be careful not to move ownership here, because it
             // will be used by the subsequent append method.
@@ -441,7 +449,7 @@ impl Matchers {
     }
 
     /// find matchers whose name equals the specified name
-    pub fn find_matchers(&self, name: &str) -> Vec<&LabelFilter> {
+    pub fn find_matchers(&self, name: &str) -> Vec<&Matcher> {
         self.matchers
             .iter()
             .chain(self.or_matchers.iter().flatten())
@@ -519,18 +527,18 @@ impl Matchers {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Vec<LabelFilter>> {
+    pub fn iter(&self) -> impl Iterator<Item = &Vec<Matcher>> {
         OrIter::new(&self.matchers, &self.or_matchers)
     }
 
-    pub fn filter_iter(&self) -> impl Iterator<Item = &LabelFilter> {
+    pub fn filter_iter(&self) -> impl Iterator<Item = &Matcher> {
         self.matchers
             .iter()
             .chain(self.or_matchers.iter().flatten())
     }
 }
 
-fn hash_filters(hasher: &mut impl Hasher, filters: &[LabelFilter]) {
+fn hash_filters(hasher: &mut impl Hasher, filters: &[Matcher]) {
     for filter in filters {
         filter.hash(hasher);
     }
@@ -567,14 +575,14 @@ impl fmt::Display for Matchers {
 }
 
 struct OrIter<'a> {
-    matchers: &'a Vec<LabelFilter>,
-    or_matchers: &'a Vec<Vec<LabelFilter>>,
+    matchers: &'a Vec<Matcher>,
+    or_matchers: &'a Vec<Vec<Matcher>>,
     index: usize,
     first: bool,
 }
 
 impl<'a> OrIter<'a> {
-    fn new(matchers: &'a Vec<LabelFilter>, or_matchers: &'a Vec<Vec<LabelFilter>>) -> Self {
+    fn new(matchers: &'a Vec<Matcher>, or_matchers: &'a Vec<Vec<Matcher>>) -> Self {
         Self {
             matchers,
             or_matchers,
@@ -584,7 +592,7 @@ impl<'a> OrIter<'a> {
     }
 }
 impl<'a> Iterator for OrIter<'a> {
-    type Item = &'a Vec<LabelFilter>;
+    type Item = &'a Vec<Matcher>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.first {
@@ -602,8 +610,8 @@ impl<'a> Iterator for OrIter<'a> {
     }
 }
 
-pub(crate) fn remove_duplicate_label_filters(filters: &mut Vec<LabelFilter>) {
-    fn get_hash(hasher: &mut Xxh3, filter: &LabelFilter) -> u64 {
+pub(crate) fn remove_duplicate_label_filters(filters: &mut Vec<Matcher>) {
+    fn get_hash(hasher: &mut Xxh3, filter: &Matcher) -> u64 {
         hasher.reset();
         hasher.write(filter.label.as_bytes());
         hasher.write(filter.op.as_str().as_bytes());
@@ -636,7 +644,7 @@ pub fn try_escape_for_repeat_re(re: &str) -> String {
             buf.push(c);
             match c {
                 ',' if comma_seen => {
-                    return (false, buf); // ,, is invalid
+                    return (false, buf); // ",," is invalid
                 }
                 ',' if buf == "," => {
                     return (false, buf); // {, is invalid
@@ -684,19 +692,19 @@ pub fn try_escape_for_repeat_re(re: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::label::{LabelFilter, LabelFilterOp, Matchers};
+    use crate::label::{Matcher, MatchOp, Matchers};
 
     use super::try_escape_for_repeat_re;
 
     #[test]
     fn test_matcher_eq_ne() {
-        let op = LabelFilterOp::Equal;
-        let matcher = LabelFilter::new(op, "name", "up").unwrap();
+        let op = MatchOp::Equal;
+        let matcher = Matcher::new(op, "name", "up").unwrap();
         assert!(matcher.is_match("up"));
         assert!(!matcher.is_match("down"));
 
-        let op = LabelFilterOp::NotEqual;
-        let matcher = LabelFilter::new(op, "name", "up").unwrap();
+        let op = MatchOp::NotEqual;
+        let matcher = Matcher::new(op, "name", "up").unwrap();
         assert!(matcher.is_match("foo"));
         assert!(matcher.is_match("bar"));
         assert!(!matcher.is_match("up"));
@@ -705,7 +713,7 @@ mod tests {
     #[test]
     fn test_matcher_re() {
         let value = "api/v1/.*";
-        let matcher = LabelFilter::new(LabelFilterOp::RegexEqual, "name", value).unwrap();
+        let matcher = Matcher::new(MatchOp::RegexEqual, "name", value).unwrap();
         assert!(matcher.is_match("api/v1/query"));
         assert!(matcher.is_match("api/v1/range_query"));
         assert!(!matcher.is_match("api/v2"));
@@ -714,72 +722,72 @@ mod tests {
     #[test]
     fn test_eq_matcher_equality() {
         assert_eq!(
-            LabelFilter::equal("code", "200"),
-            LabelFilter::equal("code", "200")
+            Matcher::equal("code", "200"),
+            Matcher::equal("code", "200")
         );
 
         assert_ne!(
-            LabelFilter::equal("code", "200"),
-            LabelFilter::equal("code", "201")
+            Matcher::equal("code", "200"),
+            Matcher::equal("code", "201")
         );
 
         assert_ne!(
-            LabelFilter::equal("code", "200"),
-            LabelFilter::not_equal("code", "200")
+            Matcher::equal("code", "200"),
+            Matcher::not_equal("code", "200")
         );
     }
 
     #[test]
     fn test_ne_matcher_equality() {
         assert_eq!(
-            LabelFilter::not_equal("code", "200"),
-            LabelFilter::not_equal("code", "200")
+            Matcher::not_equal("code", "200"),
+            Matcher::not_equal("code", "200")
         );
 
         assert_ne!(
-            LabelFilter::not_equal("code", "200"),
-            LabelFilter::not_equal("code", "201")
+            Matcher::not_equal("code", "200"),
+            Matcher::not_equal("code", "201")
         );
 
         assert_ne!(
-            LabelFilter::not_equal("code", "200"),
-            LabelFilter::equal("code", "200")
+            Matcher::not_equal("code", "200"),
+            Matcher::equal("code", "200")
         );
     }
 
     #[test]
     fn test_re_matcher_equality() {
         assert_eq!(
-            LabelFilter::regex_equal("code", "2??"),
-            LabelFilter::regex_equal("code", "2??")
+            Matcher::regex_equal("code", "2??"),
+            Matcher::regex_equal("code", "2??")
         );
 
         assert_ne!(
-            LabelFilter::regex_equal("code", "2??",),
-            LabelFilter::regex_equal("code", "2*?",)
+            Matcher::regex_equal("code", "2??",),
+            Matcher::regex_equal("code", "2*?",)
         );
 
         assert_ne!(
-            LabelFilter::new(LabelFilterOp::RegexEqual, "code", "2??",),
-            LabelFilter::new(LabelFilterOp::Equal, "code", "2??")
+            Matcher::new(MatchOp::RegexEqual, "code", "2??",),
+            Matcher::new(MatchOp::Equal, "code", "2??")
         );
     }
 
     #[test]
     fn test_not_re_matcher_equality() {
         assert_eq!(
-            LabelFilter::regex_notequal("code", "2??",),
-            LabelFilter::regex_notequal("code", "2??",)
+            Matcher::regex_notequal("code", "2??",),
+            Matcher::regex_notequal("code", "2??",)
         );
 
         assert_ne!(
-            LabelFilter::regex_notequal("code", "2??"),
-            LabelFilter::regex_notequal("code", "2*?",)
+            Matcher::regex_notequal("code", "2??"),
+            Matcher::regex_notequal("code", "2*?",)
         );
 
         assert_ne!(
-            LabelFilter::regex_equal("code", "2??").unwrap(),
-            LabelFilter::equal("code", "2??")
+            Matcher::regex_equal("code", "2??").unwrap(),
+            Matcher::equal("code", "2??")
         );
     }
 
@@ -787,44 +795,44 @@ mod tests {
     fn test_matchers_equality() {
         assert_eq!(
             Matchers::empty()
-                .append(LabelFilter::equal("name1", "val1"))
-                .append(LabelFilter::equal("name2", "val2")),
+                .append(Matcher::equal("name1", "val1"))
+                .append(Matcher::equal("name2", "val2")),
             Matchers::empty()
-                .append(LabelFilter::equal("name1", "val1"))
-                .append(LabelFilter::equal("name2", "val2"))
+                .append(Matcher::equal("name1", "val1"))
+                .append(Matcher::equal("name2", "val2"))
         );
 
         assert_ne!(
-            Matchers::empty().append(LabelFilter::equal("name1", "val1")),
-            Matchers::empty().append(LabelFilter::equal("name2", "val2"))
+            Matchers::empty().append(Matcher::equal("name1", "val1")),
+            Matchers::empty().append(Matcher::equal("name2", "val2"))
         );
 
         assert_ne!(
-            Matchers::empty().append(LabelFilter::equal("name1", "val1")),
-            Matchers::empty().append(LabelFilter::not_equal("name1", "val1"))
+            Matchers::empty().append(Matcher::equal("name1", "val1")),
+            Matchers::empty().append(Matcher::not_equal("name1", "val1"))
         );
 
         assert_eq!(
             Matchers::empty()
-                .append(LabelFilter::equal("name1", "val1"))
-                .append(LabelFilter::not_equal("name2", "val2"))
-                .append(LabelFilter::regex_equal("name2", "\\d+").unwrap())
-                .append(LabelFilter::regex_notequal("name2", "\\d+").unwrap()),
+                .append(Matcher::equal("name1", "val1"))
+                .append(Matcher::not_equal("name2", "val2"))
+                .append(Matcher::regex_equal("name2", "\\d+").unwrap())
+                .append(Matcher::regex_notequal("name2", "\\d+").unwrap()),
             Matchers::empty()
-                .append(LabelFilter::equal("name1", "val1"))
-                .append(LabelFilter::not_equal("name2", "val2"))
-                .append(LabelFilter::regex_equal("name2", "\\d+").unwrap())
-                .append(LabelFilter::regex_notequal("name2", "\\d+").unwrap())
+                .append(Matcher::equal("name1", "val1"))
+                .append(Matcher::not_equal("name2", "val2"))
+                .append(Matcher::regex_equal("name2", "\\d+").unwrap())
+                .append(Matcher::regex_notequal("name2", "\\d+").unwrap())
         );
     }
 
     #[test]
     fn test_find_matchers() {
         let matchers = Matchers::empty()
-            .append(LabelFilter::equal("foo", "bar"))
-            .append(LabelFilter::not_equal("foo", "bar"))
-            .append(LabelFilter::equal("FOO", "bar"))
-            .append(LabelFilter::not_equal("bar", "bar"));
+            .append(Matcher::equal("foo", "bar"))
+            .append(Matcher::not_equal("foo", "bar"))
+            .append(Matcher::equal("FOO", "bar"))
+            .append(Matcher::not_equal("bar", "bar"));
 
         let ms = matchers.find_matchers("foo");
         assert_eq!(4, ms.len());

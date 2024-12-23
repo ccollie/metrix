@@ -31,6 +31,7 @@ mod tests {
     use super::*;
     use crate::regex_util::{string_matcher_from_regex, ContainsMultiStringMatcher, StringMatchHandler};
     use crate::regex_util::regex_utils::{build_hir, string_matcher_from_regex_internal};
+    use crate::regex_util::string_pattern::StringPattern;
 
     #[test]
     fn test_fast_regex_matcher_match_string() {
@@ -49,7 +50,7 @@ mod tests {
     #[test]
     fn test_string_matcher_from_regexp() {
         fn literal(s: &str) -> StringMatchHandler {
-            StringMatchHandler::Literal(s.to_owned())
+            StringMatchHandler::Literal(StringPattern::case_sensitive(s.to_string()))
         }
 
         fn boxed_literal(s: &str) -> Box<StringMatchHandler> {
@@ -65,11 +66,11 @@ mod tests {
         }
 
         fn suffix(s: &str, left: Option<StringMatchHandler>) -> StringMatchHandler {
-            StringMatchHandler::suffix(left, s.to_string())
+            StringMatchHandler::suffix(left, s.to_string(), true)
         }
 
         fn prefix(s: &str, right: Option<StringMatchHandler>) -> StringMatchHandler {
-            StringMatchHandler::prefix(s.to_string(), right)
+            StringMatchHandler::prefix(s.to_string(), right, true)
         }
 
         fn contains_multi(substrings: &[&str], left: Option<StringMatchHandler>, right: Option<StringMatchHandler>) -> StringMatchHandler {
@@ -256,108 +257,108 @@ mod tests {
     #[test]
     fn test_string_matcher_from_regexp_literal_prefix() {
         struct TestConfig {
-            pattern: String,
+            pattern: &'static str,
             expected_literal_prefix_matchers: usize,
-            expected_matches: Vec<String>,
-            expected_not_matches: Vec<String>,
+            expected_matches: Vec<&'static str>,
+            expected_not_matches: Vec<&'static str>,
         }
 
         let test_cases: Vec<TestConfig> = vec![
             // Case-sensitive
             TestConfig {
-                pattern: "(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
+                pattern: "(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)",
                 expected_literal_prefix_matchers: 2,
                 expected_matches: vec![
-                    "xyz-016a-ixb-dp".to_string(),
-                    "xyz-016a-ixb-dpXXX".to_string(),
-                    "xyz-016a-ixb-op".to_string(),
-                    "xyz-016a-ixb-opXXX".to_string(),
-                    "xyz-016a-ixb-dp\n".to_string(),
+                    "xyz-016a-ixb-dp",
+                    "xyz-016a-ixb-dpXXX",
+                    "xyz-016a-ixb-op",
+                    "xyz-016a-ixb-opXXX",
+                    "xyz-016a-ixb-dp\n",
                 ],
                 expected_not_matches: vec![
-                    "XYZ-016a-ixb-dp".to_string(),
-                    "xyz-016a-ixb-d".to_string(),
-                    "XYZ-016a-ixb-op".to_string(),
-                    "xyz-016a-ixb-o".to_string(),
-                    "xyz".to_string(),
-                    "dp".to_string(),
+                    "XYZ-016a-ixb-dp",
+                    "xyz-016a-ixb-d",
+                    "XYZ-016a-ixb-op",
+                    "xyz-016a-ixb-o",
+                    "xyz",
+                    "dp",
                 ],
             },
             // Case-insensitive
             TestConfig {
-                pattern: "(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)".to_string(),
-                expected_literal_prefix_matchers: 2,
+                pattern: "(?i)(xyz-016a-ixb-dp.*|xyz-016a-ixb-op.*)",
+                expected_literal_prefix_matchers: 3,
                 expected_matches: vec![
-                    "xyz-016a-ixb-dp".to_string(),
-                    "XYZ-016a-ixb-dpXXX".to_string(),
-                    "xyz-016a-ixb-op".to_string(),
-                    "XYZ-016a-ixb-opXXX".to_string(),
-                    "xyz-016a-ixb-dp\n".to_string(),
+                    "xyz-016a-ixb-dp",
+                    "XYZ-016a-ixb-dpXXX",
+                    "xyz-016a-ixb-op",
+                    "XYZ-016a-ixb-opXXX",
+                    "xyz-016a-ixb-dp\n",
                 ],
                 expected_not_matches: vec![
-                    "xyz-016a-ixb-d".to_string(),
-                    "xyz".to_string(),
-                    "dp".to_string(),
+                    "xyz-016a-ixb-d",
+                    "xyz",
+                    "dp",
                 ],
             },
             // Nested literal prefixes, case sensitive
             TestConfig {
-                pattern: "(xyz-(aaa-(111.*)|bbb-(222.*)))|(xyz-(aaa-(333.*)|bbb-(444.*)))".to_string(),
+                pattern: "(xyz-(aaa-(111.*)|bbb-(222.*)))|(xyz-(aaa-(333.*)|bbb-(444.*)))",
                 expected_literal_prefix_matchers: 10,
                 expected_matches: vec![
-                    "xyz-aaa-111".to_string(),
-                    "xyz-aaa-111XXX".to_string(),
-                    "xyz-aaa-333".to_string(),
-                    "xyz-aaa-333XXX".to_string(),
-                    "xyz-bbb-222".to_string(),
-                    "xyz-bbb-222XXX".to_string(),
-                    "xyz-bbb-444".to_string(),
-                    "xyz-bbb-444XXX".to_string(),
+                    "xyz-aaa-111",
+                    "xyz-aaa-111XXX",
+                    "xyz-aaa-333",
+                    "xyz-aaa-333XXX",
+                    "xyz-bbb-222",
+                    "xyz-bbb-222XXX",
+                    "xyz-bbb-444",
+                    "xyz-bbb-444XXX",
                 ],
                 expected_not_matches: vec![
-                    "XYZ-aaa-111".to_string(),
-                    "xyz-aaa-11".to_string(),
-                    "xyz-aaa-222".to_string(),
-                    "xyz-bbb-111".to_string(),
+                    "XYZ-aaa-111",
+                    "xyz-aaa-11",
+                    "xyz-aaa-222",
+                    "xyz-bbb-111",
                 ],
             },
             // Nested literal prefixes, case-insensitive
             TestConfig {
-                pattern: "(?i)(xyz-(aaa-(111.*)|bbb-(222.*)))|(xyz-(aaa-(333.*)|bbb-(444.*)))".to_string(),
+                pattern: "(?i)(xyz-(aaa-(111.*)|bbb-(222.*)))|(xyz-(aaa-(333.*)|bbb-(444.*)))",
                 expected_literal_prefix_matchers: 10,
                 expected_matches: vec![
-                    "xyz-aaa-111".to_string(),
-                    "XYZ-aaa-111XXX".to_string(),
-                    "xyz-aaa-333".to_string(),
-                    "xyz-AAA-333XXX".to_string(),
-                    "xyz-bbb-222".to_string(),
-                    "xyz-BBB-222XXX".to_string(),
-                    "XYZ-bbb-444".to_string(),
-                    "xyz-bbb-444XXX".to_string(),
+                    "xyz-aaa-111",
+                    "XYZ-aaa-111XXX",
+                    "xyz-aaa-333",
+                    "xyz-AAA-333XXX",
+                    "xyz-bbb-222",
+                    "xyz-BBB-222XXX",
+                    "XYZ-bbb-444",
+                    "xyz-bbb-444XXX",
                 ],
                 expected_not_matches: vec![
-                    "xyz-aaa-11".to_string(),
-                    "xyz-aaa-222".to_string(),
-                    "xyz-bbb-111".to_string(),
+                    "xyz-aaa-11",
+                    "xyz-aaa-222",
+                    "xyz-bbb-111",
                 ],
             },
             // Mixed case sensitivity
             TestConfig {
-                pattern: "(xyz-((?i)(aaa.*|bbb.*)))".to_string(),
+                pattern: "(xyz-((?i)(aaa.*|bbb.*)))",
                 expected_literal_prefix_matchers: 3,
                 expected_matches: vec![
-                    "xyz-aaa".to_string(),
-                    "xyz-AAA".to_string(),
-                    "xyz-aaaXXX".to_string(),
-                    "xyz-AAAXXX".to_string(),
-                    "xyz-bbb".to_string(),
-                    "xyz-BBBXXX".to_string(),
+                    "xyz-aaa",
+                    "xyz-AAA",
+                    "xyz-aaaXXX",
+                    "xyz-AAAXXX",
+                    "xyz-bbb",
+                    "xyz-BBBXXX",
                 ],
                 expected_not_matches: vec![
-                    "XYZ-aaa".to_string(),
-                    "xyz-aa".to_string(),
-                    "yz-aaa".to_string(),
-                    "aaa".to_string(),
+                    "XYZ-aaa",
+                    "xyz-aa",
+                    "yz-aaa",
+                    "aaa",
                 ],
             },
         ];

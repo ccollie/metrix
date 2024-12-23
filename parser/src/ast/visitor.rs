@@ -97,7 +97,7 @@ pub fn walk_expr<V: ExprVisitor>(visitor: &mut V, expr: &Expr) -> Result<bool, V
 #[cfg(test)]
 mod tests {
     use crate::ast::MetricExpr;
-    use crate::label::LabelFilterOp;
+    use crate::label::MatchOp;
     use crate::parser;
 
     use super::*;
@@ -111,7 +111,7 @@ mod tests {
             .matchers
             .find_matchers("namespace")
             .iter()
-            .any(|x| x.op == LabelFilterOp::Equal && x.value.eq(namespace))
+            .any(|x| x.op == MatchOp::Equal && x.value.eq(namespace))
     }
 
     impl ExprVisitor for NamespaceVisitor {

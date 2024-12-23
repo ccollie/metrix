@@ -1,5 +1,5 @@
 use crate::ast::{Expr, InterpolatedSelector, MetricExpr};
-use crate::label::{LabelFilterExpr, LabelFilterOp};
+use crate::label::{LabelFilterExpr, MatchOp};
 use crate::parser::expr::parse_string_expr;
 use crate::parser::parse_error::unexpected;
 use crate::parser::{ParseResult, Parser};
@@ -180,14 +180,14 @@ fn parse_label_filter(p: &mut Parser) -> ParseResult<LabelFilterExpr> {
     use Token::*;
 
     let label = p.expect_identifier()?;
-    let op: LabelFilterOp;
+    let op: MatchOp;
 
     let tok = p.current_token()?;
     match tok.kind {
-        Equal => op = LabelFilterOp::Equal,
-        OpNotEqual => op = LabelFilterOp::NotEqual,
-        RegexEqual => op = LabelFilterOp::RegexEqual,
-        RegexNotEqual => op = LabelFilterOp::RegexNotEqual,
+        Equal => op = MatchOp::Equal,
+        OpNotEqual => op = MatchOp::NotEqual,
+        RegexEqual => op = MatchOp::RegexEqual,
+        RegexNotEqual => op = MatchOp::RegexNotEqual,
         Comma | RightBrace => return Ok(LabelFilterExpr::variable(&label)),
         _ => {
             return Err(unexpected(

@@ -17,7 +17,7 @@ use crate::ast::{
 };
 use crate::common::{hash_f64, join_vector, write_comma_separated, write_number, Value, ValueType};
 use crate::functions::{AggregateFunction, BuiltinFunction, TransformFunction};
-use crate::label::{LabelFilter, LabelFilterOp, Labels, Matchers, NAME_LABEL};
+use crate::label::{Matcher, MatchOp, Labels, Matchers, NAME_LABEL};
 use crate::parser::{escape_ident, ParseError, ParseResult};
 use crate::prelude::{
     get_aggregate_arg_idx_for_optimization, BuiltinFunctionType, InterpolatedSelector,
@@ -707,7 +707,7 @@ pub struct MetricExpr {
 impl MetricExpr {
     pub fn new<S: Into<String>>(name: S) -> MetricExpr {
         // SAFETY: safe to unwrap since only regex errors are possible
-        let name_filter = LabelFilter::new(LabelFilterOp::Equal, NAME_LABEL, name.into()).unwrap();
+        let name_filter = Matcher::new(MatchOp::Equal, NAME_LABEL, name.into()).unwrap();
         MetricExpr {
             // name: Some(name.into()),
             name: None,
@@ -715,14 +715,14 @@ impl MetricExpr {
         }
     }
 
-    pub fn with_filters(filters: Vec<LabelFilter>) -> Self {
+    pub fn with_filters(filters: Vec<Matcher>) -> Self {
         MetricExpr {
             name: None,
             matchers: Matchers::new(filters),
         }
     }
 
-    pub fn with_or_filters(filters: Vec<Vec<LabelFilter>>) -> Self {
+    pub fn with_or_filters(filters: Vec<Vec<Matcher>>) -> Self {
         MetricExpr {
             name: None,
             matchers: Matchers::with_or_matchers(filters),
@@ -741,12 +741,12 @@ impl MetricExpr {
         self.matchers.metric_name()
     }
 
-    pub fn append(mut self, filter: LabelFilter) -> Self {
+    pub fn append(mut self, filter: Matcher) -> Self {
         self.matchers = self.matchers.append(filter);
         self
     }
 
-    pub fn append_or(mut self, filter: LabelFilter) -> Self {
+    pub fn append_or(mut self, filter: Matcher) -> Self {
         self.matchers = self.matchers.append_or(filter);
         self
     }
@@ -760,7 +760,7 @@ impl MetricExpr {
     }
 
     /// find all the matchers whose name equals the specified name.
-    pub fn find_matchers(&self, name: &str) -> Vec<&LabelFilter> {
+    pub fn find_matchers(&self, name: &str) -> Vec<&Matcher> {
         self.matchers.find_matchers(name)
     }
 
@@ -1861,7 +1861,7 @@ impl Expr {
         matches!(expr, Expr::Duration(_))
     }
 
-    pub fn vectors(&self) -> Box<dyn Iterator<Item = &LabelFilter> + '_> {
+    pub fn vectors(&self) -> Box<dyn Iterator<Item = &Matcher> + '_> {
         match self {
             Self::MetricExpression(v) => Box::new(v.matchers.filter_iter()),
             Self::Rollup(re) => Box::new(re.expr.vectors().chain(if let Some(at) = &re.at {

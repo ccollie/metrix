@@ -2,6 +2,7 @@ use get_size::GetSize;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use crate::regex_util::string_pattern::StringPattern;
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -44,7 +45,7 @@ impl MatchAnyMatcher {
     }
 
     fn matches(&self, s: &str) -> bool {
-        if self.ignore_nl {
+        if !self.ignore_nl {
             !s.contains('\n')
         } else {
             true
@@ -89,18 +90,75 @@ impl ZeroOrOneCharsMatcher {
 }
 
 #[derive(Clone, Debug, GetSize, Eq, PartialEq)]
+pub struct EqualMultiStringMatcher {
+    pub values: Vec<String>,
+    is_ascii: bool,
+    case_sensitive: bool,
+}
+
+impl EqualMultiStringMatcher {
+    pub(crate) fn new(case_sensitive: bool, estimated_size: usize) -> Self {
+        EqualMultiStringMatcher {
+            values: Vec::with_capacity(estimated_size),
+            case_sensitive,
+            is_ascii: true,
+        }
+    }
+
+    pub fn push(&mut self, s: String) {
+        self.is_ascii = self.is_ascii && s.is_ascii();
+        self.values.push(s);
+    }
+
+    pub fn is_case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+
+    pub fn matches(&self, s: &str) -> bool {
+        if self.case_sensitive {
+            self.values.iter().any(|v| v == s)
+        } else if self.is_ascii {
+            self.values.iter().any(|v| v.eq_ignore_ascii_case(s))
+        } else {
+            let needle = s.to_lowercase();
+            self.values.iter().any(|v| v.to_lowercase() == needle)
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+}
+
+
+#[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct LiteralPrefixMatcher {
-    pub prefix: String,
+    pub prefix: StringPattern,
     pub right: Option<Box<StringMatchHandler>>,
 }
 
 impl LiteralPrefixMatcher {
+    pub fn new<S: Into<String>>(prefix: S, right: Option<Box<StringMatchHandler>>, case_sensitive: bool) -> Self {
+        let prefix = StringPattern::new(prefix.into(), case_sensitive);
+        Self {
+            prefix,
+            right,
+        }
+    }
+
+    fn is_case_sensitive(&self) -> bool {
+        self.prefix.is_case_sensitive()
+    }
+}
+
+impl LiteralPrefixMatcher {
     fn matches(&self, s: &str) -> bool {
-        if !s.starts_with(&self.prefix) {
+        if !self.prefix.starts_with(s) {
             return false;
         }
         if let Some(right) = &self.right {
-            right.matches(&s[self.prefix.len()..])
+            let right_part = &s[self.prefix.len()..];
+            right.matches(right_part)
         } else {
             true
         }
@@ -110,16 +168,34 @@ impl LiteralPrefixMatcher {
 #[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct LiteralSuffixMatcher {
     pub left: Option<Box<StringMatchHandler>>,
-    pub suffix: String,
+    pub suffix: StringPattern,
+}
+
+impl LiteralSuffixMatcher {
+    pub fn new<S: Into<String>>(left: Option<Box<StringMatchHandler>>, suffix: S, case_sensitive: bool) -> Self {
+        let suffix = StringPattern::new(suffix.into(), case_sensitive);
+        Self {
+            left,
+            suffix,
+        }
+    }
+
+    fn is_case_sensitive(&self) -> bool {
+        self.suffix.is_case_sensitive()
+    }
 }
 
 impl LiteralSuffixMatcher {
     fn matches(&self, s: &str) -> bool {
-        if !s.ends_with(&self.suffix) {
+        if !self.suffix.ends_with(s) {
             return false;
         }
         if let Some(left) = &self.left {
-            left.matches(&s[..s.len() - self.suffix.len()])
+            if s.len() < self.suffix.len() {
+                return false;
+            }
+            let left_part = &s[..s.len() - self.suffix.len()];
+            left.matches(left_part)
         } else {
             true
         }
@@ -183,6 +259,7 @@ pub struct LiteralMapMatcher {
     pub values: HashSet<String>,
     pub prefixes: HashMap<String, Vec<Box<StringMatchHandler>>>,
     pub min_prefix_len: usize,
+    pub is_case_sensitive: bool,
 }
 
 impl LiteralMapMatcher {
@@ -191,11 +268,16 @@ impl LiteralMapMatcher {
             values: Default::default(),
             prefixes: Default::default(),
             min_prefix_len,
+            is_case_sensitive: true,
         }
     }
 
     pub(crate) fn add(&mut self, s: String) {
-        self.values.insert(s);
+        if self.is_case_sensitive {
+            self.values.insert(s.to_lowercase());
+        } else {
+            self.values.insert(s);
+        }
     }
 
     pub(crate) fn add_prefix(&mut self, prefix: String, matcher: Box<StringMatchHandler>) {
@@ -223,7 +305,11 @@ impl LiteralMapMatcher {
     }
 
     fn matches(&self, s: &str) -> bool {
-        if self.values.contains(s) {
+        if self.is_case_sensitive {
+            if self.values.contains(&s.to_lowercase()) {
+                return true;
+            }
+        } else if self.values.contains(s) {
             return true;
         }
 
@@ -236,6 +322,10 @@ impl LiteralMapMatcher {
             }
         }
         false
+    }
+
+    pub fn is_case_sensitive(&self) -> bool {
+        true
     }
 }
 
@@ -345,9 +435,9 @@ pub enum StringMatchHandler {
     MatchNone,
     Empty,
     NotEmpty(NonEmptyStringMatcher),
-    Literal(String),
+    Literal(StringPattern),
     /// Alteration of literals
-    Alternates(Vec<String>),
+    Alternates(EqualMultiStringMatcher),
     LiteralMap(LiteralMapMatcher),
     ContainsMulti(ContainsMultiStringMatcher),
     Prefix(LiteralPrefixMatcher),
@@ -383,12 +473,22 @@ impl StringMatchHandler {
         Self::Regex(RegexMatcher::new(regex, String::new(), String::new()))
     }
 
-    pub fn literal_alternates(alts: Vec<String>) -> Self {
+    pub fn literal_alternates(alts: Vec<String>, case_sensitive: bool) -> Self {
         if alts.len() == 1 {
             let mut alts = alts;
-            Self::Literal(alts.pop().unwrap())
+            let pattern = alts.pop().unwrap();
+            if case_sensitive {
+                Self::Literal(StringPattern::case_sensitive(pattern))
+            } else {
+                Self::Literal(StringPattern::case_insensitive(pattern))
+            }
         } else {
-            Self::Alternates(alts)
+            let mut matcher = EqualMultiStringMatcher::new(true, alts.len());
+            matcher.case_sensitive = case_sensitive;
+            for alt in alts {
+                matcher.push(alt);
+            }
+            Self::Alternates(matcher)
         }
     }
 
@@ -400,26 +500,39 @@ impl StringMatchHandler {
         StringMatchHandler::NotEmpty(NonEmptyStringMatcher::new(match_nl))
     }
 
-    pub fn literal(value: String, options: &StringMatchOptions) -> Self {
+    pub fn literal(value: String, case_sensitive: bool) -> Self {
+        let pattern = if case_sensitive {
+            StringPattern::case_sensitive(value)
+        } else {
+            StringPattern::case_insensitive(value)
+        };
+        StringMatchHandler::Literal(pattern)
+    }
+
+    pub fn literal_fn(value: String, options: &StringMatchOptions) -> Self {
         get_optimized_literal_matcher(value, options)
     }
-
     pub fn equals(value: String) -> Self {
-        StringMatchHandler::Literal(value)
+        StringMatchHandler::literal(value.into(), true)
     }
 
-    pub fn prefix(value: String, right: Option<StringMatchHandler>) -> Self {
-        StringMatchHandler::Prefix(LiteralPrefixMatcher {
-            prefix: value,
-            right: right.map(Box::new),
-        })
+    pub fn prefix(value: String, right: Option<StringMatchHandler>, case_sensitive: bool) -> Self {
+        StringMatchHandler::Prefix(LiteralPrefixMatcher::new(value, right.map(Box::new), case_sensitive))
     }
 
-    pub fn suffix(left: Option<StringMatchHandler>, value: String) -> Self {
-        StringMatchHandler::Suffix(LiteralSuffixMatcher {
-            left: left.map(Box::new),
-            suffix: value,
-        })
+    pub fn suffix(left: Option<StringMatchHandler>, value: String, case_sensitive: bool) -> Self {
+        StringMatchHandler::Suffix(LiteralSuffixMatcher::new(left.map(Box::new), value, case_sensitive))
+    }
+
+    pub fn is_case_sensitive(&self) -> bool {
+        match self {
+            StringMatchHandler::Literal(p) => p.is_case_sensitive(),
+            StringMatchHandler::Prefix(p) => p.is_case_sensitive(),
+            StringMatchHandler::Suffix(p) => p.is_case_sensitive(),
+            StringMatchHandler::LiteralMap(p) => p.is_case_sensitive(),
+            StringMatchHandler::Alternates(p) => p.is_case_sensitive(),
+            _ => true,
+        }
     }
 
     #[allow(dead_code)]
@@ -429,16 +542,14 @@ impl StringMatchHandler {
             StringMatchHandler::MatchNone => false,
             StringMatchHandler::MatchFn(m) => m.matches(s),
             StringMatchHandler::Regex(r) => r.matches(s),
-            StringMatchHandler::Literal(val) => s == val,
+            StringMatchHandler::Literal(m) => m.matches(s),
             StringMatchHandler::Empty => s.is_empty(),
             StringMatchHandler::NotEmpty(opts) => opts.matches(s),
             StringMatchHandler::Or(matchers) => {
                 matchers.iter().any(|m| m.matches(s))
             }
             StringMatchHandler::ZeroOrOneChars(m) => m.matches(s),
-            StringMatchHandler::Alternates(values) => {
-                values.iter().any(|v| s == *v)
-            }
+            StringMatchHandler::Alternates(m) => m.matches(s),
             StringMatchHandler::ContainsMulti(m) => m.matches(s),
             StringMatchHandler::Prefix(m) => m.matches(s),
             StringMatchHandler::Suffix(m) => m.matches(s),
@@ -768,15 +879,15 @@ fn get_optimized_literal_matcher(value: String, options: &StringMatchOptions) ->
             }
             (Some(Quantifier::ZeroOrMore), None) => {
                 // ^.*foo$
-                StringMatchHandler::suffix(None, value)
+                StringMatchHandler::suffix(None, value, true)
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // ^foo.*$
-                StringMatchHandler::prefix(value, None)
+                StringMatchHandler::prefix(value, None, true)
             }
             (None, None) => {
                 // ^foobar$
-                StringMatchHandler::Literal(value)
+                StringMatchHandler::literal(value.into(), true)
             }
             _ => {
                 handle_default(options, value)
@@ -798,11 +909,11 @@ fn get_optimized_literal_matcher(value: String, options: &StringMatchOptions) ->
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // ^foo.*
-                StringMatchHandler::prefix(value, None)
+                StringMatchHandler::prefix(value, None, true)
             }
             (None, None) => {
                 // ^foobar
-                StringMatchHandler::suffix(None, value)
+                StringMatchHandler::suffix(None, value, true)
             }
             _ => {
                 handle_default(options, value)
@@ -818,15 +929,15 @@ fn get_optimized_literal_matcher(value: String, options: &StringMatchOptions) ->
             }
             (Some(Quantifier::ZeroOrMore), None) => {
                 // .*foo$
-                StringMatchHandler::suffix(None, value)
+                StringMatchHandler::suffix(None, value, true)
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // foo.*$
-                StringMatchHandler::prefix(value, None)
+                StringMatchHandler::prefix(value, None, true)
             }
             (None, None) => {
                 // foobar$
-                StringMatchHandler::suffix(None, value)
+                StringMatchHandler::suffix(None, value, true)
             }
             _ => {
                 // foobar$
@@ -850,11 +961,11 @@ fn get_optimized_literal_matcher(value: String, options: &StringMatchOptions) ->
             }
             (None, Some(Quantifier::ZeroOrMore)) => {
                 // foo.*
-                StringMatchHandler::prefix(value, None)
+                StringMatchHandler::prefix(value, None, true)
             }
             (None, None) => {
                 // foobar
-                StringMatchHandler::Literal(value)
+                StringMatchHandler::literal(value.into(), true)
             }
             _ => {
                 // foobar

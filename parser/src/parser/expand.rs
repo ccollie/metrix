@@ -7,7 +7,7 @@ use crate::ast::{
     RollupExpr, StringExpr, StringSegment, VectorMatchCardinality, VectorMatchModifier,
     WithArgExpr, WithExpr,
 };
-use crate::label::{LabelFilter, Labels};
+use crate::label::{Matcher, Labels};
 use crate::parser::symbol_provider::SymbolProviderRef;
 use crate::parser::{syntax_error, ParseError, ParseResult};
 use crate::prelude::InterpolatedSelector;
@@ -226,7 +226,7 @@ fn expand_with_selector_expression(
             // convert lfe to LabelFilter.
             let se = expand_string_expr(symbols, was, &lfe.value)?;
             let value = get_expr_as_string(&se)?;
-            let lf = LabelFilter::new(lfe.op, label, value)?;
+            let lf = Matcher::new(lfe.op, label, value)?;
 
             new_selector = new_selector.append(lf);
         }
@@ -270,7 +270,7 @@ fn expand_with_selector_expression(
     let wme = inner.unwrap();
 
     let lfss_src: Vec<_> = wme.matchers.iter().collect();
-    let mut or_matchers: Vec<Vec<LabelFilter>> = vec![];
+    let mut or_matchers: Vec<Vec<Matcher>> = vec![];
     if lfss_src.len() != 1 {
         // template_name{filters} where template_name is {... or ...}
         if is_only_metric_name {

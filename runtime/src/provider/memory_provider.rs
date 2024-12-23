@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use metricsql_common::hash::Signature;
-use metricsql_parser::prelude::{LabelFilter, Matchers};
+use metricsql_parser::prelude::{Matcher, Matchers};
 
 use crate::{
     Deadline, MetricStorage, QueryResult, QueryResults, RuntimeResult, SearchQuery,
@@ -158,14 +158,14 @@ impl MetricStorage for MemoryMetricProvider {
     }
 }
 
-fn matches_filter(mn: &MetricName, filter: &LabelFilter) -> bool {
+fn matches_filter(mn: &MetricName, filter: &Matcher) -> bool {
     if let Some(v) = mn.label_value(filter.label.as_str()) {
         return filter.is_match(v);
     }
     false
 }
 
-fn matches_filters(mn: &MetricName, filters: &[LabelFilter]) -> bool {
+fn matches_filters(mn: &MetricName, filters: &[Matcher]) -> bool {
     filters.iter().all(|f| matches_filter(mn, f))
 }
 
@@ -220,7 +220,7 @@ mod tests {
         labels.add_label("foo", "bar");
         provider.append(labels.clone(), 1, 1.0).unwrap();
 
-        let matchers = Matchers::new(vec![LabelFilter::equal("foo", "bar")]);
+        let matchers = Matchers::new(vec![Matcher::equal("foo", "bar")]);
         let results = provider.search(0, 2, &matchers).unwrap();
 
         assert_eq!(results.len(), 1);
@@ -233,7 +233,7 @@ mod tests {
         labels.add_label("foo", "bar");
         provider.append(labels.clone(), 1, 1.0).unwrap();
 
-        let matchers = Matchers::new(vec![LabelFilter::equal("foo", "baz")]);
+        let matchers = Matchers::new(vec![Matcher::equal("foo", "baz")]);
         let results = provider.search(0, 2, &matchers).unwrap();
 
         assert_eq!(results.len(), 0);

@@ -2,14 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::ast::StringExpr;
-use crate::label::{LabelFilter, LabelFilterOp, LabelName, NAME_LABEL};
+use crate::label::{Matcher, MatchOp, LabelName, NAME_LABEL};
 use crate::parser::{compile_regexp, escape_ident, is_empty_regex, ParseError, ParseResult};
 
 /// LabelFilterExpr represents `foo <op> ident + "bar"` expression, where <op> is `=`, `!=`, `=~` or `!~`.
 /// For internal use only, in the context of WITH expressions
 #[derive(Default, Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct LabelFilterExpr {
-    pub op: LabelFilterOp,
+    pub op: MatchOp,
 
     /// Label contains label name for the filter.
     pub label: String,
@@ -21,7 +21,7 @@ pub struct LabelFilterExpr {
 }
 
 impl LabelFilterExpr {
-    pub fn new<N>(label: N, match_op: LabelFilterOp, value: StringExpr) -> ParseResult<Self>
+    pub fn new<N>(label: N, match_op: MatchOp, value: StringExpr) -> ParseResult<Self>
     where
         N: Into<LabelName>,
     {
@@ -29,7 +29,7 @@ impl LabelFilterExpr {
 
         assert!(!label.is_empty());
 
-        if (match_op == LabelFilterOp::RegexEqual || match_op == LabelFilterOp::RegexNotEqual)
+        if (match_op == MatchOp::RegexEqual || match_op == MatchOp::RegexNotEqual)
             && value.is_expanded()
         {
             let resolved_value = value.to_string();
@@ -49,7 +49,7 @@ impl LabelFilterExpr {
     pub fn named(name: &str) -> Self {
         Self {
             label: NAME_LABEL.to_string(),
-            op: LabelFilterOp::Equal,
+            op: MatchOp::Equal,
             value: StringExpr::from(name),
             is_variable: false,
         }
@@ -58,18 +58,18 @@ impl LabelFilterExpr {
     pub(crate) fn variable(name: &str) -> Self {
         Self {
             label: NAME_LABEL.to_string(),
-            op: LabelFilterOp::Equal,
+            op: MatchOp::Equal,
             value: StringExpr::from(name),
             is_variable: true,
         }
     }
 
     pub fn equal<S: Into<String>>(key: S, value: StringExpr) -> ParseResult<LabelFilterExpr> {
-        LabelFilterExpr::new(key, LabelFilterOp::Equal, value)
+        LabelFilterExpr::new(key, MatchOp::Equal, value)
     }
 
     pub fn not_equal<S: Into<String>>(key: S, value: StringExpr) -> ParseResult<LabelFilterExpr> {
-        LabelFilterExpr::new(key, LabelFilterOp::NotEqual, value)
+        LabelFilterExpr::new(key, MatchOp::NotEqual, value)
     }
 
     /// is_negative represents whether the filter is negative, i.e. '!=' or '!~'.
@@ -83,11 +83,11 @@ impl LabelFilterExpr {
     }
 
     pub fn is_metric_name_filter(&self) -> bool {
-        self.label == NAME_LABEL && self.op == LabelFilterOp::Equal
+        self.label == NAME_LABEL && self.op == MatchOp::Equal
     }
 
     pub fn is_name_label(&self) -> bool {
-        self.label == NAME_LABEL && self.op == LabelFilterOp::Equal
+        self.label == NAME_LABEL && self.op == MatchOp::Equal
     }
 
     pub fn set_value<S: Into<String>>(&mut self, value: S) {
@@ -129,7 +129,7 @@ impl LabelFilterExpr {
     /// The following expression is illegal:
     /// {job=~".*"} # Bad!
     pub fn is_empty_matcher(&self) -> bool {
-        use LabelFilterOp::*;
+        use MatchOp::*;
         match self.op {
             Equal => self.value.is_empty(),
             NotEqual => !self.value.is_empty(),
@@ -145,7 +145,7 @@ impl LabelFilterExpr {
     }
 
     pub fn is_match(&self, str: &str) -> bool {
-        use LabelFilterOp::*;
+        use MatchOp::*;
         let haystack = self.value.to_string();
         match self.op {
             Equal => haystack.eq(str),
@@ -162,16 +162,16 @@ impl LabelFilterExpr {
         }
     }
 
-    pub fn to_label_filter(&self) -> ParseResult<LabelFilter> {
+    pub fn to_label_filter(&self) -> ParseResult<Matcher> {
         let empty_str = "".to_string();
         let value = self.value.get_literal()?.unwrap_or(&empty_str).to_string();
-        LabelFilter::new(self.op, &self.label, value)
+        Matcher::new(self.op, &self.label, value)
     }
 
     //
     pub fn is_raw_ident(&self) -> bool {
         self.value.is_empty()
-            && self.op == LabelFilterOp::Equal
+            && self.op == MatchOp::Equal
             && !self.label.is_empty()
             && self.label != NAME_LABEL
     }

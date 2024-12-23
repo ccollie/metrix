@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use tracing::{field, trace, trace_span, Span};
 use metricsql_parser::ast::{BinModifier, BinaryExpr, Expr, Operator};
-use metricsql_parser::label::LabelFilter;
+use metricsql_parser::label::Matcher;
 use metricsql_parser::optimizer::{push_down_binary_op_filters_in_place, trim_filters_by_match_modifier};
 use crate::execution::{Context, EvalConfig};
 use crate::execution::binary::{can_push_down_common_filters, get_common_label_filters};
@@ -147,7 +147,7 @@ fn push_down_filters<'a>(
 /// - It returns lfs as is if be doesn't contain any group modifier
 /// - It returns only filters specified in on()
 /// - It drops filters specified inside ignoring()
-fn trim_filters_by_group_modifier(lfs: &mut Vec<LabelFilter>, modifier: &Option<BinModifier>) {
+fn trim_filters_by_group_modifier(lfs: &mut Vec<Matcher>, modifier: &Option<BinModifier>) {
     if let Some(modifier) = modifier {
         trim_filters_by_match_modifier(lfs, &modifier.matching);
     }

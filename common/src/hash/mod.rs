@@ -13,7 +13,6 @@ cfg_if!(
 
 mod no_hash;
 mod signature;
-//mod fast_hash_fallback;
 
 pub use no_hash::*;
 pub use signature::*;

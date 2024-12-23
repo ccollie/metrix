@@ -22,14 +22,11 @@ ahash.workspace = true
 async-std = { version = "1.13", optional = true }
 async-trait = "0.1"
 enquote.workspace = true
-byte-slice-cast = "1.2"
-byte-pool.workspace = true
 clone_dyn = "0.29"
 chili.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 effective-limits = "0.5"
-futures.workspace = true
 integer-encoding.workspace = true
 lockfree-object-pool = "0.1"
 lru_time_cache = "0.11"
@@ -52,7 +49,6 @@ tracing.workspace = true
 xxhash-rust.workspace = true
 metricsql_common={ path = "../common" }
 metricsql_parser={ path = "../parser" }
-static_assertions = "1.1.0"
 
 [features]
 default = ["tokio"]

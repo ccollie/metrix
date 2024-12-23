@@ -4,7 +4,7 @@ mod tests {
     use std::time::Duration;
     use metricsql_parser::ast::{AggregationExpr, Expr, FunctionExpr, MetricExpr};
     use metricsql_parser::functions::AggregateFunction;
-    use metricsql_parser::label::{LabelFilter, LabelFilterOp};
+    use metricsql_parser::label::{Matcher, MatchOp};
 
     use crate::cache::rollup_result_cache::{merge_timeseries, RollupResultCache};
     use crate::execution::EvalConfig;
@@ -31,7 +31,7 @@ mod tests {
         ec.set_caching(true);
 
         let me = MetricExpr::default()
-            .append(LabelFilter::new(LabelFilterOp::Equal, "aaa", "xxx").unwrap());
+            .append(Matcher::new(MatchOp::Equal, "aaa", "xxx").unwrap());
 
         let fe = FunctionExpr::from_single_arg("avg", Expr::MetricExpression(me)).unwrap();
 

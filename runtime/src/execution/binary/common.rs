@@ -1,7 +1,7 @@
 use ahash::{AHashMap, AHashSet};
 use regex::escape;
 
-use metricsql_parser::prelude::{BinaryExpr, Expr, LabelFilter, Operator};
+use metricsql_parser::prelude::{BinaryExpr, Expr, Matcher, Operator};
 
 use crate::types::{Label, Timeseries};
 
@@ -20,7 +20,7 @@ pub(crate) fn can_push_down_common_filters(be: &BinaryExpr) -> bool {
     }
 }
 
-pub(crate) fn get_common_label_filters(tss: &[Timeseries]) -> Vec<LabelFilter> {
+pub(crate) fn get_common_label_filters(tss: &[Timeseries]) -> Vec<Matcher> {
     let mut kv_map: AHashMap<String, AHashSet<String>> = AHashMap::new();
     for ts in tss.iter() {
         for Label { name: k, value: v } in ts.metric_name.labels.iter() {
@@ -31,7 +31,7 @@ pub(crate) fn get_common_label_filters(tss: &[Timeseries]) -> Vec<LabelFilter> {
         }
     }
 
-    let mut lfs: Vec<LabelFilter> = Vec::with_capacity(kv_map.len());
+    let mut lfs: Vec<Matcher> = Vec::with_capacity(kv_map.len());
     for (key, values) in kv_map {
         if values.len() != tss.len() {
             // Skip the tag, since it doesn't belong to all the time series.
@@ -47,10 +47,10 @@ pub(crate) fn get_common_label_filters(tss: &[Timeseries]) -> Vec<LabelFilter> {
         let vals: Vec<&String> = values.iter().collect::<Vec<_>>();
 
         let lf = if values.len() == 1 {
-            LabelFilter::equal(key, vals[0].into())
+            Matcher::equal(key, vals[0].into())
         } else {
             let str_value = join_regexp_values(&vals);
-            LabelFilter::regex_equal(key, str_value).unwrap()
+            Matcher::regex_equal(key, str_value).unwrap()
         };
 
         lfs.push(lf);
