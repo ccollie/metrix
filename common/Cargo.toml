@@ -18,7 +18,6 @@ cfg-if.workspace = true
 chili.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
-dynamic-lru-cache.workspace = true
 byte-pool = "0.2"
 futures.workspace = true
 gxhash = { version = "3.4", optional = true }

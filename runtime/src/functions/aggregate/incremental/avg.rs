@@ -1,5 +1,3 @@
-use itertools::izip;
-
 use super::context::{IncrementalAggrContext, IncrementalAggrHandler};
 
 pub struct IncrementalAggrAvg {}
@@ -9,12 +7,10 @@ impl IncrementalAggrHandler for IncrementalAggrAvg {
         // do not use `Rapid calculation methods` at https://en.wikipedia.org/wiki/Standard_deviation,
         // since it is slower and has no obvious benefits in increased precision.
 
-        for (v, count, dst) in izip!(
-            values.iter(),
-            iac.values.iter_mut(),
-            iac.ts.values.iter_mut()
-        ).filter(|(v, _, _)| !v.is_nan()) {
-
+        for (v, (count, dst)) in values.iter().cloned()
+            .zip(iac.values.iter_mut().zip(iac.ts.values.iter_mut()))
+            .filter(|(v, (_, _))| !v.is_nan())
+        {
             if *count == 0.0 {
                 *dst = *v;
                 *count = 1.0;
@@ -27,19 +23,16 @@ impl IncrementalAggrHandler for IncrementalAggrAvg {
     }
 
     fn merge(&self, dst: &mut IncrementalAggrContext, src: &IncrementalAggrContext) {
-        let iter = izip!(
-            src.values.iter(),
-            dst.values.iter_mut(),
-            src.ts.values.iter(),
-            dst.ts.values.iter_mut()
-        );
-        for (src_count, dst_count, v, dst) in iter {
+        for ((src_count, dst_count), (v, dst)) in
+            src.values.iter().cloned().zip(dst.values.iter_mut())
+                .zip(src.ts.values.iter().cloned().zip(dst.ts.values.iter_mut())
+            ) {
             if *src_count == 0.0 {
                 continue;
             }
 
             if *dst_count == 0.0 {
-                *dst = *v;
+                *dst = v;
                 *dst_count = *src_count;
                 continue;
             }
