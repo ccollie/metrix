@@ -4,7 +4,6 @@ use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
-use itertools::Itertools;
 use metricsql_common::hash::Signature;
 use metricsql_parser::prelude::{LabelFilter, Matchers};
 
@@ -74,11 +73,12 @@ impl Storage {
     fn get_range(&self, metric_id: Signature, start: i64, end: i64) -> Option<QueryResult> {
         if let Some(values) = self.sample_values.get(&metric_id) {
             if let Some(start) = find_first_index(values, start) {
-                let points = &values[start..]
+                let mut points = &mut values[start..]
                     .iter()
                     .filter(|p| p.t <= end)
-                    .sorted_by(|a, b| a.t.cmp(&b.t))
                     .collect::<Vec<_>>();
+
+                points.sort_by(|a, b| a.t.cmp(&b.t));
 
                 let mut timestamps = Vec::with_capacity(points.len());
                 let mut values = Vec::with_capacity(points.len());

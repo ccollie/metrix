@@ -1,5 +1,3 @@
-use itertools::izip;
-
 use super::context::{IncrementalAggrContext, IncrementalAggrHandler};
 
 pub struct IncrementalAggrSum2 {}
@@ -7,14 +5,14 @@ pub struct IncrementalAggrSum2 {}
 impl IncrementalAggrHandler for IncrementalAggrSum2 {
     fn update(&self, iac: &mut IncrementalAggrContext, values: &[f64]) {
         for ((v, count), dst) in values
-            .iter()
+            .iter().cloned()
             .zip(iac.values.iter_mut())
             .zip(iac.ts.values.iter_mut())
         {
             if v.is_nan() {
                 continue;
             }
-            let v_squared = *v * *v;
+            let v_squared = v * v;
             if *count == 0.0 {
                 *count = 1.0;
                 *dst = v_squared;
@@ -26,21 +24,17 @@ impl IncrementalAggrHandler for IncrementalAggrSum2 {
     }
 
     fn merge(&self, dst: &mut IncrementalAggrContext, src: &IncrementalAggrContext) {
-        for (src_count, dst_count, v, dst) in izip!(
-            src.values.iter(),
-            dst.values.iter_mut(),
-            src.ts.values.iter(),
-            dst.ts.values.iter_mut()
-        ) {
-            if *src_count == 0.0 {
-                continue;
-            }
+        for ((_src_count, dst_count), (v, dst)) in
+            src.values.iter().cloned()
+                .zip(dst.values.iter_mut())
+                .zip(src.ts.values.iter().cloned().zip(dst.ts.values.iter_mut()))
+                .filter(|((src_count, _), _)| *src_count != 0.0) {
             if *dst_count == 0.0 {
                 *dst_count = 1.0;
-                *dst = *v;
+                *dst = v;
                 continue;
             }
-            *dst += *v;
+            *dst += v;
         }
     }
 

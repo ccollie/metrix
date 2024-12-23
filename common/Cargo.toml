@@ -35,7 +35,6 @@ serde_derive.workspace = true
 serde_regex.workspace = true
 xxhash-rust.workspace = true
 strum.workspace = true
-strum_macros.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

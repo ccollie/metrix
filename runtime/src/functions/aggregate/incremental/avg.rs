@@ -12,7 +12,7 @@ impl IncrementalAggrHandler for IncrementalAggrAvg {
             .filter(|(v, (_, _))| !v.is_nan())
         {
             if *count == 0.0 {
-                *dst = *v;
+                *dst = v;
                 *count = 1.0;
                 continue;
             }
@@ -24,21 +24,19 @@ impl IncrementalAggrHandler for IncrementalAggrAvg {
 
     fn merge(&self, dst: &mut IncrementalAggrContext, src: &IncrementalAggrContext) {
         for ((src_count, dst_count), (v, dst)) in
-            src.values.iter().cloned().zip(dst.values.iter_mut())
-                .zip(src.ts.values.iter().cloned().zip(dst.ts.values.iter_mut())
-            ) {
-            if *src_count == 0.0 {
-                continue;
-            }
-
+            src.values.iter().cloned()
+                .zip(dst.values.iter_mut())
+                .zip(src.ts.values.iter().cloned().zip(dst.ts.values.iter_mut()))
+                .filter(|((src_count, _), _)| *src_count != 0.0)
+        {
             if *dst_count == 0.0 {
                 *dst = v;
-                *dst_count = *src_count;
+                *dst_count = src_count;
                 continue;
             }
 
             *dst += v;
-            *dst_count += *src_count;
+            *dst_count += src_count;
         }
     }
 
