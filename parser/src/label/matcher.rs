@@ -1,10 +1,23 @@
+// Copyright 2023 Greptime Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
 use crate::common::join_vector;
-use crate::parser::{escape_ident, is_empty_regex, quote, ParseError, ParseResult};
+use crate::parser::{escape_ident, quote, ParseError, ParseResult};
 use ahash::AHashMap;
 use metricsql_common::prelude::{string_matcher_from_regex, LITERAL_MATCH_COST};
 use metricsql_common::regex_util::StringMatchHandler;
@@ -176,14 +189,14 @@ impl Matcher {
         }
     }
 
-    pub fn is_match(&self, str: &str) -> bool {
+    pub fn matches(&self, str: &str) -> bool {
         match self.op {
             MatchOp::Equal => self.value.eq(str),
             MatchOp::NotEqual => self.value.ne(str),
             MatchOp::RegexEqual => {
                 // slight optimization for frequent case
                 if str.is_empty() {
-                    return is_empty_regex(&self.value);
+                    return is_empty_regex_matcher(&self);
                 }
                 if let Some(re) = &self.re {
                     re.0.matches(str)
@@ -434,7 +447,7 @@ impl Matchers {
                 .matchers
                 .iter()
                 .chain(self.or_matchers.iter().flatten())
-                .all(|m| m.is_match(""))
+                .all(|m| m.matches(""))
     }
 
     /// find the matcher's value whose name equals the specified name. This function
@@ -692,7 +705,7 @@ pub fn try_escape_for_repeat_re(re: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::label::{Matcher, MatchOp, Matchers};
+    use crate::label::{MatchOp, Matcher, Matchers};
 
     use super::try_escape_for_repeat_re;
 
@@ -700,23 +713,23 @@ mod tests {
     fn test_matcher_eq_ne() {
         let op = MatchOp::Equal;
         let matcher = Matcher::new(op, "name", "up").unwrap();
-        assert!(matcher.is_match("up"));
-        assert!(!matcher.is_match("down"));
+        assert!(matcher.matches("up"));
+        assert!(!matcher.matches("down"));
 
         let op = MatchOp::NotEqual;
         let matcher = Matcher::new(op, "name", "up").unwrap();
-        assert!(matcher.is_match("foo"));
-        assert!(matcher.is_match("bar"));
-        assert!(!matcher.is_match("up"));
+        assert!(matcher.matches("foo"));
+        assert!(matcher.matches("bar"));
+        assert!(!matcher.matches("up"));
     }
 
     #[test]
     fn test_matcher_re() {
         let value = "api/v1/.*";
         let matcher = Matcher::new(MatchOp::RegexEqual, "name", value).unwrap();
-        assert!(matcher.is_match("api/v1/query"));
-        assert!(matcher.is_match("api/v1/range_query"));
-        assert!(!matcher.is_match("api/v2"));
+        assert!(matcher.matches("api/v1/query"));
+        assert!(matcher.matches("api/v1/range_query"));
+        assert!(!matcher.matches("api/v2"));
     }
 
     #[test]
@@ -790,6 +803,54 @@ mod tests {
             Matcher::equal("code", "2??")
         );
     }
+
+    #[test]
+    fn test_inverse() {
+        let tests = vec![
+            (
+                Matcher {
+                    op: MatchOp::Equal,
+                    label: "name1".to_string(),
+                    value: "value1".to_string(),
+                    re: None,
+                },
+                Matcher {
+                    op: MatchOp::NotEqual,
+                    label: "name1".to_string(),
+                    value: "value1".to_string(),
+                    re: None,
+                },
+            ),
+            (
+                Matcher {
+                    op: MatchOp::NotEqual,
+                    label: "name2".to_string(),
+                    value: "value2".to_string(),
+                    re: None,
+                },
+                Matcher {
+                    op: MatchOp::Equal,
+                    label: "name2".to_string(),
+                    value: "value2".to_string(),
+                    re: None,
+                },
+            ),
+            (
+                Matcher::new(MatchOp::RegexEqual, "name3", "value3.*").unwrap(),
+                Matcher::new(MatchOp::RegexNotEqual, "name3", "value3.*").unwrap(),
+            ),
+            (
+                Matcher::new(MatchOp::RegexNotEqual, "name4", "value4.*").unwrap(),
+                Matcher::new(MatchOp::RegexEqual, "name4", "value4.*").unwrap(),
+            ),
+        ];
+
+        for (matcher, expected) in tests {
+            let result = matcher.inverse().unwrap();
+            assert_eq!(result.op, expected.op);
+        }
+    }
+
 
     #[test]
     fn test_matchers_equality() {

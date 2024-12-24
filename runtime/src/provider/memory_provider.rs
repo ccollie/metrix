@@ -160,7 +160,7 @@ impl MetricStorage for MemoryMetricProvider {
 
 fn matches_filter(mn: &MetricName, filter: &Matcher) -> bool {
     if let Some(v) = mn.label_value(filter.label.as_str()) {
-        return filter.is_match(v);
+        return filter.matches(v);
     }
     false
 }
