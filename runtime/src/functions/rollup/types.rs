@@ -37,7 +37,7 @@ pub struct RollupFuncArg<'a> {
     /// Time window for rollup calculations.
     pub(super) window: i64,
 
-    pub(super) tsm: Option<Arc<TimeSeriesMap>>,
+    pub(super) tsm: Option<Arc<TimeSeriesMap>>, // todo: move to Option<Arc<Box>>, since its not frequently used
 }
 
 

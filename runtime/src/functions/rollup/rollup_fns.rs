@@ -24,11 +24,17 @@ use crate::functions::rollup::{
         new_rollup_rate, rollup_deriv_fast, rollup_deriv_slow, rollup_ideriv,
     },
     duration_over_time::new_rollup_duration_over_time,
-    hoeffding_bound::{new_rollup_hoeffding_bound_lower, new_rollup_hoeffding_bound_upper},
+    hoeffding_bound::{
+        new_rollup_hoeffding_bound_lower,
+        new_rollup_hoeffding_bound_upper
+    },
     holt_winters::new_rollup_holt_winters,
     integrate::{new_rollup_integrate, rollup_integrate},
     outlier_iqr::rollup_outlier_iqr,
-    quantiles::{new_rollup_quantile, new_rollup_quantiles},
+    quantiles::{
+        new_rollup_quantile,
+        new_rollup_quantiles
+    },
     RollupHandlerFloat,
 };
 use crate::functions::rollup::{RollupFunc, RollupFuncArg, RollupHandler};

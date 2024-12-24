@@ -271,7 +271,7 @@ impl RollupConfig {
     ///
     /// rc.timestamps are used as timestamps for dst_values.
     ///
-    /// timestamps must cover time range [rc.start - rc.window - MAX_SILENCE_INTERVAL ... rc.end].
+    /// timestamps must cover time range `[rc.start - rc.window - MAX_SILENCE_INTERVAL ... rc.end]`.
     pub(crate) fn exec(
         &self,
         dst_values: &mut Vec<f64>,
@@ -393,6 +393,7 @@ impl RollupConfig {
         let mut ni = 0;
         let mut nj = 0;
 
+        // todo: use smallvec
         let func_args: Vec<_> = self.timestamps.iter().enumerate().map(|(idx, &t_end)| {
             let t_start = t_end - window_ms;
 
@@ -755,7 +756,7 @@ fn get_rollup_function_handler_meta(
     })
 }
 
-/// get_rollup_tag returns the possible second arg from the expr.
+/// `get_rollup_tag` returns the possible second arg from the expr.
 ///
 /// The expr can have the following forms:
 /// - rollup_func(q, tag)

@@ -1,8 +1,8 @@
+use crate::regex_util::string_pattern::StringPattern;
 use get_size::GetSize;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
-use crate::regex_util::string_pattern::StringPattern;
 
 const MAX_SET_MATCHES: usize = 256;
 
@@ -257,22 +257,18 @@ impl ContainsMultiStringMatcher {
 #[derive(Clone, Debug, GetSize, Eq, PartialEq)]
 pub struct LiteralMapMatcher {
     pub values: HashSet<String>,
-    pub prefixes: HashMap<String, Vec<Box<StringMatchHandler>>>,
-    pub min_prefix_len: usize,
     pub is_case_sensitive: bool,
 }
 
 impl LiteralMapMatcher {
-    pub(crate) fn new(min_prefix_len: usize) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             values: Default::default(),
-            prefixes: Default::default(),
-            min_prefix_len,
             is_case_sensitive: true,
         }
     }
 
-    pub(crate) fn add(&mut self, s: String) {
+    pub(crate) fn push(&mut self, s: String) {
         if self.is_case_sensitive {
             self.values.insert(s.to_lowercase());
         } else {
@@ -280,24 +276,8 @@ impl LiteralMapMatcher {
         }
     }
 
-    pub(crate) fn add_prefix(&mut self, prefix: String, matcher: Box<StringMatchHandler>) {
-        if self.min_prefix_len == 0 {
-            panic!("add_prefix called when no prefix length defined");
-        }
-        if prefix.len() < self.min_prefix_len {
-            panic!("add_prefix called with a too short prefix");
-        }
-
-        let s = get_prefix(&prefix, self.min_prefix_len);
-
-        self.prefixes
-            .entry(s)
-            .or_insert_with(Vec::new)
-            .push(matcher);
-    }
-
     pub fn set_matches(&self) -> Vec<String> {
-        if self.values.len() >= MAX_SET_MATCHES || !self.prefixes.is_empty() {
+        if self.values.len() >= MAX_SET_MATCHES {
             return Vec::new();
         }
 
@@ -306,24 +286,11 @@ impl LiteralMapMatcher {
 
     fn matches(&self, s: &str) -> bool {
         if self.is_case_sensitive {
-            if self.values.contains(&s.to_lowercase()) {
-                return true;
-            }
-        } else if self.values.contains(s) {
-            return true;
+            self.values.contains(&s.to_lowercase())
+        } else {
+            self.values.contains(s)
         }
-
-        if self.min_prefix_len > 0 && s.len() >= self.min_prefix_len {
-            let prefix = &s[..self.min_prefix_len];
-            if let Some(matchers) = self.prefixes.get(prefix) {
-                if matchers.iter().any(|m| m.matches(s)) {
-                    return true;
-                }
-            }
-        }
-        false
     }
-
     pub fn is_case_sensitive(&self) -> bool {
         true
     }
@@ -353,20 +320,23 @@ impl RepetitionMatcher {
             return true;
         }
         if let Some(max) = &self.max {
+            let pat_len = self.sub.len();
             let mut cursor = &s[..];
             let mut i = 0;
-            while cursor.len() >= s.len() {
-                if !cursor.starts_with(&self.sub) {
-                    break;
-                }
-                cursor = &cursor[self.sub.len()..];
-                i += 1;
 
+            while i <= (*max + 1) {
+                if !cursor.starts_with(&self.sub) {
+                    return i >= self.min;
+                }
+                i += 1;
                 if i > *max {
                     return false;
                 }
+                cursor = &cursor[pat_len..];
+                if cursor.len() < pat_len {
+                    return i >= self.min;
+                }
             }
-            return i >= self.min && i <= *max
         }
         true
     }
@@ -1016,10 +986,6 @@ fn dot_plus_dot_plus_fn(needle: &str, haystack: &str) -> bool {
     }
 }
 
-fn get_prefix(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
-
 pub fn contains_in_order(s: &str, contains: &[String]) -> bool {
     if contains.len() == 1 {
         return s.contains(&contains[0]);
@@ -1088,6 +1054,37 @@ mod tests {
         require_matches(value, false);
         require_matches("x\u{FF}x", false);
         require_matches("\u{FF}\u{FE}", false);
+    }
+
+    #[test]
+    fn test_repetition_matcher_min_zero_empty_string() {
+        let matcher = RepetitionMatcher::new("sub".to_string(), 0, Some(3));
+        assert!(matcher.matches(""));
+    }
+
+    #[test]
+    fn test_repetition_exact_match() {
+        let matcher = RepetitionMatcher::new("abc".to_string(), 1, None);
+        assert!(matcher.matches("abc"));
+    }
+
+    #[test]
+    fn test_repetition_min_zero() {
+        let matcher = RepetitionMatcher::new("abc".to_string(), 0, None);
+        assert!(matcher.matches(""));
+        assert!(matcher.matches("abc"));
+        assert!(matcher.matches("abcabc"));
+    }
+
+    #[test]
+    fn test_repetition_zero_to_n() {
+        let matcher = RepetitionMatcher::new("abc".to_string(), 0, Some(3));
+        assert!(matcher.matches(""));
+        assert!(matcher.matches("abc"));
+        assert!(matcher.matches("abcabc"));
+        assert!(matcher.matches("abcabcabc"));
+
+        assert_eq!(false, matcher.matches("abcabcabcabc"));
     }
 
 }

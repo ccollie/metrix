@@ -27,11 +27,6 @@ pub(crate) fn limit_offset(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Time
     // were filtered out.
     remove_empty_series(&mut rvs);
 
-    let slice = if rvs.len() > offset {
-        &mut rvs[offset..]
-    } else {
-        &mut []
-    };
     if rvs.len() >= offset {
         rvs.drain(0..offset);
         println!("drained rvs={:?}", rvs);

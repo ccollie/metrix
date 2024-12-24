@@ -228,6 +228,7 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
                 },
                 _ => is_all_literal = false,
             }
+
             matchers.push((matcher, cost));
         } else {
             return Ok(None);
@@ -236,10 +237,14 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
 
     matchers.sort_by_key(|(_, cost)| *cost);
 
+    let case_sensitive = matches_case_sensitive.unwrap_or_default();
+
     // optimize the case where all the alternatives are literals
     if is_all_literal {
         if num_values >= MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD {
-            let mut res = LiteralMapMatcher::new(0);
+            let mut res = LiteralMapMatcher::new();
+            res.is_case_sensitive = case_sensitive;
+
             for (matcher, _) in matchers.into_iter() {
                 match matcher {
                     StringMatchHandler::Literal(lit) => {
@@ -256,7 +261,6 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
             return Ok(Some((StringMatchHandler::LiteralMap(res), total_cost)));
         }
 
-        let case_sensitive = matches_case_sensitive.unwrap_or_default();
         let mut result = EqualMultiStringMatcher::new(case_sensitive, num_values);
         for (matcher, _) in matchers.into_iter() {
             match matcher {
@@ -553,7 +557,6 @@ fn is_case_insensitive_class(hir: &Hir) -> Option<char> {
 
     None
 }
-
 
 /// In HIR, casing is represented by individual Char classes per Unicode case folding. E.g.
 /// 'a' is represented by [aA] and 'A' is represented by [aA]. This function returns the coalesced
@@ -853,7 +856,7 @@ pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandl
 
     let use_map = estimated_alternates >= MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD;
     if use_map {
-        let mut map = LiteralMapMatcher::new(0);
+        let mut map = LiteralMapMatcher::new();
         for sub_match in s.split('|') {
             if regex::escape(sub_match) != sub_match {
                 return None;
@@ -1285,12 +1288,11 @@ fn too_many_matches(matches: &[String], added: &[String]) -> bool {
     matches.len() + added.len() > MAX_SET_MATCHES
 }
 
-
 #[cfg(test)]
 mod test {
     use super::remove_start_end_anchors;
     use crate::prelude::regex_utils::{find_set_matches, optimize_concat_regex};
-    use crate::prelude::{string_matcher_from_regex};
+    use crate::prelude::string_matcher_from_regex;
     use crate::regex_util::{build_hir, get_or_values, is_dot_plus, is_dot_star};
     use regex_syntax::hir::HirKind;
 

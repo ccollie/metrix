@@ -40,8 +40,8 @@ fn transform_sort_impl(tfa: &TransformFuncArg, is_desc: bool) -> RuntimeResult<V
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
 
     fn sort(a: &Timeseries, b: &Timeseries, is_desc: bool) -> Ordering {
-        let iter_a = a.values.iter().rev().cloned();
-        let iter_b = b.values.iter().rev().cloned();
+        let iter_a = a.values.iter().rev().copied();
+        let iter_b = b.values.iter().rev().copied();
         if is_desc {
             iter_cmp_f64_desc(iter_a, iter_b)
         } else {
