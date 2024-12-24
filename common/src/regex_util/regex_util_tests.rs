@@ -656,13 +656,6 @@ mod tests {
                     visit_string_matcher(left, state, callback);
                 }
             }
-            StringMatchHandler::LiteralMap(m) => {
-                for (_, prefixes) in &m.prefixes {
-                    for matcher in prefixes {
-                        visit_string_matcher(&matcher, state, callback)
-                    }
-                }
-            }
             _ => {}
         }
     }

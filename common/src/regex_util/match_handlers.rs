@@ -326,7 +326,8 @@ impl RepetitionMatcher {
 
             while i <= (*max + 1) {
                 if !cursor.starts_with(&self.sub) {
-                    return i >= self.min;
+                    // mismatch at the beginning when min == 0 is handled above
+                    return i > self.min;
                 }
                 i += 1;
                 if i > *max {
@@ -1084,6 +1085,7 @@ mod tests {
         assert!(matcher.matches("abcabc"));
         assert!(matcher.matches("abcabcabc"));
 
+        assert_eq!(false, matcher.matches("bbb"));
         assert_eq!(false, matcher.matches("abcabcabcabc"));
     }
 
