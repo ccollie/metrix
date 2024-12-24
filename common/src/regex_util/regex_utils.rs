@@ -17,7 +17,7 @@ const MAX_SET_MATCHES: usize = 256;
 const MAX_OR_VALUES: usize = 256;
 
 /// The minimum number of alternate values a regex should have to trigger
-/// the optimization done by `optimize_equal_or_prefix_string_matchers()` and so use a map
+/// the optimization done by `optimize_equal_or_prefix_string_matchers()` to use a map
 /// to match values instead of iterating over a list.
 const MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD: usize = 16;
 
@@ -1103,7 +1103,7 @@ fn find_set_matches_from_alternate(hir: &Hir, base: &str) -> Option<(Vec<String>
 }
 
 
-pub(super) fn clear_begin_end_text(hir: &mut Hir) {
+fn clear_begin_end_text(hir: &mut Hir) {
 
     fn handle_concat(items: &Vec<Hir>) -> Option<Hir> {
         if !items.is_empty() {

@@ -276,10 +276,18 @@ impl Matcher {
     /// `set_matches` returns a set of equality matchers for the current regex matchers if possible.
     /// For examples the regex `a(b|f)` will return "ab" and "af".
     /// Returns None if we can't replace the regex by only equality matchers.
+    /// TODO: maybe return an iterator instead of a vector to avoid allocations.
     pub fn set_matches(&self) -> Option<Cow<Vec<String>>> {
         if let Some(matcher) = &self.re {
             let m = &matcher.0;
+            if !m.is_case_sensitive() {
+                return None;
+            }
             return match m {
+                StringMatchHandler::Literal(lit) => {
+                    let values = vec![lit.pattern().to_string()];
+                    Some(Cow::Owned(values))
+                },
                 StringMatchHandler::Regex(regex) => {
                     if regex.set_matches.is_empty() {
                         return None;
@@ -287,9 +295,6 @@ impl Matcher {
                     return Some(Cow::Borrowed(&regex.set_matches));
                 },
                 StringMatchHandler::Alternates(alts) => {
-                    if m.is_case_sensitive() {
-                        return None;
-                    }
                     Some(Cow::Borrowed(&alts.values))
                 },
                 StringMatchHandler::LiteralMap(map) => {
