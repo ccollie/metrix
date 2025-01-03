@@ -19,8 +19,8 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-// LazyLoader lazily loads samples into storage.
-// This is specifically implemented for unit testing of rules.
+/// LazyLoader lazily loads samples into storage.
+/// This is specifically implemented for unit testing of rules.
 pub struct LazyLoader {
     load_cmd: Option<LoadCmd>,
     storage: Arc<MemoryMetricProvider>,
@@ -30,7 +30,7 @@ pub struct LazyLoader {
 }
 
 impl LazyLoader {
-    // NewLazyLoader returns an initialized empty LazyLoader.
+    /// returns an initialized empty LazyLoader.
     pub fn new(input: &str) -> Result<Self, Box<dyn Error>> {
         let storage = Arc::new(MemoryMetricProvider::default());
         let context: Context = Context::new().with_metric_storage(storage.clone());
@@ -83,7 +83,7 @@ impl LazyLoader {
         Ok(())
     }
 
-    // appendTill appends the defined time series to the storage till the given timestamp (in milliseconds).
+    /// appends the defined time series to the storage till the given timestamp (in milliseconds).
     fn append_till(&mut self, ts: i64) -> Result<(), Box<dyn Error>> {
     if let Some(load_cmd) = self.load_cmd.as_mut() {
         let defs = &mut load_cmd.defs;
@@ -109,8 +109,8 @@ impl LazyLoader {
     Ok(())
 }
 
-    // WithSamplesTill loads the samples till given timestamp and executes the given function.
-    fn with_samples_till<F>(&mut self, ts: Duration, mut fn_: F)
+    /// loads the samples till given timestamp and executes the given function.
+    pub fn with_samples_till<F>(&mut self, ts: Duration, mut fn_: F)
     where
         F: FnMut(Result<(), Box<dyn Error>>),
     {

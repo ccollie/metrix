@@ -98,7 +98,7 @@ pub struct Matcher {
     pub value: String,
 
     #[serde(skip)]
-    re: Option<Box<(StringMatchHandler, usize)>> // boxed to reduce struct size
+    re: Option<Box<StringMatchHandler>> // boxed to reduce struct size
 }
 
 impl Matcher {
@@ -110,7 +110,7 @@ impl Matcher {
         let label = label.into();
         let value = value.into();
 
-        let re: Option<Box<(StringMatchHandler, usize)>> = match match_op {
+        let re: Option<Box<StringMatchHandler>> = match match_op {
             MatchOp::RegexEqual | MatchOp::RegexNotEqual => {
                 let matcher = string_matcher_from_regex(&value)
                     .map_err(|_e| ParseError::InvalidRegex(value.clone()))?;
@@ -199,14 +199,14 @@ impl Matcher {
                     return is_empty_regex_matcher(&self);
                 }
                 if let Some(re) = &self.re {
-                    re.0.matches(str)
+                    re.matches(str)
                 } else {
                     unreachable!("regex_equal without compiled regex");
                 }
             }
             MatchOp::RegexNotEqual => {
                 if let Some(re) = &self.re {
-                    !re.0.matches(str)
+                    !re.matches(str)
                 } else {
                     unreachable!("regex_not_equal without compiled regex");
                 }
@@ -246,9 +246,9 @@ impl Matcher {
     /// It will be empty if it's an equality matcher or if the prefix can't be determined.
     pub fn prefix(&self) -> Option<&str> {
         if let Some(re) = &self.re {
-            match &re.0 {
+            match &**re {
                 StringMatchHandler::Prefix(p) => {
-                    if re.0.is_case_sensitive() {
+                    if re.is_case_sensitive() {
                         return None;
                     }
                     return Some(p.prefix.pattern())
@@ -267,7 +267,7 @@ impl Matcher {
 
     pub fn cost(&self) -> usize {
         if let Some(re) = &self.re {
-            re.1
+            re.cost()
         } else {
             LITERAL_MATCH_COST
         }
@@ -279,11 +279,10 @@ impl Matcher {
     /// TODO: maybe return an iterator instead of a vector to avoid allocations.
     pub fn set_matches(&self) -> Option<Cow<Vec<String>>> {
         if let Some(matcher) = &self.re {
-            let m = &matcher.0;
-            if !m.is_case_sensitive() {
+            if !matcher.is_case_sensitive() {
                 return None;
             }
-            return match m {
+            return match &**matcher {
                 StringMatchHandler::Literal(lit) => {
                     let values = vec![lit.pattern().to_string()];
                     Some(Cow::Owned(values))
@@ -318,7 +317,7 @@ fn is_empty_regex_matcher(m: &Matcher) -> bool {
             return true;
         }
         if let Some(re) = &m.re {
-            return re.0.matches("");
+            return re.matches("");
         }
     }
     false

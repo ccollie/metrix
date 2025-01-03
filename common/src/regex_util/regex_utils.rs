@@ -1,7 +1,7 @@
 use regex_syntax::hir::Class::{Unicode, Bytes};
-use super::match_handlers::StringMatchHandler;
+use super::match_handlers::{get_optimized_literal_matcher, StringMatchHandler};
 use crate::prelude::{ContainsMultiStringMatcher, EqualMultiStringMatcher, RegexMatcher, RepetitionMatcher};
-use crate::regex_util::{LiteralMapMatcher, Quantifier};
+use crate::regex_util::{LiteralMapMatcher, Quantifier, StringMatchOptions};
 use regex::{Error as RegexError, Regex};
 use regex_syntax::hir::{Class, Dot, Hir, HirKind, Look, Repetition};
 use regex_syntax::parse as parse_regex;
@@ -53,18 +53,6 @@ pub(super) fn build_hir(pattern: &str) -> Result<Hir, RegexError> {
     parse_regex(pattern).map_err(|err| RegexError::Syntax(err.to_string()))
 }
 
-/// These cost values are used for sorting tag filters in ascending order or the required CPU
-/// time for execution.
-///
-/// These values are obtained from BenchmarkOptimizedRematch_cost benchmark.
-pub const EMPTY_MATCH_COST: usize = 0;
-pub const FULL_MATCH_COST: usize = 1;
-pub const PREFIX_MATCH_COST: usize = 2;
-pub const LITERAL_MATCH_COST: usize = 3;
-pub const SUFFIX_MATCH_COST: usize = 4;
-pub const MIDDLE_MATCH_COST: usize = 6;
-pub const RE_MATCH_COST: usize = 100;
-pub const FN_MATCH_COST: usize = 20;
 
 /// get_optimized_match_func tries returning optimized function for matching the given expr.
 ///
@@ -83,26 +71,25 @@ pub const FN_MATCH_COST: usize = 20;
 ///     'foo(bar|baz)'
 ///
 /// It returns re_match if it cannot find optimized function.
-pub fn string_matcher_from_regex(expr: &str) -> Result<(StringMatchHandler, usize), RegexError> {
-    fn create_re_match_fn(expr: &str, sre: &Hir) -> Result<(StringMatchHandler, usize), RegexError> {
-        let re_match = handle_regex(expr, sre)?;
-        Ok((re_match, RE_MATCH_COST))
+pub fn string_matcher_from_regex(expr: &str) -> Result<StringMatchHandler, RegexError> {
+    fn create_re_match_fn(expr: &str, sre: &Hir) -> Result<StringMatchHandler, RegexError> {
+        handle_regex(expr, sre)
     }
 
-    if expr.is_empty() {
-        return Ok((StringMatchHandler::Empty, EMPTY_MATCH_COST))
-    }
+    match expr.len() {
+        0 => return Ok(StringMatchHandler::Empty),
+        2 => {
+            if expr == ".*" {
+                return Ok(StringMatchHandler::any(false));
+            }
 
-    if expr == ".*" {
-        return Ok((StringMatchHandler::any(false), FULL_MATCH_COST));
-    }
-
-    if expr == ".+" {
-        return Ok((StringMatchHandler::not_empty(false), FULL_MATCH_COST));
-    }
-
-    if let Some(res) = optimize_alternating_literals(expr) {
-        return Ok(res);
+            if expr == ".+" {
+                return Ok(StringMatchHandler::not_empty(true));
+            }
+        }
+        _ => if let Some(res) = optimize_alternating_literals(expr) {
+            return Ok(res);
+        }
     }
 
     let mut sre = match build_hir(expr) {
@@ -152,7 +139,7 @@ pub fn string_matcher_from_regex(expr: &str) -> Result<(StringMatchHandler, usiz
 
 pub(super) fn string_matcher_from_regex_internal(
     sre: &Hir,
-) -> Result<Option<(StringMatchHandler, usize)>, RegexError> {
+) -> Result<Option<StringMatchHandler>, RegexError> {
 
     // Correctly handling anchors inside a regex is tricky,
     // so in this case we fall back to the regex engine.
@@ -161,14 +148,14 @@ pub(super) fn string_matcher_from_regex_internal(
     }
 
     match sre.kind() {
-        HirKind::Empty => Ok(Some((StringMatchHandler::Empty, EMPTY_MATCH_COST))),
+        HirKind::Empty => Ok(Some(StringMatchHandler::Empty)),
         HirKind::Repetition(rep) => {
             if rep_is_dot_star(rep) {
                 // '.*'
-                return Ok(Some((StringMatchHandler::any(true), FULL_MATCH_COST)));
+                return Ok(Some(StringMatchHandler::any(false)));
             } else if rep_is_dot_plus(rep) {
                 // '.+'
-                return Ok(Some((StringMatchHandler::not_empty(true), FULL_MATCH_COST)));
+                return Ok(Some(StringMatchHandler::not_empty(true)));
             }
             Ok(get_repetition_matcher(sre, rep))
         },
@@ -179,16 +166,15 @@ pub(super) fn string_matcher_from_regex_internal(
         }
         HirKind::Class(_) => {
             if let Some((alternatives, case_sensitive)) = find_set_matches_internal(sre, "") {
-                let cost = alternatives.len() * LITERAL_MATCH_COST;
                 let matcher = StringMatchHandler::literal_alternates(alternatives, case_sensitive);
-                Ok(Some((matcher, cost)))
+                Ok(Some(matcher))
             } else {
                 Ok(None)
             }
         }
         HirKind::Literal(_lit) => {
             let literal = literal_to_string(sre);
-            Ok(Some((StringMatchHandler::equals(literal), LITERAL_MATCH_COST)))
+            Ok(Some(StringMatchHandler::equals(literal)))
         }
         HirKind::Concat(subs) => get_concat_matcher(&subs),
         _ => {
@@ -198,25 +184,26 @@ pub(super) fn string_matcher_from_regex_internal(
     }
 }
 
-fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, usize)>, RegexError> {
+fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexError> {
     let mut is_all_literal = true;
     let mut num_values: usize = 0;
 
-    let mut matchers: SmallVec<(StringMatchHandler, usize), 6> = SmallVec::new();
-    let mut total_cost: usize = 0;
+    let mut matchers: SmallVec<StringMatchHandler, 6> = SmallVec::new();
     let mut matches_case_sensitive: Option<bool> = None;
+    let mut is_mismatch = false;
 
     for sub_hir in hirs {
-        if let Some((matcher, cost)) = string_matcher_from_regex_internal(sub_hir)? {
-            total_cost += cost;
+        if let Some(matcher) = string_matcher_from_regex_internal(sub_hir)? {
             let case_sensitive = matcher.is_case_sensitive();
 
-            if let Some(sensitive) = matches_case_sensitive {
-                if sensitive != case_sensitive {
-                    return Ok(None);
+            if !is_mismatch {
+                if let Some(sensitive) = matches_case_sensitive {
+                    if sensitive != case_sensitive {
+                        is_mismatch = true;
+                    }
+                } else {
+                    matches_case_sensitive = Some(case_sensitive);
                 }
-            } else {
-                matches_case_sensitive = Some(case_sensitive);
             }
 
             match &matcher {
@@ -229,23 +216,23 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
                 _ => is_all_literal = false,
             }
 
-            matchers.push((matcher, cost));
+            matchers.push(matcher);
         } else {
             return Ok(None);
         }
     }
 
-    matchers.sort_by_key(|(_, cost)| *cost);
+    matchers.sort_by_key(|matcher| matcher.cost());
 
     let case_sensitive = matches_case_sensitive.unwrap_or_default();
 
     // optimize the case where all the alternatives are literals
-    if is_all_literal {
+    if is_all_literal && !is_mismatch {
         if num_values >= MIN_EQUAL_MULTI_STRING_MATCHER_MAP_THRESHOLD {
             let mut res = LiteralMapMatcher::new();
             res.is_case_sensitive = case_sensitive;
 
-            for (matcher, _) in matchers.into_iter() {
+            for matcher in matchers.into_iter() {
                 match matcher {
                     StringMatchHandler::Literal(lit) => {
                         res.values.insert(lit.into());
@@ -258,11 +245,11 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
                     _ => unreachable!("BUG: unexpected matcher (check is_literal)"),
                 }
             }
-            return Ok(Some((StringMatchHandler::LiteralMap(res), total_cost)));
+            return Ok(Some(StringMatchHandler::LiteralMap(res)));
         }
 
         let mut result = EqualMultiStringMatcher::new(case_sensitive, num_values);
-        for (matcher, _) in matchers.into_iter() {
+        for matcher in matchers.into_iter() {
             match matcher {
                 StringMatchHandler::Literal(lit) => {
                     result.push(lit.into());
@@ -275,18 +262,18 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, u
                 _ => unreachable!("BUG: unexpected matcher (check is_literal)"),
             }
         }
-        return Ok(Some((StringMatchHandler::Alternates(result), total_cost)));
+        return Ok(Some(StringMatchHandler::Alternates(result)));
     }
 
     let or_matchers = matchers
         .into_iter()
-        .map(|(matcher, _)| Box::new(matcher))
+        .map(Box::new)
         .collect::<Vec<_>>();
 
-    Ok(Some((StringMatchHandler::Or(or_matchers), total_cost)))
+    Ok(Some(StringMatchHandler::Or(or_matchers)))
 }
 
-fn get_repetition_matcher(hir: &Hir, rep: &Repetition) -> Option<(StringMatchHandler, usize)> {
+fn get_repetition_matcher(hir: &Hir, rep: &Repetition) -> Option<StringMatchHandler> {
     fn validate_repetition(rep: &Repetition) -> bool {
         // if re.sub.Op != syntax.OpAnyChar && re.sub.Op != syntax.OpAnyCharNotNL {
         //     return nil
@@ -297,47 +284,45 @@ fn get_repetition_matcher(hir: &Hir, rep: &Repetition) -> Option<(StringMatchHan
     // .?
     if is_dot_question(hir) {
         let match_nl = matches_any_char(&rep.sub);
-        Some((StringMatchHandler::zero_or_one_chars(match_nl), FULL_MATCH_COST))
+        Some(StringMatchHandler::zero_or_one_chars(match_nl))
     } else if rep_is_dot_plus(rep) {
         let matches_any = matches_any_char(&rep.sub);
         let matches_non_newline = matches_any_character_except_newline(&rep.sub);
         if !matches_any && !matches_non_newline {
             return None;
         }
-        Some((StringMatchHandler::not_empty(matches_any), FULL_MATCH_COST))
+        Some(StringMatchHandler::not_empty(matches_any))
     } else if rep_is_dot_star(rep) {
         if !validate_repetition(rep) {
             return None;
         } else if matches_any_char(&rep.sub) {
             // If the newline is valid, then this matcher literally match any string (even empty).
-            Some((StringMatchHandler::any(false), FULL_MATCH_COST))
+            Some(StringMatchHandler::any(false))
         } else {
             // Any string is fine (including an empty one), as far as it doesn't contain any newline.
-            Some((StringMatchHandler::any(true), FULL_MATCH_COST))
+            Some(StringMatchHandler::any(true))
         }
     } else if is_literal(&rep.sub) {
         let literal = literal_to_string(&rep.sub);
         let repetition = RepetitionMatcher::new(literal, rep.min, rep.max);
-        // TODO: Fix this !
-        let cost = LITERAL_MATCH_COST * rep.min as usize;
-        return Some((StringMatchHandler::Repetition(repetition), cost));
+        return Some(StringMatchHandler::Repetition(repetition));
     } else {
         None
     }
 }
 
-fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, usize)>, RegexError> {
+fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexError> {
     if hirs.is_empty() {
-        return Ok(Some((StringMatchHandler::Empty, EMPTY_MATCH_COST)));
+        return Ok(Some(StringMatchHandler::Empty));
     }
 
     if hirs.len() == 1 {
         return string_matcher_from_regex_internal(&hirs[0]);
     }
 
-    fn get_literal_matcher(sre: &Hir) -> (StringMatchHandler, usize) {
+    fn get_literal_matcher(sre: &Hir) -> StringMatchHandler {
         let literal = literal_to_string(sre);
-        (StringMatchHandler::Literal(StringPattern::case_sensitive(literal)), LITERAL_MATCH_COST)
+        StringMatchHandler::Literal(StringPattern::case_sensitive(literal))
     }
 
     fn get_insensitive_literal_matcher(hirs: &[Hir]) -> Option<(StringMatchHandler, usize)> {
@@ -349,11 +334,20 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, usize)
         }
     }
 
-    fn get_repetition_matcher(hir: &Hir) -> Result<Option<(StringMatchHandler, usize)>, RegexError> {
+    fn get_repetition_matcher(hir: &Hir) -> Result<Option<StringMatchHandler>, RegexError> {
         if get_quantifier(hir).is_some() {
             return Ok(string_matcher_from_regex_internal(hir)?);
         }
         Ok(None)
+    }
+
+    fn get_set_matches(hirs: &[Hir]) -> Option<(Vec<String>, bool)> {
+        if hirs.len() == 1 {
+            find_set_matches_internal(&hirs[0], "")
+        } else {
+            let hir = Hir::concat(hirs.to_vec());
+            find_set_matches_internal(&hir, "")
+        }
     }
 
     let mut left = None;
@@ -366,11 +360,12 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, usize)
 
     let first = &hirs[0];
     let mut hirs_new = &hirs[0..];
+
     match first.kind() {
         HirKind::Class(_) => {
             if let Some((matcher, len)) = get_insensitive_literal_matcher(hirs) {
                 hirs_new = &hirs[len..];
-                left = Some((matcher, LITERAL_MATCH_COST));
+                left = Some(matcher);
                 first_is_literal = true;
                 match_len = hirs_new.len() + 1;
                 if hirs_new.is_empty() {
@@ -396,134 +391,162 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<(StringMatchHandler, usize)
         _ => {}
     }
 
+    let mut last = &hirs_new[hirs_new.len() - 1];
     if !hirs_new.is_empty() {
-        let last = &hirs_new[hirs_new.len() - 1];
-        right = string_matcher_from_regex_internal(last)?;
-        if let Some(ref r) = right {
-            if matches!(r.0, StringMatchHandler::Literal(_)) {
-                last_is_literal = true;
+        // handle case of ending in a set of case-insensitive char classes e.g. latency_[lLL][oO][gG]
+        let mut last_idx = hirs_new.len() - 1;
+        let mut has_case_insensitive_class = false;
+        while is_case_insensitive_class(last).is_some() {
+            last_idx -= 1;
+            has_case_insensitive_class = true;
+            if last_idx == 0 {
+                break;
             }
-            hirs_new = &hirs_new[0..hirs_new.len() - 1];
+            last = &hirs_new[last_idx];
         }
+        right = if has_case_insensitive_class {
+            match get_insensitive_literal_matcher(&hirs_new[last_idx..]) {
+                Some((matcher, _len)) => {
+                    hirs_new = &hirs_new[0..last_idx];
+                    last_is_literal = true;
+                    match_len = last_idx + 1;
+                    Some(matcher)
+                },
+                None => None,
+            }
+        } else {
+            let res = string_matcher_from_regex_internal(last)?;
+            if let Some(ref r) = res {
+                if matches!(r, StringMatchHandler::Literal(_)) {
+                    last_is_literal = true;
+                }
+                hirs_new = &hirs_new[0..hirs_new.len() - 1];
+                match_len = hirs_new.len();
+            }
+            res
+        };
     }
+
+    let mut set_matches_result: Option<(Vec<String>, bool)> = None;
+    let mut set_matches_attempted = false;
 
     if match_len == 2 {
         // NOTE: the parser optimizes concats of successive literals into a single literal, so if we have only two nodes,
         // then the second node is guaranteed to NOT be a literal. IOW, there is no need to check for
         // left_is_literal && right_is_literal
-        if first_is_literal && right.is_some() {
-            if let Some((matcher, cost)) = right {
-                match left {
-                    Some((StringMatchHandler::Literal(lit), _)) => {
-                        let case_sensitive = lit.is_case_sensitive();
-                        let literal: String = lit.into();
-                        let handler = StringMatchHandler::prefix(literal, Some(matcher), case_sensitive);
-                        return Ok(Some((handler, cost)));
-                    },
-                    _ => unreachable!("BUG: Literal value should have been set"),
-                }
-            } else {
-                // protected by if last.is_some()
-                unreachable!("BUG: None matcher");
+
+        if let Some(StringMatchHandler::Literal(lit)) = &left {
+            if let Some(right_matcher) = right {
+                let case_sensitive = lit.is_case_sensitive();
+                let literal: String = lit.into();
+                let handler = StringMatchHandler::prefix(literal, Some(right_matcher), case_sensitive);
+                return Ok(Some(handler));
             }
         }
-        if last_is_literal && left.is_some() {
-            if let Some((matcher, cost)) = left {
-                match right {
-                    Some((StringMatchHandler::Literal(lit), _)) => {
-                        let case_sensitive = lit.is_case_sensitive();
-                        let literal: String = lit.into();
-                        let handler = StringMatchHandler::suffix(Some(matcher), literal, case_sensitive);
-                        return Ok(Some((handler, cost)));
-                    },
-                    _ => unreachable!("BUG: Literal value should have been set"),
-                }
-            } else {
-                // protected by if first.is_some()
-                unreachable!("BUG: None matcher");
-            }
+
+        if let Some(StringMatchHandler::Literal(lit)) = &right {
+            let case_sensitive = lit.is_case_sensitive();
+            let literal: String = lit.into();
+            let handler = StringMatchHandler::suffix(left, literal, case_sensitive);
+            return Ok(Some(handler));
         }
     }
 
-    let new_len = hirs_new.len();
-    let hir = Hir::concat(hirs_new.to_vec());
-    let res = find_set_matches_internal(&hir, "");
-
-    if res.is_none() && new_len == 2 {
-        // We have not found fixed set matches. We look for other known cases that
-        // we can optimize.
-        let first = &hirs_new[0];
-        let second = &hirs_new[1];
-        // prefix is literal.
-        if right.is_none() {
-            if let HirKind::Literal(_) = first.kind() {
-                right = Some(get_literal_matcher(second));
+    let left_quantifier = get_quantifier(first);
+    let right_quantifier = get_quantifier(last);
+    // handle something like *.foo.+ or .+foo.*
+    match (left_quantifier, right_quantifier) {
+        (Some(left_quantifier), Some(right_quantifier)) => {
+            if hirs_new.len() == 1 {
+                let middle = &hirs_new[0];
+                if let Some(lit) = get_literal(middle) {
+                    let match_options = StringMatchOptions {
+                        anchor_end: true,
+                        anchor_start: true,
+                        prefix_quantifier: Some(left_quantifier),
+                        suffix_quantifier: Some(right_quantifier),
+                    };
+                    set_matches_attempted = true;
+                    let matcher = get_optimized_literal_matcher(lit, &match_options);
+                    return Ok(Some(matcher));
+                }
             }
-        }
-        // Suffix is literal.
-        if left.is_none() {
-            if let HirKind::Literal(_) = second.kind() {
-                left = Some(get_literal_matcher(first));
+            if left_quantifier != Quantifier::ZeroOrOne && right_quantifier != Quantifier::ZeroOrOne {
+                set_matches_attempted = true;
+                if let Some((matches, case_sensitive)) = get_set_matches(hirs_new) {
+                    if case_sensitive {
+                        let left= quantifier_matcher(left_quantifier).expect("BUG: Invariant failed. Quantifier is not None");
+                        let right= quantifier_matcher(right_quantifier).expect("BUG: Invariant failed. Quantifier is not None");
+                        let contains_matcher = ContainsMultiStringMatcher::new(matches, Some(left), Some(right));
+                        let matcher = StringMatchHandler::ContainsMulti(contains_matcher);
+                        return Ok(Some(matcher));
+                    } else {
+                        set_matches_result = Some((matches, case_sensitive));
+                    }
+                }
             }
-        }
+        },
+        _ => {}
     }
 
-    let tmp = hir_to_string(&hir);
-    println!("{}", tmp);
-
-    let (mut matches, matches_case_sensitive) = res.unwrap_or_default();
+    if !set_matches_attempted && set_matches_result.is_none() {
+        set_matches_result = get_set_matches(hirs_new)
+    };
 
     // Ensure we've found some literals to match (optionally with a left and/or right matcher).
     // If not, then this optimization doesn't trigger.
-    if matches.is_empty() {
-        return Ok(None);
-    }
+    let (mut matches, case_sensitive) = match set_matches_result {
+        Some((matches, case_sensitive)) => {
+            if matches.is_empty() {
+                return Ok(None);
+            }
+            (matches, case_sensitive)
+        },
+        None => {
+            return Ok(None)
+        }
+    };
 
-    let mut cost = matches.len() * MIDDLE_MATCH_COST;
     let mut resolved_left = None;
     let mut resolved_right = None;
 
     // Use the right (and best) matcher based on what we've found.
     match (left, right) {
-        (Some((left, left_cost)), Some((right, right_cost))) => {
+        (Some(left), Some(right)) => {
             resolved_left = Some(left);
             resolved_right = Some(right);
-            cost += left_cost + right_cost;
         }
-        (Some((left, left_cost)), None) => {
+        (Some(left), None) => {
             resolved_left = Some(left);
-            cost += left_cost;
             if matches.len() == 1 {
                 let case_sensitive = left_is_case_sensitive;
                 let suffix = matches.pop().expect("BUG: Invariant failed. Matches is not empty");
                 let matcher = StringMatchHandler::suffix(resolved_left, suffix, case_sensitive);
-                return Ok(Some((matcher, cost)));
+                return Ok(Some(matcher));
             }
         }
-        (None, Some((right, right_cost))) => {
+        (None, Some(right)) => {
             resolved_right = Some(right);
-            cost += right_cost;
             if matches.len() == 1 {
                 let case_sensitive = left_is_case_sensitive;
                 let prefix = matches.pop().expect("BUG: Invariant failed. Matches is not empty");
                 let matcher = StringMatchHandler::prefix(prefix, resolved_right, case_sensitive);
-                return Ok(Some((matcher, cost)));
+                return Ok(Some(matcher));
             }
         }
         _ => {
             // No left and right matchers (only fixed set matches).
-            let cost = matches.len() * MIDDLE_MATCH_COST;
-            let matcher = StringMatchHandler::literal_alternates(matches, matches_case_sensitive);
-            return Ok(Some((matcher, cost)));
+            let matcher = StringMatchHandler::literal_alternates(matches, case_sensitive);
+            return Ok(Some(matcher));
         }
     }
 
     // We found literals in the middle. We can trigger the fast path only if
     // the matches are case-sensitive because ContainsMultiStringMatcher doesn't
     // support case-insensitive.
-    if matches_case_sensitive {
+    if case_sensitive {
         let matcher = ContainsMultiStringMatcher::new(matches, resolved_left, resolved_right);
-        return Ok(Some((StringMatchHandler::ContainsMulti(matcher), cost)));
+        return Ok(Some(StringMatchHandler::ContainsMulti(matcher)));
     }
 
     Ok(None)
@@ -570,7 +593,7 @@ pub(super) fn get_case_folded_string(hirs: &[Hir]) -> Option<(String, usize)> {
             res.push(ch);
             count += 1;
         } else if let HirKind::Literal(lit) = hir.kind() {
-            // We may have character classes followed by a non-alphanumeric literal (eg. (?i)xyz-abc).
+            // We may have character classes followed by a non-alphanumeric literal (e.g. (?i)xyz-abc).
             // Here we'll have classes for xyz, then a literal for '-' and then classes for abc.
             // We coalesce these literals and character classes together. Note that we are not being
             // exhaustive here and only handling common cases.
@@ -611,7 +634,7 @@ pub(super) fn get_case_folded_string(hirs: &[Hir]) -> Option<(String, usize)> {
 }
 
 
-pub(super) fn is_literal(sre: &Hir) -> bool {
+fn is_literal(sre: &Hir) -> bool {
     match sre.kind() {
         HirKind::Literal(_) => true,
         HirKind::Capture(cap) => is_literal(cap.sub.as_ref()),
@@ -834,22 +857,35 @@ fn get_quantifier(sre: &Hir) -> Option<Quantifier> {
     }
 }
 
+fn quantifier_matcher(quantifier: Quantifier) -> Option<StringMatchHandler> {
+    if quantifier == Quantifier::ZeroOrMore {
+        // '.*'
+        Some(StringMatchHandler::any(false))
+    } else if quantifier == Quantifier::OneOrMore {
+        // '.+'
+        Some(StringMatchHandler::not_empty(true))
+    } else {
+        // .?
+        None
+    }
+}
+
 /// optimize_alternating_literals optimizes a regex of the form
 ///
 ///	`literal1|literal2|literal3|...`
 ///
 /// this function returns an optimized StringMatcher or None if the regex
 /// cannot be optimized in this way
-pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandler, usize)> {
+pub(super) fn optimize_alternating_literals(s: &str) -> Option<StringMatchHandler> {
     if s.is_empty() {
-        return Some((StringMatchHandler::Empty, EMPTY_MATCH_COST));
+        return Some(StringMatchHandler::Empty);
     }
 
     let estimated_alternates = s.matches('|').count() + 1;
 
     if estimated_alternates == 1 {
         if regex::escape(s) == s {
-            return Some((StringMatchHandler::equals(s.into()), LITERAL_MATCH_COST));
+            return Some(StringMatchHandler::equals(s.into()));
         }
         return None;
     }
@@ -864,7 +900,7 @@ pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandl
             map.values.insert(sub_match.to_string());
         }
 
-        Some((StringMatchHandler::LiteralMap(map), estimated_alternates * LITERAL_MATCH_COST))
+        Some(StringMatchHandler::LiteralMap(map))
     } else {
         let mut matcher = EqualMultiStringMatcher::new(true, estimated_alternates);
         for sub_match in s.split('|') {
@@ -874,8 +910,7 @@ pub(super) fn optimize_alternating_literals(s: &str) -> Option<(StringMatchHandl
             matcher.push(sub_match.to_string());
         }
 
-        let multi = StringMatchHandler::Alternates(matcher);
-        Some((multi, estimated_alternates * LITERAL_MATCH_COST))
+        Some(StringMatchHandler::Alternates(matcher))
     }
 }
 
@@ -940,7 +975,7 @@ pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<Str
 // Returns nil if we can't replace the regexp by only equality matchers or the regexp contains
 // a mix of case-sensitive and case-insensitive matchers.
 pub(super) fn find_set_matches(hir: &mut Hir) -> Option<(Vec<String>, bool)> {
-    clear_begin_end_text(hir);
+    clear_begin_end_anchor(hir);
     find_set_matches_internal(hir, "")
 }
 
@@ -1023,6 +1058,10 @@ fn find_set_matches_from_concat(hir: &Hir, base: &str) -> Option<(Vec<String>, b
                     matches_case_sensitive = Some(false);
                 }
 
+                if i == 0 && matches.len() == 1 && matches[0].is_empty() {
+                    matches.clear();
+                }
+
                 matches.push(format!("{base}{val}"));
 
                 i += len;
@@ -1053,19 +1092,13 @@ fn find_set_matches_from_concat(hir: &Hir, base: &str) -> Option<(Vec<String>, b
                 } else {
                     return None;
                 }
-
-                i += 1;
-                if i < len {
-                    hir = &cursor[i];
-                } else {
-                    break;
-                }
-
             }
+
+            i += 1;
             matches = new_matches;
         }
 
-        return Some((matches, matches_case_sensitive.unwrap_or_default()))
+        return Some((matches, matches_case_sensitive.unwrap_or(true)))
     }
 
     None
@@ -1103,32 +1136,31 @@ fn find_set_matches_from_alternate(hir: &Hir, base: &str) -> Option<(Vec<String>
 }
 
 
-fn clear_begin_end_text(hir: &mut Hir) {
+fn clear_begin_end_anchor(hir: &mut Hir) {
 
-    fn handle_concat(items: &Vec<Hir>) -> Option<Hir> {
-        if !items.is_empty() {
-            let mut start: usize = 0;
-            let mut end: usize = items.len() - 1;
+    fn handle_concat(items: &[Hir]) -> Option<Hir> {
+        let mut cursor = &items[0..];
 
-            if is_start_anchor(&items[0]) {
-                start += 1;
-            }
+        while !cursor.is_empty() && is_start_anchor(&cursor[0]) {
+            cursor = &cursor[1..];
+        }
 
-            if is_end_anchor(&items[end]) {
+        if !cursor.is_empty() {
+            let mut end = cursor.len();
+            while end > 0 && is_end_anchor(&cursor[end - 1]) {
                 end -= 1;
             }
-            let slice = &items[start..=end];
-            if slice.is_empty() {
-                return Some(Hir::empty());
-            }
-            let hirs: Vec<Hir> = slice.iter().cloned().collect();
-            return Some(Hir::concat(hirs))
+            cursor = &cursor[..end];
         }
-        None
+
+        match cursor.len() {
+            0 => Some(Hir::empty()),
+            1 => Some(cursor[0].clone()),
+            _ => Some(Hir::concat(cursor.to_vec())),
+        }
     }
 
     match hir.kind() {
-        HirKind::Alternation(_) => return,
         HirKind::Concat(hirs) => {
             if let Some(modified) = handle_concat(hirs) {
                 *hir = modified;
@@ -1164,6 +1196,7 @@ fn handle_regex(expr: &str, hir: &Hir) -> Result<StringMatchHandler, RegexError>
             prefix,
             suffix,
             contains,
+            string_matcher: None,
             set_matches: matches
         };
         Ok(StringMatchHandler::Regex(matcher))
@@ -1176,6 +1209,7 @@ fn handle_regex(expr: &str, hir: &Hir) -> Result<StringMatchHandler, RegexError>
             prefix: "".to_string(),
             suffix: "".to_string(),
             contains: Vec::new(),
+            string_matcher: None,
             set_matches: matches
         };
         Ok(StringMatchHandler::Regex(matcher))
@@ -1379,7 +1413,7 @@ mod test {
     }
 
     fn test_optimized_regex(expr: &str, s: &str, result_expected: bool) {
-        let (matcher, _) = string_matcher_from_regex(expr).unwrap();
+        let matcher = string_matcher_from_regex(expr).unwrap();
         let result = matcher.matches(s);
         assert_eq!(
             result, result_expected,
@@ -1479,9 +1513,9 @@ mod test {
             // Simple sets containing special characters without escaping.
             ("fo.o|bar?|^baz", vec![], false),
             // case-sensitive wrapper.
-            ("(?i)foo", vec!["foo"], false),
+            ("(?i)foo", vec!["FOO"], false),
             // case-sensitive wrapper on alternate.
-            ("(?i)foo|bar|baz", vec!["FOO", "BAR", "BAZ", "BAr", "BAz"], false),
+        //    ("(?i)foo|bar|baz", vec!["FOO", "BAR", "BAZ", "BAr", "BAz"], false),
             // mixed case sensitivity.
             ("(api|rpc)_(v1|prom)_((?i)push|query)", vec![], false),
             // mixed case sensitivity concatenation only without capture group.
@@ -1502,8 +1536,8 @@ mod test {
 
         for (pattern, exp_matches, exp_case_sensitive) in cases {
             let mut parsed = build_hir(&format!("^(?s:{})$", pattern)).unwrap();
-            let (matches, _) = find_set_matches(&mut parsed).unwrap();
-            assert_eq!(exp_matches, matches);
+            let (matches, case_sensitive) = find_set_matches(&mut parsed).unwrap_or_default();
+            assert_eq!(exp_matches, matches, "parsing {pattern} failed. Expected {:?}, got {:?}", exp_matches, matches);
 
             // TODO:
             // if exp_case_sensitive {

@@ -28,10 +28,10 @@ fn generate_random_values() -> Vec<String> {
 // Test function for FastRegexMatcher
 #[cfg(test)]
 mod tests {
+    use crate::prelude::{dot_plus_dot_plus_match_fn, dot_plus_match_fn, MatchFn};
     use super::*;
     use crate::regex_util::{string_matcher_from_regex, ContainsMultiStringMatcher, StringMatchHandler};
-    use crate::regex_util::regex_utils::{build_hir, string_matcher_from_regex_internal};
-    use crate::regex_util::string_pattern::StringPattern;
+    use crate::regex_util::match_handlers::contains_fn;
 
     #[test]
     fn test_fast_regex_matcher_match_string() {
@@ -39,7 +39,7 @@ mod tests {
         let regexes = vec!["foo", "bar", "baz"];
 
         for r in regexes {
-            let (matcher, _) = string_matcher_from_regex(r).unwrap();
+            let matcher = string_matcher_from_regex(r).unwrap();
             for v in &test_values {
                 let re = Regex::new(&format!("^(?s:{})$", r)).unwrap();
                 assert_eq!(re.is_match(v), matcher.matches(v));
@@ -50,11 +50,11 @@ mod tests {
     #[test]
     fn test_string_matcher_from_regexp() {
         fn literal(s: &str) -> StringMatchHandler {
-            StringMatchHandler::Literal(StringPattern::case_sensitive(s.to_string()))
+            StringMatchHandler::literal(s.to_string(), true)
         }
 
-        fn boxed_literal(s: &str) -> Box<StringMatchHandler> {
-            Box::new(literal(s))
+        fn insensitive_literal(s: &str) -> StringMatchHandler {
+            StringMatchHandler::literal(s.to_string(), false)
         }
 
         fn true_matcher() -> StringMatchHandler {
@@ -95,9 +95,24 @@ mod tests {
             StringMatchHandler::zero_or_one_chars(b)
         }
 
+        fn alternates(values: &[&str], case_sensitive: bool) -> StringMatchHandler {
+            let handlers = values.iter().map(|s| s.to_uppercase()).collect();
+            StringMatchHandler::literal_alternates(handlers, case_sensitive)
+        }
+
+        fn match_fn(s: &str, handler: MatchFn) -> StringMatchHandler {
+            StringMatchHandler::match_fn(s.to_string(), handler)
+        }
+
         let cases = vec![
+            //
+            ("10\\.0\\.(1|2)\\.+", None),
+            ("10\\.0\\.(1|2).+", Some(
+                contains_multi(&["10.0.1", "10.0.2"], None, Some(not_empty(true)))
+            )),
+            //
             (".*", some_true_matcher()),
-            (".*?", some_true_matcher()),
+            (".*?", None),
             ("(?s:.*)", some_true_matcher()),
             ("(.*)", some_true_matcher()),
             ("^.*$", some_true_matcher()),
@@ -108,45 +123,39 @@ mod tests {
             ("", Some(StringMatchHandler::Empty)),
             ("^$", Some(StringMatchHandler::Empty)),
             ("^foo$", Some(literal("foo"))),
-             ("^(?i:foo)$", Some(literal("FOO"))), // todo: wrong - just to compile
+             ("^(?i:foo)$", Some(insensitive_literal("FOO"))),
              ("^((?i:foo)|(bar))$", Some(
-                 or_matcher(&[literal("FOO"), literal("bar")])
+                 or_matcher(&[insensitive_literal("FOO"), literal("bar")])
              )),
             ("(?i:((foo|bar)))", Some(
-               or_matcher(&[literal("FOO"), literal("BAR")])
+                alternates(&["foo", "bar"], false)
             )),
             ("(?i:((foo1|foo2|bar)))", Some(
-               or_matcher(&[
-                   or_matcher(&[literal("FOO1"), literal("FOO2"), literal("BAR")])
-               ])
+                alternates(&["foo1", "foo2", "bar"], false)
             )),
               ("^((?i:foo|oo)|(bar))$", Some(
-                   or_matcher(&[literal("FOO"), literal("OO"), literal("bar")])
+                   or_matcher(&[insensitive_literal("FOO"), insensitive_literal("OO"), literal("bar")])
               )),
               ("(?i:(foo1|foo2|bar))", Some(
-                   or_matcher(
-                       &[
-                           or_matcher(&[literal("FOO1"), literal("FOO2"), literal("BAR")])
-                       ]
-                   )
+                  alternates(&["foo1", "foo2", "bar"], false)
               )),
               (".*foo.*", Some(
-                contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher()))
+                  match_fn("foo", contains_fn)
               )),
                ("(.*)foo.*", Some(
-                   contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher()))
+                   match_fn("foo", contains_fn)
                )),
                ("(.*)foo(.*)", Some(
-                   contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher()))
+                   match_fn("foo", contains_fn)
                )),
                ("(.+)foo(.*)", Some(
-                   contains_multi(&["foo"], Some(not_empty(true)), Some(true_matcher()))
+                   match_fn("foo", dot_plus_match_fn)
                )),
                ("^.+foo.+", Some(
-                   contains_multi(&["foo"], Some(not_empty(true)), Some(not_empty(true)))
+                   match_fn("foo", dot_plus_dot_plus_match_fn)
                )),
                ("^(.*)(foo)(.*)$", Some(
-                   contains_multi(&["foo"], Some(true_matcher()), Some(true_matcher()))
+                   match_fn("foo", contains_fn)
                )),
                ("^(.*)(foo|foobar)(.*)$", Some(
                    contains_multi(&["foo", "foobar"], Some(true_matcher()), Some(true_matcher()))
@@ -240,16 +249,16 @@ mod tests {
                 ("f.?o", None)
         ];
         for (expr, expected_matcher) in cases {
-            let hir = build_hir(expr).unwrap();
-            let res = string_matcher_from_regex_internal(&hir).unwrap();
+            let matcher = string_matcher_from_regex(expr).unwrap();
             if expected_matcher.is_none() {
-                assert!(res.is_none(), "Expected None for {}", expr);
+                if !matches!(matcher, StringMatchHandler::Regex(_)) {
+                    assert!(false, "Expected Regex matcher for {}. Found {}", expr, matcher);
+                }
                 continue;
             } else {
-                assert!(res.is_some(), "Expected Some for {}", expr);
                 let expected_matcher = expected_matcher.unwrap();
-                let (matcher, _) = res.unwrap();
-                assert_eq!(matcher, expected_matcher, "Invalid matcher for {expr}");
+                assert_eq!(matcher, expected_matcher, "Invalid matcher for {expr}. Expected {}, found {}",
+                           expected_matcher, matcher);
             }
         }
     }
@@ -365,7 +374,7 @@ mod tests {
 
         for case in test_cases {
             let re = Regex::new(&case.pattern).unwrap();
-            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
+            let matcher= string_matcher_from_regex(&case.pattern).unwrap();
 
             // Pre-condition check: ensure it contains literalPrefixSensitiveStringMatcher or literalPrefixInsensitiveStringMatcher.
             let mut num_prefix_matchers = 0;
@@ -479,7 +488,7 @@ mod tests {
 
         for case in test_cases {
             // Create the matcher
-            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
+            let matcher= string_matcher_from_regex(&case.pattern).unwrap();
 
             // Compile the regex
             let re = Regex::new(&format!("^(?s:{})$", &case.pattern)).unwrap();
@@ -576,7 +585,7 @@ mod tests {
 
         for case in test_cases {
             let re = Regex::new(&format!("^(?s:{})$", case.pattern)).unwrap();
-            let (matcher, _) = string_matcher_from_regex(&case.pattern).unwrap();
+            let matcher = string_matcher_from_regex(&case.pattern).unwrap();
 
             // Pre-condition check: ensure it contains zeroOrOneCharacterStringMatcher.
             let mut num_zero_or_one_matchers = 0;

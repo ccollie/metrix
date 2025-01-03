@@ -123,14 +123,12 @@ pub fn compile_regexp_anchored(expr: &str) -> Result<(StringMatchHandler, usize)
 }
 
 fn compile_regexp_ex(expr: &str) -> Result<RegexpCacheValue, String> {
-    let (matcher, cost) =
-        string_matcher_from_regex(expr)
-            .map_err(|_| {
-                format!("cannot build regexp from {}", expr)
-            })?;
+    let matcher= string_matcher_from_regex(expr)
+        .map_err(|_| { format!("cannot build regexp from {}", expr) })?;
 
     // heuristic for rcv in-memory size
     let size_bytes = matcher.get_size();
+    let cost = matcher.cost();
 
     // Put the re_match in the cache.
     Ok(RegexpCacheValue {

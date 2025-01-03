@@ -136,7 +136,7 @@ impl RollupHandler {
 impl PartialEq for RollupHandler {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (RollupHandler::Wrapped(left), RollupHandler::Wrapped(right)) => left == right,
+            (RollupHandler::Wrapped(left), RollupHandler::Wrapped(right)) => std::ptr::fn_addr_eq(*left, *right),
             (RollupHandler::Fake(left), RollupHandler::Fake(right)) => left == right,
             (RollupHandler::FloatArg(left), RollupHandler::FloatArg(right)) => left == right,
             (RollupHandler::VecArg(left), RollupHandler::VecArg(right)) => left == right,
