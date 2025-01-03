@@ -896,6 +896,8 @@ mod tests {
         let matchers = Matchers::empty()
             .append(Matcher::equal("foo", "bar"))
             .append(Matcher::not_equal("foo", "bar"))
+            .append(Matcher::regex_equal("foo", "bar.*").unwrap())
+            .append(Matcher::regex_notequal("foo", "bar.*").unwrap())
             .append(Matcher::equal("FOO", "bar"))
             .append(Matcher::not_equal("bar", "bar"));
 
