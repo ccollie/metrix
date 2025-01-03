@@ -25,7 +25,7 @@ const NUM_BITS: [[u8; 2]; 14] = [
     [1, 60],
 ];
 
-/// encode packs and binary encodes the provides slice of u64 values using
+/// encode packs and binary encodes the provided slice of u64 values using
 /// simple8b into the provided vector.
 pub fn encode(src: &[u64], dst: &mut Vec<u8>) -> Result<(), Box<dyn Error>> {
     let mut i = 0;
