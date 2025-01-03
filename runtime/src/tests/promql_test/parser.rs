@@ -30,11 +30,13 @@ pub const TEST_START_TIME: SystemTime = SystemTime::UNIX_EPOCH;
 
 // Regex patterns
 static PAT_EVAL_INSTANT: LazyLock<Regex> = LazyLock::new(||
-    Regex::new(r"^eval(?:_(fail|warn|ordered))?\s+instant\s+(?:at\s+(.+?))?\s+(.+)$").unwrap()
+    Regex::new(r"^eval(?:_(fail|warn|ordered))?\s+instant\s+(?:at\s+(.+?))?\s+(.+)$")
+        .expect("failed to compile regex pattern")
 );
 
 static PAT_EVAL_RANGE: LazyLock<Regex> = LazyLock::new(||
-   Regex::new(r"^eval(?:_(fail|warn))?\s+range\s+from\s+(.+)\s+to\s+(.+)\s+step\s+(.+?)\s+(.+)$").unwrap()
+   Regex::new(r"^eval(?:_(fail|warn))?\s+range\s+from\s+(.+)\s+to\s+(.+)\s+step\s+(.+?)\s+(.+)$")
+       .expect("failed to compile regex pattern")
 );
 
 static PAT_LOAD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^load(?:_(with_nhcb))?\s+(.+?)$").unwrap());
@@ -138,7 +140,7 @@ pub fn parse_load(lines: &[String], i: usize) -> Result<(usize, TestCommand), Pa
 }
 
 
-// Implementation of parse_eval function
+/// Implementation of parse_eval function
 pub fn parse_eval(lines: &[String], mut i: usize) -> Result<(usize, TestCommand), ParseErr> {
     let instant_parts = PAT_EVAL_INSTANT.captures(&lines[i]);
     let range_parts = PAT_EVAL_RANGE.captures(&lines[i]);
