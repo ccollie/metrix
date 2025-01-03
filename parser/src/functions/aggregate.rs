@@ -135,11 +135,11 @@ impl AggregateFunction {
         }
     }
 
-    pub fn return_type(&self) -> ValueType {
+    pub const fn return_type(&self) -> ValueType {
         ValueType::InstantVector
     }
 
-    pub fn can_accept_multiple_args(&self) -> bool {
+    pub const fn can_accept_multiple_args(&self) -> bool {
         can_accept_multiple_args_for_aggr_func(*self)
     }
 }

@@ -150,7 +150,7 @@ impl FromStr for TransformFunction {
 }
 
 impl TransformFunction {
-    pub fn name(&self) -> &'static str {
+    pub const fn name(&self) -> &'static str {
         use TransformFunction::*;
         match self {
             Abs => "abs",
@@ -482,7 +482,7 @@ impl TransformFunction {
         }
     }
 
-    pub fn return_type(&self) -> ValueType {
+    pub const fn return_type(&self) -> ValueType {
         ValueType::InstantVector
     }
 }
