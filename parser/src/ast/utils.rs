@@ -42,8 +42,8 @@ pub fn number(val: f64) -> Expr {
     Expr::from(val)
 }
 
-/// returns true if `needle` is found in a chain of search_op
-/// expressions. Such as: (A AND B) AND C
+/// returns true if `needle` is found in a chain of `search_op`
+/// expressions. Such as: `(A AND B) AND C`
 pub fn expr_contains(expr: &Expr, needle: &Expr, search_op: Operator) -> bool {
     match expr {
         Expr::BinaryOperator(BinaryExpr {
@@ -77,7 +77,7 @@ pub fn is_null(expr: &Expr) -> bool {
     }
 }
 
-/// returns true if `haystack` looks like (needle OP X) or (X OP needle)
+/// returns true if `haystack` looks like `(needle OP X)` or `(X OP needle)`
 pub(crate) fn is_op_with(target_op: Operator, haystack: &Expr, needle: &Expr) -> bool {
     matches!(haystack, Expr::BinaryOperator(BinaryExpr { left, op, right, .. })
         if op == &target_op && (needle == left.as_ref() || needle == right.as_ref()))
@@ -110,7 +110,7 @@ pub fn conjunction(filters: impl IntoIterator<Item = Expr>) -> Option<Expr> {
 
 /// Combines an array of filter expressions into a single filter
 /// expression consisting of the input filter expressions joined with
-/// logical OR.
+/// logical `OR`.
 ///
 /// Returns None if the filters array is empty.
 pub fn disjunction(filters: impl IntoIterator<Item = Expr>) -> Option<Expr> {
@@ -164,20 +164,18 @@ impl ExprVisitor for InvalidExprVisitor {
         }
         if let Expr::Function(f) = expr {
             if let BuiltinFunction::Rollup(rollup) = f.function {
-                let idx = get_rollup_arg_idx(&rollup, f.args.len());
-                if idx < 0 || idx as usize >= f.args.len() {
-                    return Ok(true);
-                }
-                let arg = &f.args[idx as usize];
-                match arg {
-                    Expr::Rollup(re) => {
-                        if re.window.is_none() {
+                if let Some(idx) = get_rollup_arg_idx(&rollup, f.args.len()) {
+                    let arg = &f.args[idx];
+                    match arg {
+                        Expr::Rollup(re) => {
+                            if re.window.is_none() {
+                                self.has_implicit_conversion = true;
+                            }
+                        }
+                        Expr::MetricExpression(_) => {}
+                        _ => {
                             self.has_implicit_conversion = true;
                         }
-                    }
-                    Expr::MetricExpression(_) => {}
-                    _ => {
-                        self.has_implicit_conversion = true;
                     }
                 }
             }

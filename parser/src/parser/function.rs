@@ -37,6 +37,7 @@ pub(super) fn parse_func_expr(p: &mut Parser) -> ParseResult<Expr> {
 ///    essentially converts vectors into ranges
 /// 3. non-rollup series selectors are wrapped in a default_rollup()
 ///    see https://docs.victoriametrics.com/MetricsQL.html
+///
 ///    https://docs.victoriametrics.com/MetricsQL.html#implicit-query-conversions
 pub fn validate_function_args(func: &BuiltinFunction, args: &[Expr]) -> ParseResult<()> {
     let sig = func.signature();

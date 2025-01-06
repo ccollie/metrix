@@ -6,8 +6,11 @@ use crate::parser::{ParseError, ParseResult, Parser};
 
 /// parse_aggr_func_expr parses an aggregation Expr.
 ///
-///    <aggr_op> (<Vector_expr>) [by|without <labels>] [limit <number>]
-///    <aggr_op> [by|without <labels>] (<Vector_expr>) [limit<number>]
+///    <aggr_op> (<Vector_expr>) [by|without <labels>] [limit number]
+///
+///    <aggr_op> [by|without <labels>] (<Vector_expr>) [limit number]
+///
+///     e.g. `sum(rate(foo[5m])) by (job) limit 10`
 ///
 pub(super) fn parse_aggr_func_expr(p: &mut Parser) -> ParseResult<Expr> {
     let tok = p.expect_identifier()?;

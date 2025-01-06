@@ -128,7 +128,7 @@ pub fn string_matcher_from_regex(expr: &str) -> Result<StringMatchHandler, Regex
     }
 
     // Prepare fast string matcher for re_match.
-    if let Some(match_func) = string_matcher_from_regex_internal(&sre)? {
+    if let Some(match_func) = string_matcher_from_regex_internal(expr, &sre)? {
         // Found optimized function for matching the expr.
         return Ok(match_func);
     }
@@ -138,6 +138,7 @@ pub fn string_matcher_from_regex(expr: &str) -> Result<StringMatchHandler, Regex
 }
 
 pub(super) fn string_matcher_from_regex_internal(
+    expr: &str,
     sre: &Hir,
 ) -> Result<Option<StringMatchHandler>, RegexError> {
 
@@ -162,7 +163,7 @@ pub(super) fn string_matcher_from_regex_internal(
         HirKind::Alternation(alts) => Ok(get_alternation_matcher(&alts)?),
         HirKind::Capture(cap) => {
             // Remove parenthesis from expr, i.e. '(expr) -> expr'
-            string_matcher_from_regex_internal(cap.sub.as_ref())
+            string_matcher_from_regex_internal(expr, cap.sub.as_ref())
         }
         HirKind::Class(_) => {
             if let Some((alternatives, case_sensitive)) = find_set_matches_internal(sre, "") {
@@ -176,7 +177,7 @@ pub(super) fn string_matcher_from_regex_internal(
             let literal = literal_to_string(sre);
             Ok(Some(StringMatchHandler::equals(literal)))
         }
-        HirKind::Concat(subs) => get_concat_matcher(&subs),
+        HirKind::Concat(subs) => get_concat_matcher(&subs, expr),
         _ => {
             // todo!()
             Ok(None)
@@ -193,7 +194,7 @@ fn get_alternation_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, R
     let mut is_mismatch = false;
 
     for sub_hir in hirs {
-        if let Some(matcher) = string_matcher_from_regex_internal(sub_hir)? {
+        if let Some(matcher) = string_matcher_from_regex_internal("", sub_hir)? {
             let case_sensitive = matcher.is_case_sensitive();
 
             if !is_mismatch {
@@ -311,13 +312,13 @@ fn get_repetition_matcher(hir: &Hir, rep: &Repetition) -> Option<StringMatchHand
     }
 }
 
-fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexError> {
+fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHandler>, RegexError> {
     if hirs.is_empty() {
         return Ok(Some(StringMatchHandler::Empty));
     }
 
     if hirs.len() == 1 {
-        return string_matcher_from_regex_internal(&hirs[0]);
+        return string_matcher_from_regex_internal(expr, &hirs[0]);
     }
 
     fn get_literal_matcher(sre: &Hir) -> StringMatchHandler {
@@ -336,7 +337,7 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
 
     fn get_repetition_matcher(hir: &Hir) -> Result<Option<StringMatchHandler>, RegexError> {
         if get_quantifier(hir).is_some() {
-            return Ok(string_matcher_from_regex_internal(hir)?);
+            return Ok(string_matcher_from_regex_internal("", hir)?);
         }
         Ok(None)
     }
@@ -348,6 +349,21 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
             let hir = Hir::concat(hirs.to_vec());
             find_set_matches_internal(&hir, "")
         }
+    }
+
+    fn get_regex_matcher(expr: &str, matcher: StringMatchHandler) -> Result<StringMatchHandler, RegexError> {
+        let regex = Regex::new(&format!("^(?s:{expr})$"))?;
+
+        let matcher = RegexMatcher{
+            regex,
+            prefix: "".to_string(),
+            suffix: "".to_string(),
+            contains: Vec::new(),
+            string_matcher: Some(Box::new(matcher)),
+            set_matches: vec![],
+        };
+
+        Ok(StringMatchHandler::Regex(matcher))
     }
 
     let mut left = None;
@@ -393,7 +409,7 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
 
     let mut last = &hirs_new[hirs_new.len() - 1];
     if !hirs_new.is_empty() {
-        // handle case of ending in a set of case-insensitive char classes e.g. latency_[lLL][oO][gG]
+        // handle case of ending in a set of case-insensitive char classes e.g. latency_[lL][oO][gG]
         let mut last_idx = hirs_new.len() - 1;
         let mut has_case_insensitive_class = false;
         while is_case_insensitive_class(last).is_some() {
@@ -415,7 +431,7 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
                 None => None,
             }
         } else {
-            let res = string_matcher_from_regex_internal(last)?;
+            let res = string_matcher_from_regex_internal("", last)?;
             if let Some(ref r) = res {
                 if matches!(r, StringMatchHandler::Literal(_)) {
                     last_is_literal = true;
@@ -474,11 +490,13 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
             if left_quantifier != Quantifier::ZeroOrOne && right_quantifier != Quantifier::ZeroOrOne {
                 set_matches_attempted = true;
                 if let Some((matches, case_sensitive)) = get_set_matches(hirs_new) {
-                    if case_sensitive {
+                    if case_sensitive && !expr.is_empty() {
                         let left= quantifier_matcher(left_quantifier).expect("BUG: Invariant failed. Quantifier is not None");
                         let right= quantifier_matcher(right_quantifier).expect("BUG: Invariant failed. Quantifier is not None");
                         let contains_matcher = ContainsMultiStringMatcher::new(matches, Some(left), Some(right));
                         let matcher = StringMatchHandler::ContainsMulti(contains_matcher);
+                        // partial match, so fallback to regex
+                        let matcher = get_regex_matcher(expr, matcher)?;
                         return Ok(Some(matcher));
                     } else {
                         set_matches_result = Some((matches, case_sensitive));
@@ -495,7 +513,7 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
 
     // Ensure we've found some literals to match (optionally with a left and/or right matcher).
     // If not, then this optimization doesn't trigger.
-    let (mut matches, case_sensitive) = match set_matches_result {
+    let (matches, case_sensitive) = match set_matches_result {
         Some((matches, case_sensitive)) => {
             if matches.is_empty() {
                 return Ok(None);
@@ -507,46 +525,24 @@ fn get_concat_matcher(hirs: &[Hir]) -> Result<Option<StringMatchHandler>, RegexE
         }
     };
 
-    let mut resolved_left = None;
-    let mut resolved_right = None;
-
     // Use the right (and best) matcher based on what we've found.
-    match (left, right) {
-        (Some(left), Some(right)) => {
-            resolved_left = Some(left);
-            resolved_right = Some(right);
-        }
-        (Some(left), None) => {
-            resolved_left = Some(left);
-            if matches.len() == 1 {
-                let case_sensitive = left_is_case_sensitive;
-                let suffix = matches.pop().expect("BUG: Invariant failed. Matches is not empty");
-                let matcher = StringMatchHandler::suffix(resolved_left, suffix, case_sensitive);
-                return Ok(Some(matcher));
-            }
-        }
-        (None, Some(right)) => {
-            resolved_right = Some(right);
-            if matches.len() == 1 {
-                let case_sensitive = left_is_case_sensitive;
-                let prefix = matches.pop().expect("BUG: Invariant failed. Matches is not empty");
-                let matcher = StringMatchHandler::prefix(prefix, resolved_right, case_sensitive);
-                return Ok(Some(matcher));
-            }
-        }
-        _ => {
-            // No left and right matchers (only fixed set matches).
-            let matcher = StringMatchHandler::literal_alternates(matches, case_sensitive);
-            return Ok(Some(matcher));
-        }
+    if left.is_none() && right.is_none() && !expr.is_empty() {
+        // partial match
+        // No left and right matchers (only fixed set matches).
+        let matcher = StringMatchHandler::literal_alternates(matches, case_sensitive);
+        // partial match, so fallback to regex
+        let matcher = get_regex_matcher(expr, matcher)?;
+        return Ok(Some(matcher));
     }
 
     // We found literals in the middle. We can trigger the fast path only if
     // the matches are case-sensitive because ContainsMultiStringMatcher doesn't
     // support case-insensitive.
-    if case_sensitive {
-        let matcher = ContainsMultiStringMatcher::new(matches, resolved_left, resolved_right);
-        return Ok(Some(StringMatchHandler::ContainsMulti(matcher)));
+    if case_sensitive && !expr.is_empty() {
+        // partial match
+        let matcher = ContainsMultiStringMatcher::new(matches, left, right);
+        let regex_matcher = get_regex_matcher(expr, StringMatchHandler::ContainsMulti(matcher))?;
+        return Ok(Some(regex_matcher));
     }
 
     Ok(None)
@@ -870,7 +866,7 @@ fn quantifier_matcher(quantifier: Quantifier) -> Option<StringMatchHandler> {
     }
 }
 
-/// optimize_alternating_literals optimizes a regex of the form
+/// optimizes a regex of the form
 ///
 ///	`literal1|literal2|literal3|...`
 ///

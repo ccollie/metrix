@@ -406,6 +406,10 @@ impl FromStr for RollupFunction {
     }
 }
 
+const MIN: &str = "min";
+const MAX: &str = "max";
+const AVG: &str = "avg";
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Hash, EnumIter, Serialize, Deserialize)]
 pub enum RollupTag {
     Min,
@@ -416,9 +420,9 @@ pub enum RollupTag {
 impl Display for RollupTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RollupTag::Min => write!(f, "min"),
-            RollupTag::Max => write!(f, "max"),
-            RollupTag::Avg => write!(f, "avg"),
+            RollupTag::Min => write!(f, "{}", MIN),
+            RollupTag::Max => write!(f, "{}", MAX),
+            RollupTag::Avg => write!(f, "{}", AVG),
         }
     }
 }
@@ -428,9 +432,9 @@ impl FromStr for RollupTag {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            s if s.eq_ignore_ascii_case("min") => Ok(RollupTag::Min),
-            s if s.eq_ignore_ascii_case("max") => Ok(RollupTag::Max),
-            s if s.eq_ignore_ascii_case("avg") => Ok(RollupTag::Avg),
+            s if s.eq_ignore_ascii_case(MIN) => Ok(RollupTag::Min),
+            s if s.eq_ignore_ascii_case(MAX) => Ok(RollupTag::Max),
+            s if s.eq_ignore_ascii_case(AVG) => Ok(RollupTag::Avg),
             _ => Err(ParseError::InvalidFunction(format!(
                 "invalid rollup tag::{s}",
             ))),
@@ -438,15 +442,19 @@ impl FromStr for RollupTag {
     }
 }
 
-/// get_rollup_arg_idx returns the argument index for the given fe which accepts the rollup argument.
+/// `get_rollup_arg_idx` returns the argument index for the given fe which accepts the rollup argument.
 ///
-/// -1 is returned if fe isn't a rollup function.
-pub const fn get_rollup_arg_idx(fe: &RollupFunction, arg_count: usize) -> i32 {
+/// None is returned if fe isn't a rollup function.
+pub const fn get_rollup_arg_idx(fe: &RollupFunction, arg_count: usize) -> Option<usize> {
     use RollupFunction::*;
     match fe {
-        QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => 1,
-        QuantilesOverTime => (arg_count - 1) as i32,
-        _ => 0,
+        QuantileOverTime | HoeffdingBoundLower | HoeffdingBoundUpper => Some(1),
+        QuantilesOverTime => if arg_count >= 1 {
+            Some(arg_count - 1)
+        } else {
+            None
+        },
+        _ => Some(0),
     }
 }
 

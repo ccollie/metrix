@@ -537,11 +537,7 @@ impl StringMatchHandler {
         if alts.len() == 1 {
             let mut alts = alts;
             let pattern = alts.pop().unwrap();
-            if case_sensitive {
-                Self::Literal(StringPattern::case_sensitive(pattern))
-            } else {
-                Self::Literal(StringPattern::case_insensitive(pattern))
-            }
+            Self::literal(pattern, case_sensitive)
         } else {
             let mut matcher = EqualMultiStringMatcher::new(true, alts.len());
             matcher.case_sensitive = case_sensitive;

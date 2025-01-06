@@ -16,7 +16,7 @@ use crate::{RuntimeError, RuntimeResult};
 use crate::types::{Label, Timeseries, Timestamp};
 
 pub type Labels = Vec<Label>;
-
+pub type SampleValue = f64;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Sample {
