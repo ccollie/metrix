@@ -92,15 +92,7 @@ pub fn string_matcher_from_regex(expr: &str) -> Result<StringMatchHandler, Regex
         }
     }
 
-    let mut sre = match build_hir(expr) {
-        Ok(sre) => sre,
-        Err(err) => {
-            panic!(
-                "BUG: unexpected error when parsing verified expr={expr}: {:?}",
-                err
-            );
-        }
-    };
+    let mut sre = build_hir(expr)?;
 
     // let debug_str = format!("{:?}, {}", sre, hir_to_string(&sre));
     //
@@ -369,9 +361,6 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
     let mut left = None;
     let mut right = None;
 
-    let mut first_is_literal = false;
-    let mut left_is_case_sensitive = true;
-    let mut last_is_literal = false;
     let mut match_len = hirs.len();
 
     let first = &hirs[0];
@@ -382,7 +371,6 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
             if let Some((matcher, len)) = get_insensitive_literal_matcher(hirs) {
                 hirs_new = &hirs[len..];
                 left = Some(matcher);
-                first_is_literal = true;
                 match_len = hirs_new.len() + 1;
                 if hirs_new.is_empty() {
                     return Ok(left);
@@ -399,10 +387,8 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
         }
         HirKind::Literal(_) => {
             let matcher = get_literal_matcher(first);
-            left_is_case_sensitive = true;
             left = Some(matcher);
             hirs_new = &hirs[1..];
-            first_is_literal = true;
         }
         _ => {}
     }
@@ -424,7 +410,6 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
             match get_insensitive_literal_matcher(&hirs_new[last_idx..]) {
                 Some((matcher, _len)) => {
                     hirs_new = &hirs_new[0..last_idx];
-                    last_is_literal = true;
                     match_len = last_idx + 1;
                     Some(matcher)
                 },
@@ -432,10 +417,7 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
             }
         } else {
             let res = string_matcher_from_regex_internal("", last)?;
-            if let Some(ref r) = res {
-                if matches!(r, StringMatchHandler::Literal(_)) {
-                    last_is_literal = true;
-                }
+            if res.is_some() {
                 hirs_new = &hirs_new[0..hirs_new.len() - 1];
                 match_len = hirs_new.len();
             }
@@ -482,13 +464,11 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
                         prefix_quantifier: Some(left_quantifier),
                         suffix_quantifier: Some(right_quantifier),
                     };
-                    set_matches_attempted = true;
                     let matcher = get_optimized_literal_matcher(lit, &match_options);
                     return Ok(Some(matcher));
                 }
             }
             if left_quantifier != Quantifier::ZeroOrOne && right_quantifier != Quantifier::ZeroOrOne {
-                set_matches_attempted = true;
                 if let Some((matches, case_sensitive)) = get_set_matches(hirs_new) {
                     if case_sensitive && !expr.is_empty() {
                         let left= quantifier_matcher(left_quantifier).expect("BUG: Invariant failed. Quantifier is not None");
@@ -1311,11 +1291,6 @@ pub fn get_or_values_ext(sre: &Hir, dest: &mut Vec<String>) -> bool {
         }
         _ => false,
     }
-}
-
-// too_many_matches guards against creating too many set matches.
-fn too_many_matches(matches: &[String], added: &[String]) -> bool {
-    matches.len() + added.len() > MAX_SET_MATCHES
 }
 
 #[cfg(test)]
