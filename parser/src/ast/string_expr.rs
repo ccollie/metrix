@@ -191,6 +191,17 @@ impl StringExpr {
         Ok(None)
     }
 
+    pub fn into_literal(self) -> ParseResult<String> {
+        if self.is_literal_only() {
+            if let Some(StringSegment::Literal(lit)) = self.0.into_iter().next() {
+                return Ok(lit);
+            }
+            return Ok("".to_string())
+        }
+        let msg = "BUG: string expression is not a literal".to_string();
+        Err(ParseError::General(msg))
+    }
+
     pub fn as_identifier(&self) -> Option<&String> {
         if self.is_identifier() {
             if let StringSegment::Ident(ident) = self.0.first().unwrap() {

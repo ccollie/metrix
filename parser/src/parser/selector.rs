@@ -1,5 +1,6 @@
+use smallvec::SmallVec;
 use crate::ast::{Expr, InterpolatedSelector, MetricExpr};
-use crate::label::{LabelFilterExpr, MatchOp};
+use crate::label::{LabelFilterExpr, MatchOp, Matcher};
 use crate::parser::expr::parse_string_expr;
 use crate::parser::parse_error::unexpected;
 use crate::parser::{ParseResult, Parser};
@@ -9,6 +10,7 @@ use super::tokens::Token;
 /// parse_metric_expr parses a metric selector.
 ///
 ///    <label_set>
+///
 ///    <metric_identifier> [<label_set>]
 ///
 pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
@@ -17,7 +19,7 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
 
     fn create_metric_expr(
         name: Option<String>,
-        filters: Vec<Vec<LabelFilterExpr>>,
+        mut filters: Vec<Vec<LabelFilterExpr>>,
     ) -> ParseResult<Expr> {
         let mut me = if let Some(name) = name {
             MetricExpr::new(name)
@@ -29,26 +31,27 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
             return Ok(Expr::MetricExpression(me));
         }
 
+        // AND matchers only. No OR matchers found.
         if filters.len() == 1 {
-            if let Some(first) = filters.first() {
-                if first.is_empty() {
-                    return Ok(Expr::MetricExpression(me));
-                }
-                let converted = first
-                    .iter()
-                    .map(|x| x.to_label_filter())
-                    .collect::<ParseResult<Vec<_>>>()?;
-                me.matchers.matchers.extend(converted);
-                me.sort_filters();
+            let first = filters.pop().expect("filters is not empty");
+            if first.is_empty() {
+                return Ok(Expr::MetricExpression(me));
             }
+            let converted = first
+                .into_iter()
+                .map(|x| x.into_matcher())
+                .collect::<ParseResult<Vec<_>>>()?;
+
+            me.matchers.matchers.extend(converted);
+            me.sort_filters();
             return Ok(Expr::MetricExpression(me));
         }
 
         let mut or_matchers = vec![];
         for filter in filters {
             let converted = filter
-                .iter()
-                .map(|x| x.to_label_filter())
+                .into_iter()
+                .map(|x| x.into_matcher())
                 .collect::<ParseResult<Vec<_>>>()?;
             or_matchers.push(converted);
         }
@@ -94,7 +97,7 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
 
 /// parse_label_filters parses a set of label matchers.
 ///
-/// '{' [ <label_name> <match_op> <match_string>, ... [or <label_name> <match_op> <match_string>, ...] '}'
+/// `{` [ <label_name> <match_op> <match_string>, ... [or <label_name> <match_op> <match_string>, ...] `}`
 ///
 fn parse_label_filters(p: &mut Parser) -> ParseResult<Vec<Vec<LabelFilterExpr>>> {
     use Token::*;
@@ -205,4 +208,17 @@ fn parse_label_filter(p: &mut Parser) -> ParseResult<LabelFilterExpr> {
     let value = parse_string_expr(p)?;
 
     LabelFilterExpr::new(label, op, value)
+}
+
+fn optimize_or_matchers(filters: Vec<Vec<Matcher>>) -> Vec<Vec<Matcher>> {
+    let names: SmallVec<String, 4> = filters
+        .iter()
+        .flat_map(|x| x.iter().map(|y| y.label.clone()))
+        .collect();
+    let mut optimized = vec![];
+    for mut or_filters in filters {
+        or_filters.sort();
+        optimized.push(or_filters);
+    }
+    optimized
 }

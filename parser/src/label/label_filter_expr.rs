@@ -162,10 +162,16 @@ impl LabelFilterExpr {
         }
     }
 
-    pub fn to_label_filter(&self) -> ParseResult<Matcher> {
+    pub fn to_matcher(&self) -> ParseResult<Matcher> {
         let empty_str = "".to_string();
         let value = self.value.get_literal()?.unwrap_or(&empty_str).to_string();
         Matcher::new(self.op, &self.label, value)
+    }
+
+    pub fn into_matcher(self) -> ParseResult<Matcher> {
+        let label = self.label;
+        let value = self.value.into_literal()?;
+        Matcher::new(self.op, label, value)
     }
 
     //

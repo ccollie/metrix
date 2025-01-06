@@ -23,7 +23,7 @@ resolver = "2"
 agnostic-lite = { version = "0.3.16", default-features = false, features = ["time"] }
 ahash = { version = "0.8", features = ["std", "serde"] }
 byte-pool = "0.2"
-chili = { git = "https://github.com/dragostis/chili", branch = "main" }
+chili = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 cfg-if = "1.0.0"

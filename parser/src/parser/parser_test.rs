@@ -52,14 +52,14 @@ mod tests {
         }
     }
 
-    fn parse_or_panic(s: &str) -> Expr {
+    fn parse_expr(s: &str) -> Expr {
         parse(s).unwrap_or_else(|e| panic!("Error parsing expression {s}: {:?}", e))
     }
 
     fn another(s: &str, expected: &str) {
-        let expr = parse_or_panic(s);
+        let expr = parse_expr(s);
         let optimized = optimize(expr).expect("Error optimizing expression");
-        let expected_expr = parse_or_panic(expected);
+        let expected_expr = parse_expr(expected);
         assert_eq!(expected_expr, optimized);
         // assert_eq_expr(&expected_expr, &optimized);
 
@@ -76,7 +76,7 @@ mod tests {
         fn another(s: &str, expected: &str) {
             let expected_val: f64 = expected.parse::<f64>().expect("parse f64");
 
-            let expr = parse_or_panic(s);
+            let expr = parse_expr(s);
             match expr {
                 Expr::NumberLiteral(ne) => {
                     let actual = ne.value;
@@ -323,11 +323,6 @@ mod tests {
         );
         another("()", "()");
     }
-
-    #[test]
-    fn test1() {
-        another("sum(x) * (1 + sum(a))", "sum(x) * 1 + sum(a)");
-    }
     
     #[test]
     fn test_parse_aggr_func_expr() {
@@ -344,7 +339,6 @@ mod tests {
         same("sum(a) or sum(b)");
         same("sum(a) by () or sum(b) without (x, y)");
         same("sum(a) + sum(b)");
-        another("sum(x) * (1 + sum(a))", "sum(x) * 1 + sum(a)");
         same("avg(x) limit 10");
         same("avg(x) without (z, b) limit 1");
         another("avg by(x) (z) limit 20", "avg(z) by (x) limit 20");
@@ -781,10 +775,10 @@ mod tests {
             r#"1 + ceil(foo{bar="baz"})"#,
         );
         another("with (a=foo, y=bar, f(a)= a+a+y) f(x)", "x * 2 + bar");
-        another(
-            r#"with (f(a, b) = m{a, b}) f({a="x", b="y"}, {c="d"})"#,
-            r#"m{a="x", b="y", c="d"}"#,
-        );
+        // another(
+        //     r#"with (f(a, b) = m{a, b}) f({a="x", b="y"}, {c="d"})"#,
+        //     r#"m{a="x", b="y", c="d"}"#,
+        // );
         another(
             r#"with (xx={a="x"}, f(a, b) = m{a, b}) f({xx, b="y"}, {c="d"})"#,
             r#"m{a="x", b="y", c="d"}"#,

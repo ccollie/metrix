@@ -14,6 +14,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
 use crate::common::join_vector;
@@ -79,13 +80,13 @@ impl TryFrom<&str> for MatchOp {
     }
 }
 
-impl fmt::Display for MatchOp {
+impl Display for MatchOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
 
-/// LabelFilter represents MetricsQL label filter like `foo="bar"`.
+/// `Matcher` represents a MetricsQL label filter like `region="us-east-1"`.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Matcher {
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
@@ -572,24 +573,67 @@ impl Hash for Matchers {
     }
 }
 
-impl fmt::Display for Matchers {
+impl Display for Matchers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let simple_matchers = &self.matchers;
         let or_matchers = &self.or_matchers;
         if or_matchers.is_empty() {
-            write!(f, "{}", join_vector(simple_matchers, ",", true))
+            join_matchers(f, simple_matchers)
         } else {
-            let or_matchers_string =
-                self.or_matchers
-                    .iter()
-                    .fold(String::new(), |or_matchers_str, pair| {
-                        format!("{} or {}", or_matchers_str, join_vector(pair, ", ", false))
-                    });
-            let or_matchers_string = or_matchers_string.trim_start_matches(" or").trim();
-            write!(f, "{}", or_matchers_string)
+            for (i, matchers) in or_matchers.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " or ")?;
+                }
+                join_matchers(f, &matchers)?;
+            }
+            Ok(())
         }
     }
 }
+
+fn join_matchers(f: &mut fmt::Formatter<'_>, v: &[Matcher]) -> fmt::Result {
+    let mut name_index: Option<usize> = None;
+    let mut len: usize = v.len();
+
+    for (i, matcher) in v.iter().enumerate() {
+        if matcher.is_metric_name_filter() {
+            write!(f, "{}", matcher.value)?;
+            name_index = Some(i);
+            len = v.len() - 1;
+            break;
+        }
+    }
+
+    if len == 0 {
+        write!(f, "{{}}")?;
+        return Ok(());
+    }
+
+    write!(f, "{{")?;
+    if let Some(index) = name_index {
+        let mut count = 0;
+        for (i, matcher) in v.iter().enumerate() {
+            if count > 0 {
+                write!(f, ", ")?;
+            }
+            if i != index {
+                write!(f, "{}", matcher)?;
+                count += 1;
+            }
+        }
+    } else {
+        for (i, matcher) in v.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", matcher)?;
+        }
+    }
+    write!(f, "}}")?;
+
+    Ok(())
+}
+
 
 struct OrIter<'a> {
     matchers: &'a Vec<Matcher>,

@@ -96,7 +96,7 @@ impl InterpolatedSelector {
         for m in &self.matchers {
             let mut and_matchers = vec![];
             for l in m {
-                and_matchers.push(l.to_label_filter()?);
+                and_matchers.push(l.to_matcher()?);
             }
             or_matchers.push(and_matchers);
         }
