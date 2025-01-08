@@ -3,9 +3,8 @@
 
 // Original Source: https://github.com/GreptimeTeam/promql-parser/blob/main/src/parser/ast.rs
 use crate::ast::{
-    AggregationExpr, BExpression, BinModifier, BinaryExpr, Expr, FunctionExpr,
-    InterpolatedSelector, MetricExpr, NumberLiteral, ParensExpr, RollupExpr, StringExpr, UnaryExpr,
-    VectorMatchCardinality, WithExpr,
+    AggregationExpr, BExpression, BinModifier, BinaryExpr, Expr, FunctionExpr, MetricExpr,
+    NumberLiteral, ParensExpr, RollupExpr, StringExpr, UnaryExpr, VectorMatchCardinality
 };
 use crate::common::{Value, ValueType};
 use crate::functions::BuiltinFunction;
@@ -29,9 +28,7 @@ pub fn check_ast(expr: Expr) -> Result<Expr, String> {
         Rollup(ex) => check_ast_for_rollup(ex),
         Parens(ex) => check_ast_for_parens(ex),
         StringExpr(ex) => check_ast_for_string_expr(ex),
-        With(ex) => check_ast_for_with(ex),
         StringLiteral(_) | NumberLiteral(_) | Duration(_) => Ok(expr),
-        WithSelector(ws) => check_ast_for_interpolated_vector_selector(ws),
     }
 }
 
@@ -56,11 +53,6 @@ fn check_ast_for_parens(expr: ParensExpr) -> Result<Expr, String> {
         expressions.push(check_ast(expr)?);
     }
     Ok(Expr::Parens(ParensExpr::new(expressions)))
-}
-
-// TODO
-fn check_ast_for_with(expr: WithExpr) -> Result<Expr, String> {
-    Ok(Expr::With(expr))
 }
 
 /// TODO
@@ -221,33 +213,6 @@ fn check_ast_for_vector_selector(ex: MetricExpr) -> Result<Expr, String> {
             }
             Ok(Expr::MetricExpression(ex))
         }
-        None if ex.is_empty_matchers() => {
-            // When name is None, a vector selector must contain at least one non-empty matcher
-            // to prevent implicit selection of all metrics (e.g. by a typo).
-            Err("vector selector must contain at least one non-empty matcher".into())
-        }
         _ => Ok(Expr::MetricExpression(ex)),
     }
-}
-
-fn check_ast_for_interpolated_vector_selector(ex: InterpolatedSelector) -> Result<Expr, String> {
-    // A Vector selector must contain at least one non-empty matcher to prevent
-    // implicit selection of all metrics (e.g. by a typo).
-    if ex.is_empty_matchers() {
-        return Err("vector selector must contain at least one non-empty matcher".into());
-    }
-
-    let mut du = ex.find_matchers(NAME_LABEL);
-    if du.len() >= 2 {
-        // this is to ensure that the err information can be predicted with fixed order
-        du.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        return Err(format!(
-            "metric name must not be set twice: '{}' or '{}'",
-            du[0].name(),
-            du[1].name()
-        ));
-    }
-
-    Ok(Expr::WithSelector(ex))
 }

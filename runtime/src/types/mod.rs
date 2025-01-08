@@ -12,6 +12,5 @@ mod traits;
 mod metric_name_test;
 #[cfg(test)]
 mod timeseries_test;
-mod unit_vec;
 
 pub use metricsql_common::label::Label;

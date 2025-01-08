@@ -27,4 +27,5 @@ pub mod prelude {
     pub use crate::label::*;
     pub use crate::optimizer::*;
     pub use crate::parser::*;
+    pub use crate::ast::utils::*;
 }

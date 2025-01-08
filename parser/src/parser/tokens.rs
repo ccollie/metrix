@@ -79,9 +79,6 @@ pub enum Token {
     #[token("unless", ignore(ascii_case))]
     OpUnless,
 
-    #[token("with", ignore(ascii_case))]
-    With,
-
     #[token("without", ignore(ascii_case))]
     Without,
 
@@ -274,7 +271,6 @@ impl Token {
                 | Limit
                 | On
                 | Offset
-                | With
                 | Without
                 | OpAnd
                 | OpAtan2
@@ -299,7 +295,6 @@ impl Token {
             Self::On => "on",
             Self::Offset => "offset",
             Self::StringLiteral => "<string literal>",
-            Self::With => "with",
             Self::Without => "without",
 
             Self::Identifier => "<identifier>",
@@ -356,6 +351,28 @@ impl Display for Token {
         f.write_str(self.as_str())
     }
 }
+
+pub(crate) const IDENT_LIKE_TOKENS: &'static [Token] =
+    &[
+        Token::By,
+        Token::Bool,
+        Token::OpDefault,
+        Token::GroupLeft,
+        Token::GroupRight,
+        Token::Ignoring,
+        Token::KeepMetricNames,
+        Token::Identifier,
+        Token::Limit,
+        Token::On,
+        Token::Offset,
+        Token::Without,
+        Token::OpAnd,
+        Token::OpAtan2,
+        Token::OpIf,
+        Token::OpIfNot,
+        Token::OpOr,
+        Token::OpUnless,
+    ];
 
 #[cfg(test)]
 mod tests {
@@ -571,7 +588,6 @@ mod tests {
     #[test_case("limit", Limit)]
     #[test_case("offset", Offset)]
     #[test_case("on", On)]
-    #[test_case("with", With)]
     #[test_case("without", Without)]
     fn keyword(src: &str, tok: Token) {
         test_tokens!(src, [tok]);

@@ -13,7 +13,6 @@ use crate::parser::{extract_string_value, parse_number, ParseResult, Parser};
 use super::aggregation::parse_aggr_func_expr;
 use super::rollup::parse_rollup_expr;
 use super::selector::parse_metric_expr;
-use super::with_expr::parse_with_expr;
 
 pub(super) fn parse_number_expr(p: &mut Parser) -> ParseResult<Expr> {
     let value = p.parse_number()?;
@@ -26,10 +25,6 @@ pub(super) fn parse_duration_expr(p: &mut Parser) -> ParseResult<Expr> {
 }
 
 pub(super) fn parse_single_expr(p: &mut Parser) -> ParseResult<Expr> {
-    if p.at(&Token::With) {
-        let with = parse_with_expr(p)?;
-        return Ok(Expr::With(with));
-    }
     let expr = parse_single_expr_without_rollup_suffix(p)?;
     if p.peek_kind().is_rollup_start() {
         let re = parse_rollup_expr(p, expr)?;
@@ -260,7 +255,7 @@ fn parse_unary_minus_expr(p: &mut Parser) -> ParseResult<Expr> {
 }
 
 pub(super) fn parse_string_expr(p: &mut Parser) -> ParseResult<StringExpr> {
-    let str = p.parse_string_expression()?;
+    let str = p.parse_string_expression(false)?;
     // todo: make sure
     Ok(str)
 }

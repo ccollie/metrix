@@ -162,7 +162,7 @@ impl StringExpr {
                             "unknown identifier {:?} in string expression of {:?}",
                             ident, self
                         );
-                        return Err(ParseError::WithExprExpansionError(msg));
+                        return Err(ParseError::General(msg));
                     }
                 }
             };

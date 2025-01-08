@@ -1,11 +1,11 @@
-use smallvec::SmallVec;
-use crate::ast::{Expr, InterpolatedSelector, MetricExpr};
-use crate::label::{LabelFilterExpr, MatchOp, Matcher};
+use super::tokens::{Token, IDENT_LIKE_TOKENS};
+use crate::ast::{Expr, MetricExpr};
+use crate::label::{MatchOp, Matcher, Matchers};
 use crate::parser::expr::parse_string_expr;
 use crate::parser::parse_error::unexpected;
-use crate::parser::{ParseResult, Parser};
-
-use super::tokens::Token;
+use crate::parser::{invalid_token_error, unescape_ident, ParseResult, Parser};
+use crate::prelude::ParseError;
+use smallvec::SmallVec;
 
 /// parse_metric_expr parses a metric selector.
 ///
@@ -14,107 +14,74 @@ use super::tokens::Token;
 ///    <metric_identifier> [<label_set>]
 ///
 pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
-    let can_expand = p.can_lookup();
     let mut name: Option<String> = None;
-
-    fn create_metric_expr(
-        name: Option<String>,
-        mut filters: Vec<Vec<LabelFilterExpr>>,
-    ) -> ParseResult<Expr> {
-        let mut me = if let Some(name) = name {
-            MetricExpr::new(name)
-        } else {
-            MetricExpr::default()
-        };
-
-        if filters.is_empty() {
-            return Ok(Expr::MetricExpression(me));
-        }
-
-        // AND matchers only. No OR matchers found.
-        if filters.len() == 1 {
-            let first = filters.pop().expect("filters is not empty");
-            if first.is_empty() {
-                return Ok(Expr::MetricExpression(me));
-            }
-            let converted = first
-                .into_iter()
-                .map(|x| x.into_matcher())
-                .collect::<ParseResult<Vec<_>>>()?;
-
-            me.matchers.matchers.extend(converted);
-            me.sort_filters();
-            return Ok(Expr::MetricExpression(me));
-        }
-
-        let mut or_matchers = vec![];
-        for filter in filters {
-            let converted = filter
-                .into_iter()
-                .map(|x| x.into_matcher())
-                .collect::<ParseResult<Vec<_>>>()?;
-            or_matchers.push(converted);
-        }
-
-        me.matchers.or_matchers = or_matchers;
-        me.sort_filters();
-        Ok(Expr::MetricExpression(me))
-    }
 
     if p.at(&Token::Identifier) {
         let token = p.expect_identifier()?;
-
-        if !p.at(&Token::LeftBrace) {
-            let me = MetricExpr::new(token);
-            return Ok(Expr::MetricExpression(me));
-        }
-
         name = Some(token);
     }
 
-    let filters = parse_label_filters(p)?;
-    // symbol table is empty and we're not parsing a WITH statement
-    if !can_expand {
-        create_metric_expr(name, filters)
-    } else {
-        // no identifiers in the label filters, create a MetricExpr
-        if filters
-            .iter()
-            .all(|x| x.iter().all(|filter| filter.is_resolved()))
-        {
-            return create_metric_expr(name, filters);
+    if !p.at(&Token::LeftBrace) {
+        if name.is_none() {
+            return Err(ParseError::InvalidSelector("missing metric name".to_string()));
         }
-        p.needs_expansion = true;
-        let mut with_me = if let Some(name) = name {
-            InterpolatedSelector::new(name)
-        } else {
-            InterpolatedSelector::default()
-        };
-        with_me.matchers = filters;
-        Ok(Expr::WithSelector(with_me))
+        return Ok(Expr::MetricExpression(MetricExpr {
+            name,
+            ..Default::default()
+        }));
     }
+
+    let mut matchers = parse_label_filters(p)?;
+    if !matchers.or_matchers.is_empty() {
+        if let Some(metric_name) = normalize_matcher_list(&mut matchers.or_matchers) {
+            if let Some(name) = &name {
+                if name != &metric_name {
+                    return Err(ParseError::InvalidSelector("duplicate metric name".to_string()));
+                }
+            } else {
+                name = Some(metric_name.to_string());
+            }
+            if matchers.or_matchers.len() == 1 {
+                let mut matcher = matchers.or_matchers.pop().expect("or_matchers is not empty");
+                std::mem::swap(&mut matchers.matchers, &mut matcher);
+            }
+        }
+    }
+
+    let mut me = MetricExpr {
+        name,
+        matchers,
+        ..Default::default()
+    };
+
+    me.sort_filters();
+    Ok(Expr::MetricExpression(me))
 }
 
 /// parse_label_filters parses a set of label matchers.
 ///
 /// `{` [ <label_name> <match_op> <match_string>, ... [or <label_name> <match_op> <match_string>, ...] `}`
 ///
-fn parse_label_filters(p: &mut Parser) -> ParseResult<Vec<Vec<LabelFilterExpr>>> {
+fn parse_label_filters(p: &mut Parser) -> ParseResult<Matchers> {
     use Token::*;
 
     p.expect(&LeftBrace)?;
 
     if p.at(&RightBrace) {
         p.bump();
-        return Ok(vec![]);
+        return Ok(Matchers::default());
     }
 
-    let mut result: Vec<Vec<LabelFilterExpr>> = Vec::with_capacity(2);
+    let mut or_matchers: Vec<Vec<Matcher>> = Vec::new();
+    let mut matchers: Vec<Matcher> = Vec::new();
+    let mut has_or_matchers = false;
+
     loop {
-        let filters = parse_label_filters_internal(p)?;
-        if !filters.is_empty() {
-            result.push(filters);
+        if has_or_matchers && !matchers.is_empty() {
+            let last_matchers = std::mem::take(&mut matchers);
+            or_matchers.push(last_matchers);
         }
+        matchers = parse_label_filters_internal(p)?;
 
         let tok = p.current_token()?;
         match tok.kind {
@@ -122,25 +89,37 @@ fn parse_label_filters(p: &mut Parser) -> ParseResult<Vec<Vec<LabelFilterExpr>>>
                 p.bump();
                 break;
             }
-            OpOr => p.bump(),
+            OpOr => {
+                has_or_matchers = true;
+                p.bump()
+            },
             _ => return Err(unexpected("label filter", tok.text, "OR or }", None)),
         }
     }
 
-    Ok(result)
+    if has_or_matchers {
+        if !matchers.is_empty() {
+            or_matchers.push(matchers);
+        }
+        // todo: validate name
+        return Ok(Matchers::with_or_matchers(or_matchers));
+    }
+
+    Ok(Matchers::new(matchers))
 }
 
 /// parse_label_filters parses a set of label matchers.
 ///
 /// [ <label_name> <match_op> <match_string>, ... ]
 ///
-fn parse_label_filters_internal(p: &mut Parser) -> ParseResult<Vec<LabelFilterExpr>> {
+fn parse_label_filters_internal(p: &mut Parser) -> ParseResult<Vec<Matcher>> {
     use Token::*;
 
-    let mut filters = Vec::with_capacity(4);
+    let mut matchers: Vec<Matcher> = vec![];
+
     loop {
-        let filter = parse_label_filter(p)?;
-        filters.push(filter);
+        let matcher = parse_label_filter(p)?;
+        matchers.push(matcher);
 
         let tok = p.current_token()?;
         match tok.kind {
@@ -158,31 +137,86 @@ fn parse_label_filters_internal(p: &mut Parser) -> ParseResult<Vec<LabelFilterEx
         }
     }
 
-    if !p.can_lookup() {
-        // if we're not parsing a WITH statement, we need to make sure we have no unresolved identifiers
-        for filter in &filters {
-            if filter.is_variable() {
-                return Err(unexpected(
-                    "label filter",
-                    &filter.label,
-                    "unresolved identifier",
-                    None,
-                ));
+    Ok(matchers)
+}
+
+fn normalize_matcher_list(matchers: &mut Vec<Vec<Matcher>>) -> Option<String> {
+    // if we have a __name__ filter, we need to ensure that all matchers have the same name
+    // if so, we pull out the name and return it while removing the __name__ filter from all matchers
+
+    // track name filters. Use Smallvec instead of HashSet to avoid allocations
+    let mut to_remove: SmallVec<(usize, usize, bool), 4> = SmallVec::new();
+
+    let name = {
+        let mut metric_name: &str = "";
+
+        let first = matchers.first()?;
+        for (i, m) in first.iter().enumerate() {
+            if m.is_metric_name_filter() {
+                metric_name = m.value.as_str();
+                to_remove.push((0, i, first.len() == 1));
+                break;
             }
+        }
+
+        if metric_name.is_empty() {
+            return None;
+        }
+
+        let mut i: usize = 1;
+
+        for match_list in matchers.iter().skip(1) {
+            let mut found = false;
+            for (j, m) in match_list.iter().enumerate() {
+                if m.is_metric_name_filter() {
+                    if m.value.as_str() != metric_name {
+                        return None;
+                    }
+                    found = true;
+                    to_remove.push((i, j, match_list.len() == 1));
+                    break;
+                }
+            }
+            if !found {
+                return None;
+            }
+            i += 1;
+        }
+
+        metric_name.to_string()
+    };
+
+    // remove the __name__ filter from all matchers
+    for (i, j, remove) in to_remove.iter().rev() {
+        if *remove {
+            matchers.remove(*i);
+        } else {
+            matchers[*i].remove(*j);
         }
     }
 
-    Ok(filters)
+    Some(name)
 }
 
 /// parse_label_filter parses a single label matcher.
 ///
 ///   <label_name> <match_op> <match_string> | identifier
 ///
-fn parse_label_filter(p: &mut Parser) -> ParseResult<LabelFilterExpr> {
+fn parse_label_filter(p: &mut Parser) -> ParseResult<Matcher> {
     use Token::*;
 
-    let label = p.expect_identifier()?;
+    let tok = p.expect_one_of(IDENT_LIKE_TOKENS);
+    if tok.is_err() {
+        let span = p.last_token_range().unwrap_or_default();
+        return Err(invalid_token_error(&[Identifier], None, &span, "".to_string()))
+    }
+
+    let tok = tok.expect("filter label name");
+    let label = match tok.kind {
+        Identifier => unescape_ident(tok.text)?.to_string(),
+        _ => tok.text.to_string(),
+    };
+
     let op: MatchOp;
 
     let tok = p.current_token()?;
@@ -191,7 +225,6 @@ fn parse_label_filter(p: &mut Parser) -> ParseResult<LabelFilterExpr> {
         OpNotEqual => op = MatchOp::NotEqual,
         RegexEqual => op = MatchOp::RegexEqual,
         RegexNotEqual => op = MatchOp::RegexNotEqual,
-        Comma | RightBrace => return Ok(LabelFilterExpr::variable(&label)),
         _ => {
             return Err(unexpected(
                 "label filter",
@@ -204,21 +237,7 @@ fn parse_label_filter(p: &mut Parser) -> ParseResult<LabelFilterExpr> {
 
     p.bump();
 
-    // todo: if we're parsing a WITH, we can accept an ident. IOW, we can have metric{s=ident}
-    let value = parse_string_expr(p)?;
+    let value = parse_string_expr(p)?.into_literal()?;
 
-    LabelFilterExpr::new(label, op, value)
-}
-
-fn optimize_or_matchers(filters: Vec<Vec<Matcher>>) -> Vec<Vec<Matcher>> {
-    let names: SmallVec<String, 4> = filters
-        .iter()
-        .flat_map(|x| x.iter().map(|y| y.label.clone()))
-        .collect();
-    let mut optimized = vec![];
-    for mut or_filters in filters {
-        or_filters.sort();
-        optimized.push(or_filters);
-    }
-    optimized
+    Matcher::new(op, label, value)
 }

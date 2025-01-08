@@ -92,11 +92,3 @@ fn are_all_args_scalar(args: &[QueryValue]) -> bool {
         }
     })
 }
-
-fn is_scalar_ts(tss: &[Timeseries]) -> bool {
-    if tss.len() != 1 {
-        return false;
-    }
-    let mn = &tss[0].metric_name;
-    mn.is_empty()
-}

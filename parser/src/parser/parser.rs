@@ -1,20 +1,15 @@
-use std::borrow::BorrowMut;
-use std::sync::Arc;
-use std::time::Duration;
 use logos::{Logos, Span};
+use std::borrow::BorrowMut;
+use std::time::Duration;
 
-use crate::ast::{DurationExpr, Expr, ParensExpr, StringExpr, WithArgExpr};
-use crate::parser::expand::resolve_ident;
+use crate::ast::{DurationExpr, Expr, ParensExpr, StringExpr};
 use crate::parser::expr::parse_expression;
-use crate::parser::symbol_provider::{HashMapSymbolProvider, SymbolProviderRef};
 use crate::parser::tokens::Token;
 use crate::parser::{
     extract_string_value, invalid_token_error, parse_duration_value, parse_number, syntax_error,
     ParseErr, ParseError, ParseResult,
 };
 use crate::prelude::unescape_ident;
-
-use super::expand::expand_with_expr;
 
 /// A token of MetricSql source.
 #[derive(Debug, Clone, PartialEq)]
@@ -43,10 +38,8 @@ impl TokenWithLocation<'_> {
 /// - self.token[self.cursor] should point to the next token after the parsed token.
 pub struct Parser<'a> {
     tokens: Vec<TokenWithLocation<'a>>,
-    symbol_provider: SymbolProviderRef,
     pub(crate) cursor: usize,
     pub(super) needs_expansion: bool,
-    pub(super) with_stack: Vec<Vec<WithArgExpr>>,
 }
 
 impl<'a> Parser<'a> {
@@ -84,8 +77,6 @@ impl<'a> Parser<'a> {
             cursor: 0,
             tokens,
             needs_expansion: false,
-            with_stack: vec![],
-            symbol_provider: Arc::new(HashMapSymbolProvider::new()),
         })
     }
 
@@ -94,8 +85,6 @@ impl<'a> Parser<'a> {
             cursor: 0,
             tokens,
             needs_expansion: false,
-            with_stack: vec![],
-            symbol_provider: Arc::new(HashMapSymbolProvider::new()),
         }
     }
 
@@ -289,14 +278,11 @@ impl<'a> Parser<'a> {
         Ok(values)
     }
 
-    pub(super) fn parse_string_expression(&mut self) -> ParseResult<StringExpr> {
+    pub(super) fn parse_string_expression(&mut self, accept_identifiers: bool) -> ParseResult<StringExpr> {
         use Token::*;
 
         let mut tok = self.current_token()?;
         let mut result = StringExpr::default();
-        // if we have no symbols or not in a WITH, we don't accept identifiers since we can't resolve
-        // them
-        let accept_identifiers = self.can_lookup();
 
         loop {
             match &tok.kind {
@@ -316,7 +302,11 @@ impl<'a> Parser<'a> {
                     self.needs_expansion = true;
                 }
                 _ => {
-                    return Err(self.token_error(&[StringLiteral, Identifier]));
+                    return if accept_identifiers {
+                        Err(self.token_error(&[StringLiteral, Identifier]))
+                    } else {
+                        Err(self.token_error(&[StringLiteral]))
+                    };
                 }
             }
 
@@ -413,33 +403,5 @@ impl<'a> Parser<'a> {
         // self.kind
         let tok = self.tokens.get(self.cursor);
         tok.expect("BUG: invalid index out of bounds").kind
-    }
-
-    pub(super) fn is_parsing_with(&self) -> bool {
-        !self.with_stack.is_empty()
-    }
-
-    pub(super) fn has_symbols(&self) -> bool {
-        self.symbol_provider.size() > 0
-    }
-
-    pub(super) fn can_lookup(&self) -> bool {
-        self.is_parsing_with() || self.has_symbols()
-    }
-
-    pub(super) fn resolve_ident(&self, ident: &str, args: Vec<Expr>) -> ParseResult<Option<Expr>> {
-        let empty = vec![];
-        let was = self.with_stack.last().unwrap_or(&empty);
-        let expr = resolve_ident(&self.symbol_provider, was, ident, args)?;
-        Ok(expr)
-    }
-
-    pub(super) fn expand_if_needed(&self, expr: Expr) -> ParseResult<Expr> {
-        if self.needs_expansion {
-            let was: Vec<WithArgExpr> = vec![];
-            expand_with_expr(&self.symbol_provider, &was, expr)
-        } else {
-            Ok(expr)
-        }
     }
 }

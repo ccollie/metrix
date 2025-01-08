@@ -11,7 +11,7 @@ mod tests {
         if q == "{}" {
             return Expr::MetricExpression(MetricExpr::default());
         }
-        parse(q).unwrap_or_else(|_| panic!("unexpected error in parse({})", q))
+        parse(q).unwrap_or_else(|e| panic!("unexpected error in parse({}): {:?}", q, e))
     }
 
     #[test]

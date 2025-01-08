@@ -5,7 +5,7 @@ use metricsql_common::prelude::{datetime_part, timestamp_secs_to_utc_datetime, D
 
 use crate::ast::{
     AggregationExpr, BinaryExpr, DurationExpr, Expr, FunctionExpr, NumberLiteral, Operator,
-    ParensExpr, RollupExpr, UnaryExpr, WithArgExpr, WithExpr,
+    ParensExpr, RollupExpr, UnaryExpr
 };
 use crate::binaryop::{scalar_binary_operation, string_compare};
 use crate::common::{RewriteRecursion, TreeNodeRewriter};
@@ -106,8 +106,6 @@ pub(super) fn can_evaluate(expr: &Expr) -> bool {
         | Expr::UnaryOperator(_)
         | Expr::BinaryOperator(_) => true,
         Expr::StringExpr(se) => !se.is_expanded(),
-        Expr::With(_) => false,
-        Expr::WithSelector(_) => false,
         Expr::MetricExpression(_) => false,
     }
 }
@@ -117,7 +115,6 @@ pub fn const_simplify(expr: Expr) -> ParseResult<Expr> {
         Expr::UnaryOperator(uo) => handle_unary_expr(uo),
         Expr::BinaryOperator(be) => handle_binary_expr(be),
         Expr::Function(fe) => handle_function_expr(fe),
-        Expr::With(we) => handle_with_expr(we),
         Expr::Aggregation(ae) => handle_aggregation_expr(ae),
         Expr::Rollup(re) => handle_rollup_expr(re),
         Expr::Parens(p) => {
@@ -381,26 +378,6 @@ fn handle_rollup_expr(re: RollupExpr) -> ParseResult<Expr> {
         ..re
     };
     Ok(Expr::Rollup(new_expr))
-}
-
-fn handle_with_expr(we: WithExpr) -> ParseResult<Expr> {
-    let expr = const_simplify(*we.expr)?;
-    let was = we
-        .was
-        .into_iter()
-        .map(|wa| {
-            Ok(WithArgExpr {
-                name: wa.name,
-                args: wa.args,
-                expr: const_simplify(wa.expr)?,
-                token_range: wa.token_range,
-            })
-        })
-        .collect::<ParseResult<Vec<WithArgExpr>>>()?;
-    Ok(Expr::With(WithExpr {
-        expr: Box::new(expr),
-        was,
-    }))
 }
 
 fn handle_expr_vecs(args: Vec<Expr>) -> ParseResult<Vec<Expr>> {

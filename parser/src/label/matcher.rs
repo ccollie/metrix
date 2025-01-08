@@ -17,7 +17,6 @@ use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-use crate::common::join_vector;
 use crate::parser::{escape_ident, quote, ParseError, ParseResult};
 use ahash::AHashMap;
 use metricsql_common::prelude::{string_matcher_from_regex, LITERAL_MATCH_COST};
@@ -352,7 +351,7 @@ impl Ord for Matcher {
     }
 }
 
-impl fmt::Display for Matcher {
+impl Display for Matcher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
