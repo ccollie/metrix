@@ -1,9 +1,9 @@
-use super::tokens::{Token, IDENT_LIKE_TOKENS};
+use super::tokens::Token;
 use crate::ast::{Expr, MetricExpr};
 use crate::label::{MatchOp, Matcher, Matchers};
 use crate::parser::expr::parse_string_expr;
 use crate::parser::parse_error::unexpected;
-use crate::parser::{invalid_token_error, unescape_ident, ParseResult, Parser};
+use crate::parser::{unescape_ident, ParseResult, Parser};
 use crate::prelude::ParseError;
 use smallvec::SmallVec;
 
@@ -16,9 +16,13 @@ use smallvec::SmallVec;
 pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     let mut name: Option<String> = None;
 
-    if p.at(&Token::Identifier) {
-        let token = p.expect_identifier()?;
-        name = Some(token);
+    let tok = p.current_token()?;
+    if tok.kind.is_ident_like() {
+        name = match tok.kind {
+            Token::Identifier => Some(unescape_ident(tok.text)?.to_string()),
+            _ => Some(tok.text.to_string())
+        };
+        p.bump();
     }
 
     if !p.at(&Token::LeftBrace) {
@@ -32,6 +36,9 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     }
 
     let mut matchers = parse_label_filters(p)?;
+
+    // now normalize the matchers
+    let mut need_normalization = true;
     if !matchers.or_matchers.is_empty() {
         if let Some(metric_name) = normalize_matcher_list(&mut matchers.or_matchers) {
             if let Some(name) = &name {
@@ -44,6 +51,23 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
             if matchers.or_matchers.len() == 1 {
                 let mut matcher = matchers.or_matchers.pop().expect("or_matchers is not empty");
                 std::mem::swap(&mut matchers.matchers, &mut matcher);
+            }
+            need_normalization = false;
+        }
+    }
+
+    if need_normalization && !matchers.matchers.is_empty() {
+        for (i, matcher) in matchers.matchers.iter().enumerate() {
+            if matcher.is_metric_name_filter() {
+                if let Some(name) = &name {
+                    if name != &matcher.value {
+                        return Err(ParseError::InvalidSelector("duplicate metric name".to_string()));
+                    }
+                } else {
+                    name = Some(matcher.value.clone());
+                }
+                matchers.matchers.remove(i);
+                break;
             }
         }
     }
@@ -205,17 +229,7 @@ fn normalize_matcher_list(matchers: &mut Vec<Vec<Matcher>>) -> Option<String> {
 fn parse_label_filter(p: &mut Parser) -> ParseResult<Matcher> {
     use Token::*;
 
-    let tok = p.expect_one_of(IDENT_LIKE_TOKENS);
-    if tok.is_err() {
-        let span = p.last_token_range().unwrap_or_default();
-        return Err(invalid_token_error(&[Identifier], None, &span, "".to_string()))
-    }
-
-    let tok = tok.expect("filter label name");
-    let label = match tok.kind {
-        Identifier => unescape_ident(tok.text)?.to_string(),
-        _ => tok.text.to_string(),
-    };
+    let label = p.expect_identifier_ex()?;
 
     let op: MatchOp;
 

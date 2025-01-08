@@ -4,11 +4,12 @@ use std::time::Duration;
 
 use crate::ast::{DurationExpr, Expr, ParensExpr, StringExpr};
 use crate::parser::expr::parse_expression;
-use crate::parser::tokens::Token;
+use crate::parser::tokens::{Token, IDENT_LIKE_TOKENS};
 use crate::parser::{
     extract_string_value, invalid_token_error, parse_duration_value, parse_number, syntax_error,
     ParseErr, ParseError, ParseResult,
 };
+use crate::parser::tokens::Token::Identifier;
 use crate::prelude::unescape_ident;
 
 /// A token of MetricSql source.
@@ -152,8 +153,19 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn expect_identifier(&mut self) -> ParseResult<String> {
-        let tok = self.expect_one_of(&[Token::Identifier])?;
+        let tok = self.expect_one_of(&[Identifier])?;
         Ok(unescape_ident(tok.text)?.to_string())
+    }
+
+    pub(super) fn expect_identifier_ex(&mut self) -> ParseResult<String> {
+        let tok = self.expect_one_of(IDENT_LIKE_TOKENS);
+        match tok {
+            Ok(tok) => Ok(unescape_ident(tok.text)?.to_string()),
+            Err(_) => {
+                let span = self.last_token_range().unwrap_or_default();
+                Err(invalid_token_error(&[Identifier], None, &span, "".to_string()))
+            }
+        }
     }
 
     pub(super) fn token_error(&self, expected: &[Token]) -> ParseError {

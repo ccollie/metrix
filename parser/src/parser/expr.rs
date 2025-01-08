@@ -7,7 +7,7 @@ use crate::functions::FunctionMeta;
 use crate::label::Labels;
 use crate::parser::function::parse_func_expr;
 use crate::parser::parse_error::unexpected;
-use crate::parser::tokens::Token;
+use crate::parser::tokens::{Token, IDENT_LIKE_TOKENS};
 use crate::parser::{extract_string_value, parse_number, ParseResult, Parser};
 
 use super::aggregation::parse_aggr_func_expr;
@@ -209,12 +209,18 @@ pub(super) fn parse_single_expr_without_rollup_suffix(p: &mut Parser) -> ParseRe
         Duration => parse_duration_expr(p),
         OpPlus => parse_unary_plus_expr(p),
         OpMinus => parse_unary_minus_expr(p),
-        _ => Err(unexpected(
-            "",
-            &tok.kind.to_string(),
-            "Expr",
-            Some(&tok.span),
-        )),
+        _ => {
+            if IDENT_LIKE_TOKENS.contains(&tok.kind) {
+                parse_ident_expr(p)
+            } else {
+                Err(unexpected(
+                    "",
+                    &tok.kind.to_string(),
+                    "Expr",
+                    Some(&tok.span),
+                ))
+            }
+        },
     }
 }
 
@@ -269,7 +275,7 @@ fn parse_ident_expr(p: &mut Parser) -> ParseResult<Expr> {
         parse_metric_expr(p)
     }
 
-    let name = p.expect_identifier()?;
+    let name = p.expect_identifier_ex()?;
 
     // Look into the next token in order to determine how to parse
     // the current Expr.
