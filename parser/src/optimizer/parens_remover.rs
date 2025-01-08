@@ -46,7 +46,7 @@ impl ParensRemover {
 fn unnest_parens(pe: &mut ParensExpr) {
     while pe.expressions.len() == 1 {
         if let Some(Expr::Parens(pe2)) = pe.expressions.get_mut(0) {
-            *pe = pe2.clone(); // todo: take
+            *pe = pe2.clone(); // todo: take/swap
         } else {
             break;
         }

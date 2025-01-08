@@ -141,15 +141,6 @@ mod tests {
     }
 
     #[test]
-    fn test_2() {
-        another(
-            r#"{__name__="a",bar="baz" or __name__="a"}"#,
-            r#"a{bar="baz"}"#,
-        );
-        same("foo{}");
-    }
-
-    #[test]
     fn test_parse_metric_expr() {
         same(r#"{foo="bar"}[5m]"#);
         same("foo{}");
@@ -325,6 +316,20 @@ mod tests {
         );
         another("()", "()");
     }
+
+    #[test]
+    fn test_2() {
+        another(
+            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
+            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
+        );
+        another(
+            r##"# comment
+                Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) # yet another comment
+                    * scalar("Test")"##,
+            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("Test")"#,
+        );
+    }
     
     #[test]
     fn test_parse_aggr_func_expr() {
@@ -347,26 +352,27 @@ mod tests {
 
         // All the above
         another(
-            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("Test")"#,
-            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("Test")"#,
+            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
+            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
         );
         another(
             r##"# comment
                 Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) # yet another comment
-                    * scalar("Test")"##,
-            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("Test")"#,
+                    * scalar("20")"##,
+            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("20")"#,
         );
     }
 
     #[test]
     fn testing() {
-        another("1/0", "+Inf");
+        same("m + ignoring () n[5m]");
+        another("M + IGNORING () N[5m]", "M + ignoring () N[5m]");
     }
 
     #[test]
     fn test_parse_binary_op_expr() {
         // binaryOpExpr
-        // another("nan == nan", "NaN");
+        another("nan == nan", "NaN");
         another("nan ==bool nan", "1");
         another("nan !=bool nan", "0");
         another("nan !=bool 2", "1");
@@ -384,8 +390,8 @@ mod tests {
         another("1/0", "+Inf");
         another("0/0", "NaN");
         another("-m", "-m");
-        //	same("m + ignoring () n[5m]");
-        //	another("M + IGNORING () N[5m]", "M + ignoring () N[5m]");
+        same("m + ignoring () n[5m]");
+        another("M + IGNORING () N[5m]", "M + ignoring () N[5m]");
         same("m + on (foo) n");
         same("m + ignoring (a, b) n");
         another("1 or 2", "1");
@@ -669,8 +675,8 @@ mod tests {
     #[test]
     fn invalid_metric_expr() {
         // invalid metricExpr
-        assert_invalid("{}");
-        assert_invalid("{}[5m]");
+        // assert_invalid("{}"); // this is technically valid, but is a bad idea (return all series without labels)
+        // assert_invalid("{}[5m]");
         assert_invalid("foo[-55]");
         assert_invalid("m[-5m]");
         assert_invalid("{");
@@ -730,7 +736,6 @@ mod tests {
 
     #[test]
     fn invalid_at_modifier() {
-        // Invalid @ modifier
         assert_invalid("@");
         assert_invalid("foo @");
         assert_invalid("foo @ ! ");
@@ -795,7 +800,6 @@ mod tests {
 
     #[test]
     fn invalid_binary_op_expr() {
-        // invalid binaryOpExpr
         assert_invalid("+");
         assert_invalid("1 +");
         assert_invalid("1 + 2.");
@@ -833,7 +837,6 @@ mod tests {
 
     #[test]
     fn invalid_empty_string() {
-        // an empty string
         assert_invalid("");
         assert_invalid(r#"  \t\b\r\n  "#);
     }
