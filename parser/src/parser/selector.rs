@@ -30,8 +30,10 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
             return Err(ParseError::InvalidSelector("missing metric name".to_string()));
         }
         return Ok(Expr::MetricExpression(MetricExpr {
-            name,
-            ..Default::default()
+            matchers: Matchers {
+                name,
+                ..Default::default()
+            },
         }));
     }
 
@@ -72,11 +74,8 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
         }
     }
 
-    let mut me = MetricExpr {
-        name,
-        matchers,
-        ..Default::default()
-    };
+    matchers.name = name;
+    let mut me = MetricExpr { matchers };
 
     me.sort_filters();
     Ok(Expr::MetricExpression(me))
@@ -126,7 +125,7 @@ fn parse_label_filters(p: &mut Parser) -> ParseResult<Matchers> {
             or_matchers.push(matchers);
         }
         // todo: validate name
-        return Ok(Matchers::with_or_matchers(or_matchers));
+        return Ok(Matchers::with_or_matchers(None, or_matchers));
     }
 
     Ok(Matchers::new(matchers))

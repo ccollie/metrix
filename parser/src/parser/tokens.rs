@@ -266,6 +266,7 @@ impl Token {
                 | OpDefault
                 | GroupLeft
                 | GroupRight
+                | Identifier
                 | Ignoring
                 | KeepMetricNames
                 | Limit

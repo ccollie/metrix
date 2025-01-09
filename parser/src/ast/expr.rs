@@ -697,8 +697,6 @@ impl Prettier for DurationExpr {
 /// `rate(x{job="foo",instance="bar" or job="x",instance="baz"}[5m])`
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetricExpr {
-    /// name is the metric name.
-    pub name: Option<String>,
     /// matchers contains a list of label filters from curly braces.
     pub matchers: Matchers,
 }
@@ -708,23 +706,25 @@ impl MetricExpr {
         // SAFETY: safe to unwrap since only regex errors are possible
         let name_filter = Matcher::new(MatchOp::Equal, NAME_LABEL, name.into()).unwrap();
         MetricExpr {
-            // name: Some(name.into()),
-            name: None,
             matchers: Matchers::default().append(name_filter),
         }
     }
 
     pub fn with_filters(filters: Vec<Matcher>) -> Self {
         MetricExpr {
-            name: None,
             matchers: Matchers::new(filters),
         }
     }
 
-    pub fn with_or_filters(filters: Vec<Vec<Matcher>>) -> Self {
+    pub fn with_or_filters(name: Option<String>, filters: Vec<Vec<Matcher>>) -> Self {
         MetricExpr {
-            name: None,
-            matchers: Matchers::with_or_matchers(filters),
+            matchers: Matchers::with_or_matchers(name, filters),
+        }
+    }
+
+    pub fn with_matchers(name: Option<String>, matchers: Vec<Matcher>) -> Self {
+        MetricExpr {
+            matchers: Matchers::with_matchers(name, matchers),
         }
     }
 
@@ -780,36 +780,7 @@ impl Value for MetricExpr {
 
 impl Display for MetricExpr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if self.is_empty() {
-            write!(f, "{{}}")?;
-            return Ok(());
-        }
-
-        let mut offset = 0;
-        let metric_name = self.metric_name().unwrap_or("");
-        if !metric_name.is_empty() {
-            write!(f, "{}", escape_ident(metric_name))?;
-            offset = 1;
-        }
-
-        if self.is_only_metric_name() {
-            return Ok(());
-        }
-        write!(f, "{{")?;
-        let mut count = 0;
-        for lfs in self.matchers.iter() {
-            if lfs.len() < offset {
-                continue;
-            }
-            if count > 0 {
-                write!(f, " or ")?;
-            }
-            let lfs_ = &lfs[offset..];
-            write!(f, "{}", join_vector(lfs_, ", ", false))?;
-            count += 1;
-        }
-        write!(f, "}}")?;
-        Ok(())
+        write!(f, "{}", self.matchers)
     }
 }
 
@@ -823,10 +794,7 @@ impl Display for MetricExpr {
 /// use metricsql_parser::ast::MetricExpr;
 /// use metricsql_parser::label::Matchers;
 ///
-/// let vs = MetricExpr {
-///     name: Some(String::from("foo")),
-///     matchers: Matchers::empty(),
-/// };
+/// let vs = MetricExpr::new("foo");
 ///
 /// assert_eq!(MetricExpr::from("foo"), vs);
 /// ```

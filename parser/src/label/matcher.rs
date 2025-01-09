@@ -14,9 +14,10 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+use crate::common::join_vector;
 use crate::parser::{escape_ident, quote, ParseError, ParseResult};
 use ahash::AHashMap;
 use metricsql_common::prelude::{string_matcher_from_regex, LITERAL_MATCH_COST};
@@ -80,7 +81,7 @@ impl TryFrom<&str> for MatchOp {
 }
 
 impl Display for MatchOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
@@ -352,7 +353,7 @@ impl Ord for Matcher {
 }
 
 impl Display for Matcher {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
             "{}{}{}",
@@ -374,6 +375,7 @@ impl Hash for Matcher {
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Matchers {
+    pub name: Option<String>,
     pub matchers: Vec<Matcher>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "<[_]>::is_empty"))]
     pub or_matchers: Vec<Vec<Matcher>>,
@@ -382,24 +384,31 @@ pub struct Matchers {
 impl Matchers {
     pub fn new(filters: Vec<Matcher>) -> Self {
         Matchers {
+            name: None,
             matchers: filters,
             or_matchers: vec![],
         }
     }
 
     pub fn empty() -> Self {
-        Self {
-            matchers: vec![],
+        Self::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.matchers.is_empty() && self.or_matchers.is_empty() && self.name.is_none()
+    }
+
+    pub fn with_matchers(name: Option<String>, matchers: Vec<Matcher>) -> Self {
+        Matchers {
+            name,
+            matchers,
             or_matchers: vec![],
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.matchers.is_empty() && self.or_matchers.is_empty()
-    }
-
-    pub fn with_or_matchers(or_matchers: Vec<Vec<Matcher>>) -> Self {
+    pub fn with_or_matchers(name: Option<String>, or_matchers: Vec<Vec<Matcher>>) -> Self {
         Matchers {
+            name,
             matchers: vec![],
             or_matchers,
         }
@@ -486,49 +495,12 @@ impl Matchers {
     }
 
     pub fn is_only_metric_name(&self) -> bool {
-        if !self.matchers.is_empty() {
-            return self.matchers.len() == 1 && self.matchers[0].is_metric_name_filter();
-        }
-        if !self.or_matchers.is_empty() {
-            if self.metric_name().is_none() {
-                return false;
-            }
-            return self.or_matchers.iter().all(|lfs| lfs.len() <= 1);
-        }
-        true
+        self.name.is_some() && self.matchers.is_empty() && self.or_matchers.is_empty()
     }
 
     pub fn metric_name(&self) -> Option<&str> {
-        if !self.matchers.is_empty() {
-            let found = self
-                .matchers
-                .iter()
-                .find(|m| m.is_metric_name_filter())
-                .map(|m| m.value.as_str());
-
-            // todo: make sure only 1 is specified
-            return found;
-        }
-        if !self.or_matchers.is_empty() {
-            let lfs = self.or_matchers.first().unwrap();
-            if lfs.is_empty() {
-                return None;
-            }
-            let head = &lfs[0];
-            if !head.is_metric_name_filter() {
-                return None;
-            }
-            let metric_name = head.value.as_str();
-            for or_matchers in &self.or_matchers[1..] {
-                if or_matchers.is_empty() {
-                    return None;
-                }
-                let first = &or_matchers[0];
-                if !first.is_metric_name_filter() || first.value.as_str() != metric_name {
-                    return None;
-                }
-            }
-            return Some(metric_name);
+        if let Some(name) = self.name.as_ref() {
+            return Some(name);
         }
         None
     }
@@ -561,74 +533,60 @@ fn hash_filters(hasher: &mut impl Hasher, filters: &[Matcher]) {
     }
 }
 
+const MATCHER_HASH_ID: u8 = 1;
+const OR_MATCHER_HASH_ID: u8 = 2;
+
 impl Hash for Matchers {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        if let Some(name) = &self.name {
+            name.hash(state);
+        }
         if !self.matchers.is_empty() {
+            state.write_u8(MATCHER_HASH_ID);
             hash_filters(state, &self.matchers);
         }
         for filters in &self.or_matchers {
+            state.write_u8(OR_MATCHER_HASH_ID);
             hash_filters(state, filters);
         }
     }
 }
 
 impl Display for Matchers {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let simple_matchers = &self.matchers;
-        let or_matchers = &self.or_matchers;
-        if or_matchers.is_empty() {
-            join_matchers(f, simple_matchers)
-        } else {
-            for (i, matchers) in or_matchers.iter().enumerate() {
-                if i > 0 {
-                    write!(f, " or ")?;
-                }
-                join_matchers(f, &matchers)?;
-            }
-            Ok(())
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        if self.is_empty() {
+            write!(f, "{{}}")?;
+            return Ok(());
         }
+
+        if let Some(name) = &self.name {
+            write!(f, "{}", escape_ident(name))?;
+        }
+
+        if self.is_only_metric_name() {
+            return Ok(());
+        }
+
+        write!(f, "{{")?;
+        for (i, lfs) in self.iter().enumerate() {
+            if i > 0 {
+                write!(f, " or ")?;
+            }
+            join_matchers(f, lfs)?;
+        }
+        write!(f, "}}")?;
+        Ok(())
     }
 }
 
-fn join_matchers(f: &mut fmt::Formatter<'_>, v: &[Matcher]) -> fmt::Result {
-    let mut name_index: Option<usize> = None;
-    let mut len: usize = v.len();
+fn join_matchers(f: &mut Formatter<'_>, v: &[Matcher]) -> fmt::Result {
 
     for (i, matcher) in v.iter().enumerate() {
-        if matcher.is_metric_name_filter() {
-            write!(f, "{}", matcher.value)?;
-            name_index = Some(i);
-            len = v.len() - 1;
-            break;
+        if i > 0 {
+            write!(f, ", ")?;
         }
+        write!(f, "{}", matcher)?;
     }
-
-    if len == 0 {
-        write!(f, "{{}}")?;
-        return Ok(());
-    }
-
-    write!(f, "{{")?;
-    if let Some(index) = name_index {
-        let mut count = 0;
-        for (i, matcher) in v.iter().enumerate() {
-            if count > 0 {
-                write!(f, ", ")?;
-            }
-            if i != index {
-                write!(f, "{}", matcher)?;
-                count += 1;
-            }
-        }
-    } else {
-        for (i, matcher) in v.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", matcher)?;
-        }
-    }
-    write!(f, "}}")?;
 
     Ok(())
 }
