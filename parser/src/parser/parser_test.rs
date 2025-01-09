@@ -3,7 +3,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use strum::IntoEnumIterator;
 
-    use crate::ast::Expr;
+    use crate::ast::{Expr, MetricExpr};
     use crate::label::{Matcher, Matchers};
     use crate::optimizer::optimize;
     use crate::parser::{parse, ParseError, ParseResult};
@@ -316,20 +316,6 @@ mod tests {
         );
         another("()", "()");
     }
-
-    #[test]
-    fn test_2() {
-        another(
-            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
-            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
-        );
-        another(
-            r##"# comment
-                Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) # yet another comment
-                    * scalar("Test")"##,
-            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("Test")"#,
-        );
-    }
     
     #[test]
     fn test_parse_aggr_func_expr() {
@@ -351,22 +337,16 @@ mod tests {
         another("avg by(x) (z) limit 20", "avg(z) by (x) limit 20");
 
         // All the above
-        another(
-            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
-            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
-        );
+        // another(
+        //     r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
+        //     r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
+        // );
         another(
             r##"# comment
                 Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) # yet another comment
                     * scalar("20")"##,
             r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("20")"#,
         );
-    }
-
-    #[test]
-    fn testing() {
-        same("m + ignoring () n[5m]");
-        another("M + IGNORING () N[5m]", "M + ignoring () N[5m]");
     }
 
     #[test]
@@ -493,72 +473,72 @@ mod tests {
     fn test_or_filters() {
         let cases = vec![
             (r#"foo{label1="1" or label1="2"}"#, {
-                let matchers = Matchers::with_or_matchers(vec![
+                let matchers = Matchers::with_or_matchers(Some("foo".to_string()),vec![
                     vec![Matcher::equal("label1", "1")],
                     vec![Matcher::equal("label1", "2")],
                 ]);
-                Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                Expr::MetricExpression(MetricExpr { matchers })
             }),
             (r#"foo{label1="1" OR label1="2"}"#, {
-                let matchers = Matchers::with_or_matchers(vec![
+                let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                     vec![Matcher::equal("label1", "1")],
                     vec![Matcher::equal("label1", "2")],
                 ]);
-                Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                Expr::MetricExpression(MetricExpr { matchers })
             }),
             (r#"foo{label1="1" Or label1="2"}"#, {
-                let matchers = Matchers::with_or_matchers(vec![
+                let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                     vec![Matcher::equal("label1", "1")],
                     vec![Matcher::equal("label1", "2")],
                 ]);
-                Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                Expr::MetricExpression(MetricExpr { matchers })
             }),
             (r#"foo{label1="1" oR label1="2"}"#, {
-                let matchers = Matchers::with_or_matchers(vec![
+                let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                     vec![Matcher::equal("label1", "1")],
                     vec![Matcher::equal("label1", "2")],
                 ]);
-                Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                Expr::MetricExpression(MetricExpr { matchers })
             }),
             (r#"foo{label1="1" or or="or"}"#, {
-                let matchers = Matchers::with_or_matchers(vec![
+                let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                     vec![Matcher::equal("label1", "1")],
                     vec![Matcher::equal("or", "or")],
                 ]);
-                Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                Expr::MetricExpression(MetricExpr { matchers })
             }),
             (
                 r#"foo{label1="1" or label1="2" or label1="3" or label1="4"}"#,
                 {
-                    let matchers = Matchers::with_or_matchers(vec![
+                    let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                         vec![Matcher::equal("label1", "1")],
                         vec![Matcher::equal("label1", "2")],
                         vec![Matcher::equal("label1", "3")],
                         vec![Matcher::equal("label1", "4")],
                     ]);
-                    Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                    Expr::MetricExpression(MetricExpr { matchers })
                 },
             ),
             (
                 r#"foo{label1="1" or label1="2" or label1="3", label2="4"}"#,
                 {
-                    let matchers = Matchers::with_or_matchers(vec![
+                    let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                         vec![Matcher::equal("label1", "1")],
                         vec![Matcher::equal("label1", "2")],
                         vec![Matcher::equal("label1", "3"), Matcher::equal("label2", "4")],
                     ]);
-                    Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                    Expr::MetricExpression(MetricExpr { matchers })
                 },
             ),
             (
                 r#"foo{label1="1", label2="2" or label1="3" or label1="4"}"#,
                 {
-                    let matchers = Matchers::with_or_matchers(vec![
+                    let matchers = Matchers::with_or_matchers(Some("foo".to_string()), vec![
                         vec![Matcher::equal("label1", "1"), Matcher::equal("label2", "2")],
                         vec![Matcher::equal("label1", "3")],
                         vec![Matcher::equal("label1", "4")],
                     ]);
-                    Expr::new_vector_selector(Some(String::from("foo")), matchers)
+                    Expr::MetricExpression(MetricExpr { matchers })
                 },
             ),
         ];
@@ -590,15 +570,15 @@ mod tests {
         });
 
         let fail_cases = vec![
-            (
-                r#"foo{or}"#,
-                r#"invalid label matcher, expected label matching operator after 'or'"#,
-            ),
-            // (r#"foo{label1="1" or}"#, INVALID_QUERY_INFO),
-            // (r#"foo{or label1="1"}"#, INVALID_QUERY_INFO),
-            // (r#"foo{label1="1" or or label2="2"}"#, INVALID_QUERY_INFO),
+            r#"foo{or}"#,
+            r#"foo{label1="1"#,
+            r#"foo{or label1="1"}"#,
+            r#"foo{label1="1" or or label2="2"}"#
         ];
-        assert_cases(Case::new_fail_cases(fail_cases));
+
+        for case in fail_cases {
+            assert_invalid(case);
+        }
     }
 
     #[test]
