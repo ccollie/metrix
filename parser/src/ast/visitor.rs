@@ -78,8 +78,6 @@ pub fn walk_expr<V: ExprVisitor>(visitor: &mut V, expr: &Expr) -> Result<bool, V
         | Expr::StringExpr(_)
         | Expr::NumberLiteral(_)
         | Expr::MetricExpression(_)
-        | Expr::With(_)
-        | Expr::WithSelector(_)
         | Expr::Duration(_) => true,
     };
 

@@ -1,6 +1,5 @@
 use crate::ast::{
-    AggregationExpr, BinaryExpr, Expr, FunctionExpr, ParensExpr, RollupExpr, UnaryExpr,
-    WithArgExpr, WithExpr,
+    AggregationExpr, BinaryExpr, Expr, FunctionExpr, ParensExpr, RollupExpr, UnaryExpr
 };
 use crate::common::{RewriteRecursion, TreeNodeRewriter};
 use crate::parser::ParseResult;
@@ -47,7 +46,7 @@ impl ParensRemover {
 fn unnest_parens(pe: &mut ParensExpr) {
     while pe.expressions.len() == 1 {
         if let Some(Expr::Parens(pe2)) = pe.expressions.get_mut(0) {
-            *pe = pe2.clone(); // todo: take
+            *pe = pe2.clone(); // todo: take/swap
         } else {
             break;
         }
@@ -105,19 +104,6 @@ pub fn remove_parens_expr(e: Expr) -> Expr {
             }
             Expr::Parens(ParensExpr { expressions: args })
         }
-        Expr::With(with) => Expr::With(WithExpr {
-            expr: Box::new(remove_parens_expr(*with.expr)),
-            was: with
-                .was
-                .into_iter()
-                .map(|wa| WithArgExpr {
-                    name: wa.name,
-                    args: vec![],
-                    expr: crate::optimizer::remove_parens_expr(wa.expr),
-                    token_range: Default::default(),
-                })
-                .collect(),
-        }),
         _ => e,
     }
 }
@@ -138,10 +124,6 @@ pub fn should_remove_parens(e: &Expr) -> bool {
         Expr::Aggregation(ae) => ae.args.iter().any(should_remove_parens),
         Expr::Function(fe) => fe.args.iter().any(should_remove_parens),
         Expr::Parens(_) => true,
-        Expr::With(with) => {
-            should_remove_parens(&with.expr)
-                || with.was.iter().any(|wa| should_remove_parens(&wa.expr))
-        }
         _ => false,
     }
 }

@@ -19,7 +19,7 @@
 
 use crate::ast::{
     AggregationExpr, BExpression, BinaryExpr, Expr, FunctionExpr, ParensExpr, RollupExpr,
-    UnaryExpr, WithArgExpr, WithExpr,
+    UnaryExpr
 };
 use crate::common::{TreeNode, VisitRecursion};
 use crate::parser::ParseResult;
@@ -36,7 +36,6 @@ impl TreeNode for Expr {
             | Expr::StringExpr(_)
             | Expr::NumberLiteral(_)
             | Expr::MetricExpression(_)
-            | Expr::WithSelector(_)
             | Expr::Duration(_) => vec![],
             Expr::UnaryOperator(u) => vec![u.expr.as_ref().clone()],
             Expr::BinaryOperator(BinaryExpr { left, right, .. }) => {
@@ -52,14 +51,6 @@ impl TreeNode for Expr {
                     expr_vec.push(at_expr.as_ref().clone());
                 }
                 // todo: window, step, offset
-                expr_vec
-            }
-            Expr::With(w) => {
-                let mut expr_vec = Vec::with_capacity(1 + w.was.len());
-                expr_vec.push(w.expr.as_ref().clone());
-                for wa in w.was.iter() {
-                    expr_vec.push(wa.expr.clone());
-                }
                 expr_vec
             }
         };
@@ -141,24 +132,6 @@ impl TreeNode for Expr {
                 expressions: transform_vec(expressions, &mut transform)?,
             }),
             Expr::StringLiteral(_) | Expr::StringExpr(_) => self.clone(),
-            Expr::With(w) => {
-                let mut was: Vec<WithArgExpr> = Vec::with_capacity(w.was.len());
-                for wa in w.was.into_iter() {
-                    let new_wa = WithArgExpr {
-                        name: wa.name.clone(),
-                        args: wa.args.clone(),
-                        expr: transform(wa.expr)?,
-                        token_range: wa.token_range,
-                    };
-                    was.push(new_wa);
-                }
-                let with = WithExpr {
-                    was,
-                    expr: Box::new(transform(*w.expr)?),
-                };
-                Expr::With(with)
-            }
-            Expr::WithSelector(_) => self.clone(),
         };
 
         Ok(expr)

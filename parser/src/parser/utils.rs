@@ -99,8 +99,8 @@ pub fn unescape_ident(s: &str) -> ParseResult<Cow<str>> {
     Ok(Cow::Owned(unescaped))
 }
 
-/// interprets token as a single-quoted, double-quoted, or backquoted
-/// Prometheus query language string literal, returning the string value that s
+/// interprets `token` as a single-quoted, double-quoted, or backquoted
+/// Prometheus query language string literal, returning the string value that `token`
 /// quotes.
 ///
 /// Special-casing for single quotes was removed and single quoted strings are now treated the
@@ -118,18 +118,14 @@ pub fn extract_string_value(token: &str) -> ParseResult<Cow<str>> {
     // See https://prometheus.io/docs/prometheus/latest/querying/basics/#string-literals
     let mut quote_ch = token.chars().next().unwrap();
     if !['"', '\'', '`'].contains(&quote_ch) {
-        return Err(ParseError::SyntaxError(format!(
-            "invalid quote character {}",
-            quote_ch
-        )));
+        return Err(ParseError::SyntaxError(format!("invalid quote character {quote_ch}")));
     }
 
     let last = token.chars().last().unwrap();
 
     if last != quote_ch {
         return Err(ParseError::SyntaxError(format!(
-            "string literal contains unexpected trailing char; got {}",
-            token
+            "string literal contains unexpected trailing char; got {token}"
         )));
     }
 

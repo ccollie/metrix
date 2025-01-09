@@ -28,14 +28,14 @@ pub enum ParseError {
     InvalidNumber(String),
     #[error(transparent)]
     InvalidArgCount(ArgCountError),
-    #[error("Error expanding WITH expression: `{0}`")]
-    WithExprExpansionError(String),
     #[error("Syntax Error: `{0}`")]
     SyntaxError(String),
     #[error("{0}")]
     General(String),
     #[error("Invalid regex: {0}")]
     InvalidRegex(String),
+    #[error("Invalid vector selector: {0}")]
+    InvalidSelector(String),
     #[error("Unknown function {0}")]
     InvalidFunction(String),
     #[error("Division by zero")]

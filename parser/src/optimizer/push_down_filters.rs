@@ -7,7 +7,7 @@ use crate::ast::{
 };
 use crate::functions::BuiltinFunction::Transform;
 use crate::functions::{AggregateFunction, BuiltinFunction, RollupFunction, TransformFunction};
-use crate::label::{Matcher, MatchOp, Matchers, NAME_LABEL};
+use crate::label::{MatchOp, Matcher, Matchers, NAME_LABEL};
 use crate::parser::{ParseError, ParseResult};
 use crate::prelude::{can_accept_multiple_args_for_aggr_func, VectorMatchCardinality};
 use metricsql_common::hash::{FastHashSet, HashSetExt};
@@ -296,7 +296,10 @@ fn get_common_label_filters_for_label_replace(args: &[Expr]) -> Vec<Matcher> {
     lfs
 }
 
-fn get_common_label_filters_for_label_set(args: &[Expr]) -> Vec<Matcher> {
+fn get_common_label_filters_for_label_set_2(args: &[Expr]) -> Vec<Matcher> {
+    if args.is_empty() {
+        return vec![];
+    }
     if args.len() != 2 {
         return vec![];
     }
@@ -332,6 +335,43 @@ fn get_common_label_filters_for_label_set(args: &[Expr]) -> Vec<Matcher> {
     }
     lfs
 }
+
+fn get_common_label_filters_for_label_set(args: &[Expr]) -> Vec<Matcher> {
+    if args.is_empty() {
+        return vec![];
+    }
+
+    // Get the initial label filters from the first argument
+    let mut lfs = get_common_label_filters(&args[0]);
+
+    // Iterate over the remaining arguments in pairs (label name, label value)
+    let mut args_iter = args.iter().skip(1);
+    while let Some(label_name) = args_iter.next() {
+        let label_value = match args_iter.next() {
+            Some(expr) => expr,
+            None => return vec![], // Missing label value
+        };
+
+        match (label_name, label_value) {
+            (Expr::StringLiteral(se_label_name), Expr::StringLiteral(se_label_value)) => {
+                // Skip if the label name is "__name__"
+                if se_label_name.0 == "__name__" {
+                    continue;
+                }
+
+                // Drop existing filters for the label name
+                drop_label_filters_for_label_name(&mut lfs, label_name);
+
+                // Add the new label filter
+                lfs.push(Matcher::equal(se_label_name.as_str(), se_label_value.as_str()));
+            }
+            _ => return vec![], // Invalid label name or value
+        }
+    }
+
+    lfs
+}
+
 
 fn get_expr_as_string(expr: &Expr) -> Option<&str> {
     match expr {

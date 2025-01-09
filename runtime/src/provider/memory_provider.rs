@@ -73,7 +73,7 @@ impl Storage {
     fn get_range(&self, metric_id: Signature, start: i64, end: i64) -> Option<QueryResult> {
         if let Some(values) = self.sample_values.get(&metric_id) {
             if let Some(start) = find_first_index(values, start) {
-                let mut points = &mut values[start..]
+                let points = &mut values[start..]
                     .iter()
                     .filter(|p| p.t <= end)
                     .collect::<Vec<_>>();

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
-use std::ops::{Deref, Neg, Range};
+use std::ops::{Deref, Neg};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use std::{fmt, iter, ops};
@@ -13,14 +13,14 @@ use metricsql_common::duration::fmt_duration_ms;
 
 use crate::ast::utils::string_vecs_equal_unordered;
 use crate::ast::{
-    expr_equals, indent, prettify_args, Operator, Prettier, StringExpr, MAX_CHARACTERS_PER_LINE,
+    indent, prettify_args, Operator, Prettier, StringExpr, MAX_CHARACTERS_PER_LINE,
 };
 use crate::common::{hash_f64, join_vector, write_comma_separated, write_number, Value, ValueType};
 use crate::functions::{AggregateFunction, BuiltinFunction, TransformFunction};
-use crate::label::{Matcher, MatchOp, Labels, Matchers, NAME_LABEL};
+use crate::label::{Labels, MatchOp, Matcher, Matchers, NAME_LABEL};
 use crate::parser::{escape_ident, ParseError, ParseResult};
 use crate::prelude::{
-    get_aggregate_arg_idx_for_optimization, BuiltinFunctionType, InterpolatedSelector,
+    get_aggregate_arg_idx_for_optimization, BuiltinFunctionType,
     RollupFunction,
 };
 
@@ -327,7 +327,6 @@ impl VectorMatchCardinality {
     pub fn is_group_left(&self) -> bool {
         matches!(self, VectorMatchCardinality::ManyToOne(_))
     }
-
     pub fn is_group_right(&self) -> bool {
         matches!(self, VectorMatchCardinality::OneToMany(_))
     }
@@ -698,8 +697,6 @@ impl Prettier for DurationExpr {
 /// `rate(x{job="foo",instance="bar" or job="x",instance="baz"}[5m])`
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetricExpr {
-    /// name is the metric name.
-    pub name: Option<String>,
     /// matchers contains a list of label filters from curly braces.
     pub matchers: Matchers,
 }
@@ -709,23 +706,25 @@ impl MetricExpr {
         // SAFETY: safe to unwrap since only regex errors are possible
         let name_filter = Matcher::new(MatchOp::Equal, NAME_LABEL, name.into()).unwrap();
         MetricExpr {
-            // name: Some(name.into()),
-            name: None,
             matchers: Matchers::default().append(name_filter),
         }
     }
 
     pub fn with_filters(filters: Vec<Matcher>) -> Self {
         MetricExpr {
-            name: None,
             matchers: Matchers::new(filters),
         }
     }
 
-    pub fn with_or_filters(filters: Vec<Vec<Matcher>>) -> Self {
+    pub fn with_or_filters(name: Option<String>, filters: Vec<Vec<Matcher>>) -> Self {
         MetricExpr {
-            name: None,
-            matchers: Matchers::with_or_matchers(filters),
+            matchers: Matchers::with_or_matchers(name, filters),
+        }
+    }
+
+    pub fn with_matchers(name: Option<String>, matchers: Vec<Matcher>) -> Self {
+        MetricExpr {
+            matchers: Matchers::with_matchers(name, matchers),
         }
     }
 
@@ -781,36 +780,7 @@ impl Value for MetricExpr {
 
 impl Display for MetricExpr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if self.is_empty() {
-            write!(f, "{{}}")?;
-            return Ok(());
-        }
-
-        let mut offset = 0;
-        let metric_name = self.metric_name().unwrap_or("");
-        if !metric_name.is_empty() {
-            write!(f, "{}", escape_ident(metric_name))?;
-            offset = 1;
-        }
-
-        if self.is_only_metric_name() {
-            return Ok(());
-        }
-        write!(f, "{{")?;
-        let mut count = 0;
-        for lfs in self.matchers.iter() {
-            if lfs.len() < offset {
-                continue;
-            }
-            if count > 0 {
-                write!(f, " or ")?;
-            }
-            let lfs_ = &lfs[offset..];
-            write!(f, "{}", join_vector(lfs_, ", ", false))?;
-            count += 1;
-        }
-        write!(f, "}}")?;
-        Ok(())
+        write!(f, "{}", self.matchers)
     }
 }
 
@@ -824,10 +794,7 @@ impl Display for MetricExpr {
 /// use metricsql_parser::ast::MetricExpr;
 /// use metricsql_parser::label::Matchers;
 ///
-/// let vs = MetricExpr {
-///     name: Some(String::from("foo")),
-///     matchers: Matchers::empty(),
-/// };
+/// let vs = MetricExpr::new("foo");
 ///
 /// assert_eq!(MetricExpr::from("foo"), vs);
 /// ```
@@ -864,7 +831,7 @@ impl Prettier for MetricExpr {
     }
 }
 
-/// FuncExpr represents MetricsQL function such as `rate(...)`
+/// FuncExpr represents a MetricsQL function call such as `rate(...)`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionExpr {
     pub function: BuiltinFunction,
@@ -1647,141 +1614,6 @@ impl ExpressionNode for ParensExpr {
     }
 }
 
-/// WithExpr represents `with (...)` extension from MetricsQL.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WithExpr {
-    pub was: Vec<WithArgExpr>,
-    pub expr: BExpr,
-}
-
-impl WithExpr {
-    pub fn new(expr: Expr, was: Vec<WithArgExpr>) -> Self {
-        WithExpr {
-            expr: Box::new(expr),
-            was,
-        }
-    }
-
-    pub fn return_type(&self) -> ValueType {
-        self.expr.return_type()
-    }
-}
-
-impl Value for WithExpr {
-    fn value_type(&self) -> ValueType {
-        self.expr.value_type()
-    }
-}
-
-impl Display for WithExpr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "WITH (")?;
-        for (i, was) in self.was.iter().enumerate() {
-            if (i + 1) < self.was.len() {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", was)?;
-        }
-        write!(f, ") ")?;
-        write!(f, "{}", self.expr)?;
-        Ok(())
-    }
-}
-
-impl Prettier for WithExpr {
-    fn format(&self, level: usize, max: usize) -> String {
-        let mut s = format!("{}WITH (\n", indent(level));
-        for (i, was) in self.was.iter().enumerate() {
-            if i > 0 {
-                s.push_str(",\n");
-            }
-            s.push_str(&was.pretty(level + 1, max));
-        }
-        s.push_str(&format!("\n{})", indent(level)));
-        s
-    }
-}
-
-impl ExpressionNode for WithExpr {
-    fn cast(self) -> Expr {
-        Expr::With(self)
-    }
-}
-
-/// `WithArgExpr` represents a single entry from WITH expression.
-#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
-pub struct WithArgExpr {
-    pub name: String,
-    pub args: Vec<String>,
-    pub expr: Expr,
-    pub(crate) token_range: Range<usize>,
-}
-
-impl PartialEq for WithArgExpr {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.args == other.args && expr_equals(&self.expr, &other.expr)
-    }
-}
-
-impl WithArgExpr {
-    pub fn new_function<S: Into<String>>(name: S, expr: Expr, args: Vec<String>) -> Self {
-        WithArgExpr {
-            name: name.into(),
-            args,
-            expr,
-            token_range: Default::default(),
-        }
-    }
-
-    pub fn new<S: Into<String>>(name: S, expr: Expr, args: Vec<String>) -> Self {
-        WithArgExpr {
-            name: name.into(),
-            args,
-            expr,
-            token_range: Default::default(),
-        }
-    }
-
-    pub fn new_number<S: Into<String>>(name: S, value: f64) -> Self {
-        Self::new(name, Expr::from(value), vec![])
-    }
-
-    pub fn new_string<S: Into<String>>(name: S, value: String) -> Self {
-        Self::new(name, Expr::from(value), vec![])
-    }
-
-    pub fn return_value(&self) -> ValueType {
-        self.expr.return_type()
-    }
-}
-
-impl Value for WithArgExpr {
-    fn value_type(&self) -> ValueType {
-        self.expr.value_type()
-    }
-}
-
-impl Display for WithArgExpr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", escape_ident(&self.name))?;
-        write_comma_separated(self.args.iter(), f, !self.args.is_empty())?;
-        write!(f, " = {}", self.expr)?;
-        Ok(())
-    }
-}
-
-impl Prettier for WithArgExpr {
-    fn format(&self, level: usize, max: usize) -> String {
-        let mut s = format!("{}{} = ", indent(level), self.name);
-        if !self.args.is_empty() {
-            s.push_str(&self.args.join(", "));
-            s.push_str(" = ");
-        }
-        s.push_str(&self.expr.pretty(level, max));
-        s
-    }
-}
-
 /// A root expression node.
 ///
 /// These are all valid root expression ast.
@@ -1824,14 +1656,6 @@ pub enum Expr {
     /// Prometheus' docs claim strings aren't currently implemented, but they're
     /// valid as function arguments.
     StringExpr(StringExpr),
-
-    /// A MetricsQL specific WITH statement node. Transformed at parse time to one
-    /// of the other variants
-    With(WithExpr),
-
-    /// An interpolated MetricsQL metric with optional filters, i.e. `foo{...}` parsed in the
-    /// context of a `WITH` statement. Transformed at parse time to a MetricExpr
-    WithSelector(InterpolatedSelector),
 }
 
 pub type BExpression = Box<Expr>;
@@ -1877,10 +1701,7 @@ impl Expr {
             Self::NumberLiteral(_)
             | Self::Duration(_)
             | Self::StringLiteral(_)
-            | Self::StringExpr(_)
-            | Self::With(_) => Box::new(iter::empty()),
-            // this node type should not appear in the AST after parsing
-            Expr::WithSelector(_) => Box::new(iter::empty()),
+            | Self::StringExpr(_) => Box::new(iter::empty()),
         }
     }
 
@@ -1937,8 +1758,6 @@ impl Expr {
             Expr::Rollup(re) => re.return_type(),
             Expr::Parens(me) => me.return_type(),
             Expr::MetricExpression(me) => me.return_type(),
-            Expr::With(w) => w.return_type(),
-            Expr::WithSelector(_) => ValueType::InstantVector,
         }
     }
 
@@ -1954,8 +1773,6 @@ impl Expr {
             Expr::Rollup(_) => "Rollup",
             Expr::Parens(_) => "Parens",
             Expr::MetricExpression(_) => "VectorSelector",
-            Expr::With(_) => "With",
-            Expr::WithSelector(_) => "WithSelector",
         }
     }
 
@@ -1973,8 +1790,6 @@ impl Expr {
             Expr::Rollup(r) => Expr::Rollup(r),
             Expr::StringLiteral(s) => Expr::StringLiteral(s),
             Expr::StringExpr(s) => Expr::StringExpr(s),
-            Expr::With(w) => Expr::With(w),
-            Expr::WithSelector(ws) => Expr::WithSelector(ws),
         }
     }
 
@@ -2128,8 +1943,6 @@ impl Display for Expr {
             Expr::Rollup(re) => write!(f, "{}", re)?,
             Expr::StringLiteral(s) => write!(f, "{}", enquote('"', s))?,
             Expr::StringExpr(s) => write!(f, "{}", s)?,
-            Expr::With(w) => write!(f, "{}", w)?,
-            Expr::WithSelector(ws) => write!(f, "{}", ws)?,
         }
         Ok(())
     }
@@ -2149,8 +1962,6 @@ impl Prettier for Expr {
             Expr::Function(ex) => ex.pretty(level, max),
             Expr::Duration(d) => d.pretty(level, max),
             Expr::StringExpr(se) => se.pretty(level, max),
-            Expr::With(we) => we.pretty(level, max),
-            Expr::WithSelector(ws) => ws.pretty(level, max),
         }
     }
 }
@@ -2169,8 +1980,6 @@ impl Value for Expr {
             Expr::Rollup(re) => re.return_type(),
             Expr::StringLiteral(_) => ValueType::String,
             Expr::StringExpr(_) => ValueType::String,
-            Expr::With(w) => w.return_type(),
-            Expr::WithSelector(_) => ValueType::InstantVector,
         }
     }
 }

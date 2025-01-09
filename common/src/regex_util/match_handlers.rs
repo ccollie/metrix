@@ -650,10 +650,10 @@ impl StringMatchHandler {
         match self {
             StringMatchHandler::MatchAny(m) => m.cost(),
             StringMatchHandler::MatchNone => EMPTY_MATCH_COST,
-            StringMatchHandler::MatchFn(m) => FN_MATCH_COST,
+            StringMatchHandler::MatchFn(_) => FN_MATCH_COST,
             StringMatchHandler::Regex(r) => r.cost(),
             // todo: case-insensitive literals should have a higher cost
-            StringMatchHandler::Literal(m) => LITERAL_MATCH_COST,
+            StringMatchHandler::Literal(_) => LITERAL_MATCH_COST,
             StringMatchHandler::Empty => EMPTY_MATCH_COST,
             StringMatchHandler::NotEmpty(m) => m.cost(),
             StringMatchHandler::Or(matchers) => {

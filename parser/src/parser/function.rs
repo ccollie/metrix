@@ -8,15 +8,6 @@ pub(super) fn parse_func_expr(p: &mut Parser) -> ParseResult<Expr> {
     let name = p.expect_identifier()?;
     let args = p.parse_arg_list()?;
 
-    // with (f(x) = sum(x * 2))  f(x{a="b"}) => sum(x{a="b"}) * 2)
-    // check if we have a function with the same name in the WITH stack
-    if p.can_lookup() {
-        let args_clone = args.clone();
-        if let Some(expr) = p.resolve_ident(&name, args_clone)? {
-            return Ok(expr);
-        }
-    }
-
     let mut fe = FunctionExpr::new(&name, args)?;
     fe.keep_metric_names = if p.at(&Token::KeepMetricNames) {
         p.bump();

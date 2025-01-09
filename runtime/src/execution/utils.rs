@@ -4,7 +4,6 @@ use std::time::Duration;
 use metricsql_parser::ast::DurationExpr;
 use metricsql_parser::functions::RollupFunction;
 
-use crate::common::math::is_stale_nan;
 use crate::execution::EvalConfig;
 use crate::types::{QueryValue, Timeseries};
 use crate::RuntimeResult;
@@ -104,39 +103,4 @@ pub(crate) fn remove_nan_values(
         dst_values.push(*v);
         dst_timestamps.push(timestamps[i])
     }
-}
-
-pub(crate) fn drop_stale_nans(
-    func: RollupFunction,
-    values: &mut Vec<f64>,
-    timestamps: &mut Vec<i64>,
-) {
-    if func == RollupFunction::DefaultRollup || func == RollupFunction::StaleSamplesOverTime {
-        // do not drop Prometheus staleness marks (aka stale NaNs) for default_rollup() function,
-        // since it uses them for Prometheus-style staleness detection.
-        // do not drop staleness marks for stale_samples_over_time() function, since it needs
-        // to calculate the number of staleness markers.
-        return;
-    }
-    // Remove Prometheus staleness marks, so non-default rollup functions don't hit NaN values.
-    let has_stale_samples = values.iter().any(|x| is_stale_nan(*x));
-
-    if !has_stale_samples {
-        // Fast path: values have no Prometheus staleness marks.
-        return;
-    }
-
-    // Slow path: drop Prometheus staleness marks from values.
-    let mut k = 0;
-    for i in 0..values.len() {
-        let v = values[i];
-        if !is_stale_nan(v) {
-            values[k] = v;
-            timestamps[k] = timestamps[i];
-            k += 1;
-        }
-    }
-
-    values.truncate(k);
-    timestamps.truncate(k);
 }
