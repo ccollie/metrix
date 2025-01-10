@@ -43,11 +43,7 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     let mut need_normalization = true;
     if !matchers.or_matchers.is_empty() {
         if let Some(metric_name) = normalize_matcher_list(&mut matchers.or_matchers) {
-            if let Some(name) = &name {
-                if name != &metric_name {
-                    return Err(ParseError::InvalidSelector("duplicate metric name".to_string()));
-                }
-            } else {
+            if name.is_none() {
                 name = Some(metric_name.to_string());
             }
             if matchers.or_matchers.len() == 1 {
@@ -59,14 +55,11 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     }
 
     if need_normalization && !matchers.matchers.is_empty() {
-        for (i, matcher) in matchers.matchers.iter().enumerate() {
+        for (i, matcher) in matchers.matchers.iter_mut().enumerate() {
             if matcher.is_metric_name_filter() {
-                if let Some(name) = &name {
-                    if name != &matcher.value {
-                        return Err(ParseError::InvalidSelector("duplicate metric name".to_string()));
-                    }
-                } else {
-                    name = Some(matcher.value.clone());
+                if name.is_none() {
+                    let value = std::mem::take(&mut matcher.value);
+                    name = Some(value);
                 }
                 matchers.matchers.remove(i);
                 break;
