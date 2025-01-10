@@ -55,11 +55,3 @@ pub(crate) fn write_comma_separated<T: Display>(
     }
     Ok(())
 }
-
-pub fn join_vector<T: Display>(v: &[T], sep: &str, sort: bool) -> String {
-    let mut vs = v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
-    if sort {
-        vs.sort();
-    }
-    vs.join(sep)
-}

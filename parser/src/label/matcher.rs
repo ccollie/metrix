@@ -17,7 +17,6 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-use crate::common::join_vector;
 use crate::parser::{escape_ident, quote, ParseError, ParseResult};
 use ahash::AHashMap;
 use metricsql_common::prelude::{string_matcher_from_regex, LITERAL_MATCH_COST};

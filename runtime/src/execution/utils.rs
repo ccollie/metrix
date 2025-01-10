@@ -73,34 +73,3 @@ pub(crate) fn get_step(expr: &Option<DurationExpr>, step: Duration) -> Duration 
         res
     }
 }
-
-pub(crate) fn remove_nan_values(
-    dst_values: &mut Vec<f64>,
-    dst_timestamps: &mut Vec<i64>,
-    values: &[f64],
-    timestamps: &[i64],
-) {
-    let mut has_nan = false;
-    for v in values {
-        if v.is_nan() {
-            has_nan = true;
-            break;
-        }
-    }
-
-    if !has_nan {
-        // Fast path - no NaNs.
-        dst_values.extend_from_slice(values);
-        dst_timestamps.extend_from_slice(timestamps);
-        return;
-    }
-
-    // Slow path - remove NaNs.
-    for (i, v) in values.iter().enumerate() {
-        if v.is_nan() {
-            continue;
-        }
-        dst_values.push(*v);
-        dst_timestamps.push(timestamps[i])
-    }
-}
