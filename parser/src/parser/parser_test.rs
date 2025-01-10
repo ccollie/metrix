@@ -337,10 +337,10 @@ mod tests {
         another("avg by(x) (z) limit 20", "avg(z) by (x) limit 20");
 
         // All the above
-        // another(
-        //     r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * scalar("10")"#,
-        //     r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * scalar("10")"#,
-        // );
+        another(
+            r#"Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) * Z"#,
+            r#"sum((abs(M) * (M{X=""}[5m] offset 7m)) - 123, 35) by(X,y) * Z"#,
+        );
         another(
             r##"# comment
                 Sum(abs(M) * M{X=""}[5m] Offset 7m - 123, 35) BY (X, y) # yet another comment

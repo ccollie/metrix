@@ -10,10 +10,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use crate::types::MetricName;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
-pub type Sample = crate::provider::Sample;
+#[derive(Debug, Clone)]
+pub struct Sample {
+    pub metric: MetricName,
+    pub timestamp: i64,
+    pub value: f64,
+}
 
 // SequenceValue struct
 #[derive(Debug, Clone)]

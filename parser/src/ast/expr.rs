@@ -15,10 +15,10 @@ use crate::ast::utils::string_vecs_equal_unordered;
 use crate::ast::{
     indent, prettify_args, Operator, Prettier, StringExpr, MAX_CHARACTERS_PER_LINE,
 };
-use crate::common::{hash_f64, join_vector, write_comma_separated, write_number, Value, ValueType};
+use crate::common::{hash_f64, write_comma_separated, write_number, Value, ValueType};
 use crate::functions::{AggregateFunction, BuiltinFunction, TransformFunction};
 use crate::label::{Labels, MatchOp, Matcher, Matchers, NAME_LABEL};
-use crate::parser::{escape_ident, ParseError, ParseResult};
+use crate::parser::{ParseError, ParseResult};
 use crate::prelude::{
     get_aggregate_arg_idx_for_optimization, BuiltinFunctionType,
     RollupFunction,

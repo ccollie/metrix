@@ -55,7 +55,7 @@ fn transform_sort_impl(tfa: &TransformFuncArg, is_desc: bool) -> RuntimeResult<V
         series.sort_by(|a, b| sort(a, b, is_desc));
     }
 
-    println!("Sorted {:?}", series);
+    // println!("Sorted {:?}", series);
 
     Ok(std::mem::take(&mut series))
 }

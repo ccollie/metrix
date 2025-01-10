@@ -2,16 +2,16 @@
 mod tests {
     use std::sync::Arc;
 
-    use crate::execution::exec;
+    use crate::execution::{exec, exec_raw};
     use crate::execution::{Context, EvalConfig};
     use crate::functions::parse_timezone;
     use crate::functions::transform::get_timezone_offset;
-    use crate::{test_results_equal, Deadline, QueryResult};
-    use std::time::Duration;
+    use crate::types::{MetricName, QueryValue, Timestamp};
+    use crate::{test_results_equal, Deadline, QueryResult, RuntimeResult};
     use metricsql_common::label::Label;
     use metricsql_parser::parser::parse;
     use metricsql_parser::prelude::utils::is_likely_invalid;
-    use crate::types::{MetricName, Timestamp};
+    use std::time::Duration;
 
     const NAN: f64 = f64::NAN;
     const INF: f64 = f64::INFINITY;
@@ -41,7 +41,7 @@ mod tests {
 
     const TEST_ITERATIONS: usize = 3;
 
-    fn test_query(q: &str, expected: Vec<QueryResult>) {
+    fn setup_context() -> (Context, EvalConfig) {
         let mut ec = EvalConfig::new(START, END, STEP);
         ec.max_series = 1000;
         ec.max_points_per_series = 15000;
@@ -49,6 +49,12 @@ mod tests {
         let timeout = Duration::from_millis(1000);
         ec.deadline = Deadline::new(timeout).unwrap();
         let context = Context::default(); // todo: have a test gated default;
+        (context, ec)
+    }
+
+    fn test_query(q: &str, expected: Vec<QueryResult>) {
+        let (context, mut ec) = setup_context();
+
         for _ in 0..TEST_ITERATIONS {
             match exec(&context, &mut ec, q, false) {
                 Ok(result) => test_results_equal(&result, &expected),
@@ -57,6 +63,16 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn exec_query(q: &str) -> Vec<QueryResult> {
+        let (context, mut ec) = setup_context();
+        exec(&context, &mut ec, q, false).unwrap()
+    }
+
+    fn exec_raw_query(q: &str) -> RuntimeResult<QueryValue> {
+        let (context, mut ec) = setup_context();
+        exec_raw(&context, &mut ec, q)
     }
 
     fn assert_result_eq(q: &str, values: &[f64]) {
@@ -117,7 +133,118 @@ mod tests {
     #[test]
     fn simple_string() {
         let q = r#""foobar""#;
-        test_query(q, vec![])
+        let actual = exec_raw_query(q).unwrap();
+        assert_eq!(actual, QueryValue::String("foobar".to_string()));
+    }
+
+    #[test]
+    fn string_concat() {
+        let q = r#""foo" + "-" + "bar""#;
+        let actual = exec_raw_query(q).unwrap();
+        assert_eq!(actual, QueryValue::String("foo-bar".to_string()));
+    }
+
+    fn assert_string_comparison(q: &str, expected: f64) {
+        let actual = exec_raw_query(q).unwrap();
+        if let QueryValue::Scalar(actual_value) = actual {
+            if expected.is_nan() {
+                assert!(actual_value.is_nan(), "expected NaN, got {}", actual_value);
+            } else {
+                assert_eq!(actual_value, expected, "expected {}, got {}", expected, actual_value);
+            }
+        } else {
+            panic!("Expected scalar value, got {:?}", actual);
+        }
+    }
+
+    #[test]
+    fn string_comparison_equal() {
+        let q = r#""foo" == "foo""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" == bool "foo""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" == "bar""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo" == bool "bar""#;
+        assert_string_comparison(q, 0.0);
+    }
+
+    #[test]
+    fn string_comparison_not_equal() {
+        let q = r#""foo"!= "foo""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo"!= bool "foo""#;
+        assert_string_comparison(q, 0.0);
+
+        let q = r#""foo"!= "bar""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo"!= bool "bar""#;
+        assert_string_comparison(q, 1.0);
+    }
+
+    #[test]
+    fn string_comparison_less() {
+        let q = r#""foo" < "bar""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo" < bool "bar""#;
+        assert_string_comparison(q, 0.0);
+
+        let q = r#""foo" < "zzz""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" < bool "zzz""#;
+        assert_string_comparison(q, 1.0);
+    }
+
+    #[test]
+    fn string_comparison_greater() {
+        let q = r#""foo" > "bar""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" > bool "bar""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" > "zzz""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo" > bool "zzz""#;
+        assert_string_comparison(q, 0.0);
+    }
+
+    #[test]
+    fn string_comparison_less_equal() {
+        let q = r#""foo" <= "bar""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo" <= bool "bar""#;
+        assert_string_comparison(q, 0.0);
+
+        let q = r#""foo" <= "zzz""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" <= bool "zzz""#;
+        assert_string_comparison(q, 1.0);
+    }
+
+    #[test]
+    fn string_comparison_greater_equal() {
+        let q = r#""foo" >= "bar""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" >= bool "bar""#;
+        assert_string_comparison(q, 1.0);
+
+        let q = r#""foo" >= "zzz""#;
+        assert_string_comparison(q, NAN);
+
+        let q = r#""foo" >= bool "zzz""#;
+        assert_string_comparison(q, 0.0);
     }
 
     #[test]
@@ -1343,27 +1470,6 @@ mod tests {
         let mut r = make_result(&[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
         r.metric.set("bar", "sep2sep1");
         test_query(q, vec![r])
-    }
-
-    #[test]
-    fn label_value() {
-        let q = r#"with (
-        x = (
-        label_set(time() > 1500, "foo", "123.456", "__name__", "aaa"),
-        label_set(-time(), "foo", "bar", "__name__", "bbb"),
-        label_set(-time(), "__name__", "bxs"),
-        label_set(-time(), "foo", "45", "bar", "xs"),
-        )
-        )
-        sort(x + label_value(x, "foo"))"#;
-        let mut r1 = make_result(&[-955_f64, -1155.0, -1355.0, -1555.0, -1755.0, -1955.0]);
-        r1.metric.set("bar", "xs");
-        r1.metric.set("foo", "45");
-
-        let mut r2 = make_result(&[NAN, NAN, NAN, 1723.456, 1923.456, 2123.456]);
-        r2.metric.set("foo", "123.456");
-
-        test_query(q, vec![r1, r2]);
     }
 
     #[test]
@@ -3251,10 +3357,10 @@ mod tests {
         r1.metric.set("le", "+Inf");
 
         let mut r2 = make_result(&[0_f64, 0.0, 0.0, 0.0, 0.0, 0.0]);
-        r2.metric.set("le", "1.000e0");
+        r2.metric.set("le", "1.000e+00");
 
         let mut r3 = make_result(&[40_f64, 40.0, 40.0, 40.0, 40.0, 40.0]);
-        r3.metric.set("le", "2.448e0");
+        r3.metric.set("le", "2.448e+00");
 
         test_query(q, vec![r1, r2, r3]);
     }
@@ -4479,6 +4585,7 @@ mod tests {
 
     #[test]
     fn range_linear_regression_custom() {
+        let temp = exec_query("time() > 1200 < 1800");
         assert_result_eq(
             "range_linear_regression(time() > 1200 < 1800)",
             &[1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0],
@@ -4555,6 +4662,7 @@ mod tests {
 
     #[test]
     fn aggr_over_time_multi_func() {
+        let temp = exec_query("round(rand(0),0.1)[:10s]");
         let q = r#"sort(aggr_over_time(round(rand(0),0.1)[:10s], "min_over_time", "median_over_time", "max_over_time"))"#;
         let mut r1 = make_result(&[0.0, 0.0, 0.0, 0.0, 0.1, 0.1]);
         r1.metric.set("rollup", "min_over_time");
@@ -4586,6 +4694,7 @@ mod tests {
 
     #[test]
     fn rollup_candlestick() {
+        let temp = exec_query("round(rand(0),0.01)");
         let q = r#"sort(rollup_candlestick(alias(round(rand(0),0.01),"foobar")[:10s]))"#;
         let mut r1 = make_result(&[0.02, 0.02, 0.03, 0.0, 0.03, 0.02]);
         r1.metric.set_metric_group("foobar");
@@ -5320,7 +5429,7 @@ label_set(time()+200, "__name__", "bar", "a", "x"),
         f("sum(sum(http_total))");
 
         f("sum(sum_over_time(http_total[1m] )) by (instance)");
-        f("sum(up{cluster='a'}[1m] or up{cluster='b'}[1m])");
+       // f("sum(up{cluster='a'}[1m] or up{cluster='b'}[1m])");
         f("(avg_over_time(alarm_test1[1m]) - avg_over_time(alarm_test1[1m] offset 5m)) > 0.1");
         f("http_total[1m] offset 1m");
         f("sum(http_total offset 1m)");

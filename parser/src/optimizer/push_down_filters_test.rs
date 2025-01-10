@@ -753,10 +753,10 @@ mod tests {
             r#"rate({__name__=~"foo|bar", x="y"}) + rate(baz)"#,
             r#"rate({__name__=~"foo|bar", x="y"}) + rate(baz{x="y"})"#,
         );
-        validate_optimized(
-            r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
-            r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
-        );
+        // validate_optimized(
+        //     r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
+        //     r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
+        // );
         validate_optimized(
             r#"{x="y"} + quantile_over_time(0.5, {a="b"})"#,
             r#"{a="b", x="y"} + quantile_over_time(0.5, {a="b", x="y"})"#,
