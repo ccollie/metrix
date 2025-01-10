@@ -655,8 +655,6 @@ mod tests {
     #[test]
     fn invalid_metric_expr() {
         // invalid metricExpr
-        // assert_invalid("{}"); // this is technically valid, but is a bad idea (return all series without labels)
-        // assert_invalid("{}[5m]");
         assert_invalid("foo[-55]");
         assert_invalid("m[-5m]");
         assert_invalid("{");
