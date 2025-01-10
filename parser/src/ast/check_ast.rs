@@ -164,7 +164,8 @@ fn check_ast_for_binary_expr(mut ex: BinaryExpr) -> Result<Expr, String> {
 fn check_ast_for_rollup(mut ex: RollupExpr) -> Result<Expr, String> {
     ex.expr = BExpression::from(check_ast(*ex.expr)?);
     let value_type = ex.expr.return_type();
-    if value_type != ValueType::InstantVector {
+    // we differ from Prometheus in that Scalars are treated to InstantVectors with no labels
+    if value_type != ValueType::InstantVector && value_type != ValueType::Scalar {
         return Err(format!(
             "subquery is only allowed on instant vector, got {value_type} instead"
         ));
