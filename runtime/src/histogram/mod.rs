@@ -1,17 +1,18 @@
 use std::fmt;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
 use lockfree_object_pool::{LinearObjectPool, LinearReusable};
 
-const E10MIN: i32 = -9;
-const E10MAX: i32 = 18;
+const E10_MIN: i32 = -9;
+const E10_MAX: i32 = 18;
 const BUCKETS_PER_DECIMAL: usize = 18;
-const DECIMAL_BUCKETS_COUNT: i32 = E10MAX - E10MIN;
+const DECIMAL_BUCKETS_COUNT: i32 = E10_MAX - E10_MIN;
 const BUCKETS_COUNT: usize = (DECIMAL_BUCKETS_COUNT * BUCKETS_PER_DECIMAL as i32) as usize;
-const LOWER_MIN: f64 = 1e-9;
 
-static LOWER_BUCKET_RANGE: &str = "0...0.000";
-static UPPER_BUCKET_RANGE: &str = "1000000000000000000.000...+Inf";
+static UPPER_BUCKET_RANGE: LazyLock<String> =
+    LazyLock::new(|| format!("{}...+Inf", format_float(10_f64.powi(E10_MAX))));
+static LOWER_BUCKET_RANGE: LazyLock<String> =
+    LazyLock::new(|| format!("0...{}", format_float(10_f64.powi(E10_MIN))));
 
 
 /// `Histogram` is a histogram for non-negative values with automatically created buckets.
@@ -91,7 +92,7 @@ impl Histogram {
             return;
         }
         self.count += 1;
-        let bucket_idx = (v.log10() - E10MIN as f64) * BUCKETS_PER_DECIMAL as f64;
+        let bucket_idx = (v.log10() - E10_MIN as f64) * BUCKETS_PER_DECIMAL as f64;
         self.sum += v;
         self.values.push(v);
         if bucket_idx < 0_f64 {
@@ -154,7 +155,7 @@ impl Histogram {
         }
     }
 
-    /// visit_non_zero_buckets calls f for all buckets with non-zero counters.
+    /// visit_non_zero_buckets calls `f` for all buckets with non-zero counters.
     ///
     /// vmrange contains "<start>...<end>" string with bucket bounds. The lower bound
     /// isn't included in the bucket, while the upper bound is included.
@@ -166,7 +167,7 @@ impl Histogram {
         F: Fn(&'a str, u64, &mut C),
     {
         if self.lower > 0 {
-            f(LOWER_BUCKET_RANGE, self.lower, context)
+            f(LOWER_BUCKET_RANGE.as_str(), self.lower, context)
         }
 
         let ranges = get_bucket_ranges();
@@ -182,7 +183,7 @@ impl Histogram {
         }
 
         if self.upper > 0 {
-            f(UPPER_BUCKET_RANGE, self.upper, context)
+            f(UPPER_BUCKET_RANGE.as_str(), self.upper, context)
         }
     }
 }
@@ -218,7 +219,7 @@ impl<'a> Iterator for NonZeroBuckets<'a> {
             self.lower_handled = true;
             if self.histogram.lower > 0 {
                 return Some(NonZeroBucket {
-                    vm_range: LOWER_BUCKET_RANGE,
+                    vm_range: LOWER_BUCKET_RANGE.as_str(),
                     count: self.histogram.lower,
                 });
             }
@@ -229,7 +230,7 @@ impl<'a> Iterator for NonZeroBuckets<'a> {
         if self.index >= buckets.len() {
             if self.histogram.upper > 0 {
                 return Some(NonZeroBucket {
-                    vm_range: UPPER_BUCKET_RANGE,
+                    vm_range: UPPER_BUCKET_RANGE.as_str(),
                     count: self.histogram.upper,
                 });
             }
@@ -248,7 +249,7 @@ impl<'a> Iterator for NonZeroBuckets<'a> {
                 if self.index >= buckets.len() {
                     if self.histogram.upper > 0 {
                         break Some(NonZeroBucket {
-                            vm_range: UPPER_BUCKET_RANGE,
+                            vm_range: UPPER_BUCKET_RANGE.as_str(),
                             count: self.histogram.upper,
                         });
                     }
@@ -268,35 +269,44 @@ impl<'a> Iterator for NonZeroBuckets<'a> {
     }
 }
 
-#[inline]
-fn format_float(v: f64) -> String {
-    format!("{:.3e}", v)
+// All this nonsense is to format the exponent with a leading '+' and two digits, since rust doesn't
+// support formatting padded exponents out of the box.
+fn format_float(number: f64) -> String {
+    // Step 1: Format the number in scientific notation
+    let formatted = format!("{:.3e}", number); // Two decimal places for mantissa
+
+    // Step 2: Split into mantissa and exponent
+    let parts: Vec<&str> = formatted.split('e').collect();
+    let mantissa = parts[0];
+
+    // Step 3: Format and pad the exponent
+    let exponent = parts[1].trim_start_matches('+'); // Remove '+' if present
+    let padded_exponent = format!("{:+03}", exponent.parse::<i32>().unwrap()); // Ensures two digits
+
+    // Step 4: Combine mantissa and padded exponent
+    let final_output = format!("{}e{}", mantissa, padded_exponent);
+    final_output
 }
 
-static BUCKET_RANGES: OnceLock<[String; BUCKETS_COUNT]> = OnceLock::new();
+static BUCKET_RANGES: LazyLock<Box<[String; BUCKETS_COUNT]>> = LazyLock::new(init_bucket_ranges);
 
-fn create_bucket_ranges() -> [String; BUCKETS_COUNT] {
+fn init_bucket_ranges() -> Box<[String; BUCKETS_COUNT]> {
     let bucket_multiplier: f64 = 10_f64.powf(1.0 / BUCKETS_PER_DECIMAL as f64);
-    let mut ranges: Vec<String> = Vec::with_capacity(BUCKETS_COUNT);
-    let mut v: f64 = LOWER_MIN;
+    let mut v = 10_f64.powi(E10_MIN);
     let mut start = format_float(v);
-
-    for _ in 0..BUCKETS_COUNT {
+    const ARRAY_REPEAT_VALUE: String = String::new();
+    let mut ranges = Box::new([ARRAY_REPEAT_VALUE; BUCKETS_COUNT]);
+    for i in 0..BUCKETS_COUNT {
         v *= bucket_multiplier;
         let end = format_float(v);
-        ranges.push(format!("{}...{}", start, end).to_string());
+        ranges[i] = format!("{}...{}", start, end);
         start = end;
     }
-    ranges.try_into().unwrap_or_else(|v: Vec<String>| {
-        panic!(
-            "Expected a Vec of length {BUCKETS_COUNT} but it was {}",
-            v.len()
-        )
-    })
+    ranges
 }
 
 fn get_bucket_ranges() -> &'static [String; BUCKETS_COUNT] {
-    BUCKET_RANGES.get_or_init(create_bucket_ranges)
+    BUCKET_RANGES.as_ref()
 }
 
 // todo: move to utils ?

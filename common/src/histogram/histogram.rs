@@ -10,19 +10,46 @@ static BUCKET_RANGES: LazyLock<Box<[String; BUCKETS_COUNT]>> = LazyLock::new(ini
 static BUCKET_MULTIPLIER: LazyLock<f64> =
     LazyLock::new(|| 10_f64.powf(1.0 / BUCKETS_PER_DECIMAL as f64));
 static UPPER_BUCKET_RANGE: LazyLock<String> =
-    LazyLock::new(|| format!("{:.3e}...+Inf", 10_f64.powi(E10_MAX)));
+    LazyLock::new(|| format!("{}...+Inf", format_float(10_f64.powi(E10_MAX))));
 static LOWER_BUCKET_RANGE: LazyLock<String> =
-    LazyLock::new(|| format!("0...{:.3e}", 10_f64.powi(E10_MIN)));
+    LazyLock::new(|| format!("0...{}", format_float(10_f64.powi(E10_MIN))));
+
+/// `Histogram` is a histogram for non-negative values with automatically created buckets.
+///
+/// See https://medium.com/@valyala/improving-histogram-usability-for-prometheus-and-grafana-bc7e5df0e350
+///
+/// Each bucket contains a counter for values in the given range.
+/// Each non-empty bucket is exposed via the following metric:
+///
+///	`<metric_name>_bucket{<optional_tags>,vmrange="<start>...<end>"} <counter>`
+///
+/// Where:
+///
+///   - <metric_name> is the metric name passed to NewHistogram
+///   - <optional_tags> is optional tags for the <metric_name>, which are passed to NewHistogram
+///   - <start> and <end> - start and end values for the given bucket
+///   - <counter> - the number of hits to the given bucket during Update* calls
+///
+/// Histogram buckets can be converted to Prometheus-like buckets with `le` labels
+/// with `prometheus_buckets(<metric_name>_bucket)` function from PromQL extensions in VictoriaMetrics.
+/// (see https://docs.victoriametrics.com/metricsql/ ):
+///
+///	`prometheus_buckets(request_duration_bucket)`
+///
+/// Time series produced by the Histogram have better compression ratio comparing to
+/// Prometheus histogram buckets with `le` labels, since they don't include counters
+/// for all the previous buckets.
+///
+/// Zero histogram is usable.
+pub struct Histogram {
+    inner: RwLock<Inner>,
+}
 
 struct Inner {
     decimal_buckets: [Option<[u64; BUCKETS_PER_DECIMAL]>; DECIMAL_BUCKETS_COUNT],
     lower: u64,
     upper: u64,
     sum: f64,
-}
-
-pub struct Histogram {
-    inner: RwLock<Inner>,
 }
 
 impl Default for Histogram {
@@ -155,14 +182,19 @@ impl Histogram {
     }
 }
 
+#[inline]
+fn format_float(f: f64) -> String {
+    format!("{:.3e}", f)
+}
+
 fn init_bucket_ranges() -> Box<[String; BUCKETS_COUNT]> {
     let mut v = 10_f64.powi(E10_MIN);
-    let mut start = format!("{:.3e}", v);
+    let mut start = format_float(v);
     const ARRAY_REPEAT_VALUE: String = String::new();
     let mut ranges = Box::new([ARRAY_REPEAT_VALUE; BUCKETS_COUNT]);
     for i in 0..BUCKETS_COUNT {
         v *= *BUCKET_MULTIPLIER;
-        let end = format!("{:.3e}", v);
+        let end = format_float(v);
         ranges[i] = format!("{}...{}", start, end);
         start = end;
     }
