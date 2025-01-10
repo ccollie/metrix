@@ -94,14 +94,6 @@ impl TimeSeriesMap {
         inner.series.len()
     }
 
-    // pub fn visit_non_zero_buckets<'a, F, C>(&self, context: &mut C, f: F)
-    // where
-    //     F: Fn(&'a str, u64, &mut C),
-    // {
-    //     let inner = self.inner.read().unwrap();
-    //     inner.hist.visit_non_zero_buckets(context, f)
-    // }
-
     pub(crate) fn process_rollup(&self, values: &[f64], rollup_idx: usize) {
         let mut inner = self.inner.write().unwrap();
         inner.reset();
