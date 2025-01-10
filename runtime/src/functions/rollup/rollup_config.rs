@@ -334,7 +334,7 @@ impl RollupConfig {
         self.exec_internal(&mut ts.values, Some(tsm), values, timestamps)
     }
 
-    fn exec_internal(
+    pub(crate) fn exec_internal(
         &self,
         dst_values: &mut Vec<f64>,
         tsm: Option<Arc<TimeSeriesMap>>,
@@ -387,6 +387,7 @@ impl RollupConfig {
         let samples_scanned_per_call = self.samples_scanned_per_call as u64;
         let window_ms = window.as_millis() as i64;
         let max_prev_interval = max_prev_interval.as_millis() as i64;
+        let sample_len = values.len();
 
         let mut i = 0;
         let mut j = 0;
@@ -408,15 +409,34 @@ impl RollupConfig {
 
             let mut rfa = RollupFuncArg::default();
             rfa.window = window_ms;
-            rfa.prev_value = if i > 0 && timestamps[i - 1] > t_start - max_prev_interval {
-                values[i - 1]
-            } else {
-                f64::NAN
-            };
-            rfa.prev_timestamp = if i > 0 { timestamps[i - 1] } else { t_start - max_prev_interval };
+
+            rfa.prev_timestamp = t_start - max_prev_interval;
+
+            if i < sample_len && i > 0 && timestamps[i-1] > rfa.prev_timestamp {
+                // SAFETY: range is checked above
+                unsafe {
+                    let prev_idx = i - 1;
+                    rfa.prev_value = *values.get_unchecked(prev_idx);
+                    rfa.prev_timestamp = *timestamps.get_unchecked(prev_idx);
+                }
+            }
+
             rfa.values = &values[i..j];
             rfa.timestamps = &timestamps[i..j];
-            rfa.real_prev_value = if i > 0 { values[i - 1] } else { f64::NAN };
+
+            rfa.real_prev_value = f64::NAN;
+            if i > 0 {
+                let idx = i - 1;
+                // SAFETY: i > 0 is checked above
+                unsafe {
+                    let prev_timestamp = timestamps.get_unchecked(idx);
+                    if (t_end - prev_timestamp) < max_prev_interval {
+                        let prev_value = values.get_unchecked(idx);
+                        rfa.real_prev_value = *prev_value;
+                    }
+                }
+            }
+
             rfa.real_next_value = if j < values.len() { values[j] } else { f64::NAN };
             rfa.curr_timestamp = t_end;
             rfa.idx = idx;

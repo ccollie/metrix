@@ -10,6 +10,7 @@ use crate::types::Timestamp;
 /// See https://www.robustperception.io/staleness-and-promql
 /// StaleNaN is a special NaN value, which is used as Prometheus staleness mark.
 pub const STALE_NAN_BITS: u64 = 0x7ff0000000000002;
+pub const STALE_NAN: f64 = f64::from_bits(STALE_NAN_BITS);
 
 /// is_stale_nan returns true if f represents Prometheus staleness mark.
 #[inline]

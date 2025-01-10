@@ -22,7 +22,8 @@ pub struct RollupFuncArg<'a> {
     /// Timestamps for values.
     pub(crate) timestamps: &'a [Timestamp],
 
-    /// Real value preceding values without restrictions on staleness interval.
+    /// Real value preceding value
+    /// Populated if preceding value is within the staleness interval.
     pub(super) real_prev_value: f64,
 
     /// Real value which goes after values.
