@@ -1,9 +1,11 @@
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use core::mem::align_of;
 use core::mem::size_of;
+use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
-
+use serde::de::{SeqAccess, Visitor};
 // Original source Polars
 // https://github.com/pola-rs/polars/blob/main/crates/polars-utils/src/idx_vec.rs
 
@@ -206,7 +208,7 @@ impl<T> Clone for UnitVec<T> {
 }
 
 impl<T: Debug> Debug for UnitVec<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "UnitVec: {:?}", self.as_slice())
     }
 }
@@ -296,6 +298,46 @@ impl<T: Clone> From<&[T]> for UnitVec<T> {
     }
 }
 
+
+impl<T: Serialize> Serialize for UnitVec<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for UnitVec<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct UnitVecVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for UnitVecVisitor<T> {
+            type Value = UnitVec<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a sequence")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut vec = UnitVec::new();
+                while let Some(value) = seq.next_element()? {
+                    vec.push(value);
+                }
+                Ok(vec)
+            }
+        }
+
+        deserializer.deserialize_seq(UnitVecVisitor(std::marker::PhantomData))
+    }
+}
+
 #[macro_export]
 macro_rules! unitvec {
     () => (
@@ -323,24 +365,27 @@ macro_rules! unitvec {
     );
 }
 
+#[cfg(test)]
 mod tests {
+    use serde_json;
+    use super::UnitVec;
 
     #[test]
     #[should_panic]
     fn test_unitvec_realloc_zero() {
-        super::UnitVec::<usize>::new().realloc(0);
+        UnitVec::<usize>::new().realloc(0);
     }
 
     #[test]
     #[should_panic]
     fn test_unitvec_realloc_one() {
-        super::UnitVec::<usize>::new().realloc(1);
+        UnitVec::<usize>::new().realloc(1);
     }
 
     #[test]
     #[should_panic]
     fn test_untivec_realloc_lt_len() {
-        super::UnitVec::<usize>::from(&[1, 2][..]).realloc(1)
+        UnitVec::<usize>::from(&[1, 2][..]).realloc(1)
     }
 
     #[test]
@@ -365,5 +410,34 @@ mod tests {
             let v = unitvec![n];
             assert_eq!(v, v.clone());
         }
+    }
+
+
+    #[test]
+    fn test_serialize_unitvec() {
+        let vec: UnitVec<i32> = unitvec![1, 2, 3];
+        let serialized = serde_json::to_string(&vec).unwrap();
+        assert_eq!(serialized, "[1,2,3]");
+    }
+
+    #[test]
+    fn test_deserialize_unitvec() {
+        let data = "[1,2,3]";
+        let deserialized: UnitVec<i32> = serde_json::from_str(data).unwrap();
+        assert_eq!(deserialized, unitvec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_serialize_empty_unitvec() {
+        let vec: UnitVec<i32> = UnitVec::new();
+        let serialized = serde_json::to_string(&vec).unwrap();
+        assert_eq!(serialized, "[]");
+    }
+
+    #[test]
+    fn test_deserialize_empty_unitvec() {
+        let data = "[]";
+        let deserialized: UnitVec<i32> = serde_json::from_str(data).unwrap();
+        assert_eq!(deserialized, UnitVec::new());
     }
 }

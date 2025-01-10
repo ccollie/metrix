@@ -20,7 +20,7 @@ pub mod time;
 pub mod humanize;
 pub mod label;
 mod threads;
-mod unit_vec;
+pub mod types;
 
 pub mod prelude {
     pub use crate::async_runtime::*;
@@ -35,5 +35,5 @@ pub mod prelude {
     pub use crate::time::*;
     pub use crate::humanize::*;
     pub use crate::label::*;
-    pub use crate::unit_vec::*;
+    pub use crate::types::*;
 }
