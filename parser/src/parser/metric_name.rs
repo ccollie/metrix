@@ -2,7 +2,7 @@ use super::tokens::Token;
 use super::parse_error::unexpected;
 use crate::parser::{extract_string_value, ParseErr, ParseError, ParseResult};
 use logos::{Lexer, Logos};
-use metricsql_common::label::Label;
+use metricsql_common::types::{Label};
 
 /// specialized parser for a Prometheus compatible metric name (as opposed to a metric selector).
 ///

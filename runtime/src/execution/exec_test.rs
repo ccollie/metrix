@@ -8,7 +8,7 @@ mod tests {
     use crate::functions::transform::get_timezone_offset;
     use crate::types::{MetricName, QueryValue, Timestamp};
     use crate::{test_results_equal, Deadline, QueryResult, RuntimeResult};
-    use metricsql_common::label::Label;
+    use metricsql_common::types::Label;
     use metricsql_parser::parser::parse;
     use metricsql_parser::prelude::utils::is_likely_invalid;
     use std::time::Duration;

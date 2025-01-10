@@ -13,4 +13,4 @@ mod metric_name_test;
 #[cfg(test)]
 mod timeseries_test;
 
-pub use metricsql_common::label::Label;
+pub use metricsql_common::types::{Label};

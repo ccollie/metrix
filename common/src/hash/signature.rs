@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use crate::hash::FastHasher;
-use crate::label::Label;
+use crate::types::Label;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Ord, PartialOrd)]
 pub struct Signature(u64);
