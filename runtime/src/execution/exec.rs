@@ -20,6 +20,7 @@ use crate::execution::parser_cache::{ParseCacheResult, ParseCacheValue};
 use crate::execution::rollups::RollupEvaluator;
 use crate::execution::vectors::vector_vector_binop;
 use crate::prelude::binary::scalar_binary_operation;
+use crate::types::InstantVector;
 
 // see git branch fd75173
 type Value = QueryValue;
@@ -121,6 +122,43 @@ pub(crate) fn exec_internal(
             panic!("Bug: Invalid parse state")
         }
     }
+}
+
+fn round_values(values: &mut [f64], n: i16) {
+    if n < 36 {
+        for v in values.iter_mut() {
+            *v = round_to_decimal_digits(*v, n);
+        }
+    }
+}
+
+pub fn exec_raw(context: &Context, ec: &mut EvalConfig, q: &str) -> RuntimeResult<QueryValue> {
+    let (mut rv, _) = exec_internal(context, ec, q)?;
+    let n = ec.round_digits as i16;
+
+    match rv {
+        QueryValue::Scalar(ref mut iv) => {
+            if n < 100 {
+                *iv = round_to_decimal_digits(*iv, n);
+            }
+        },
+        QueryValue::InstantVector(ref mut iv) => {
+            if n < 100 {
+                for r in iv.iter_mut() {
+                    round_values(&mut r.values, n);
+                }
+            }
+        },
+        QueryValue::RangeVector(ref mut iv) => {
+            if n < 100 {
+                for ts in iv.iter_mut() {
+                    round_values(&mut ts.values, n);
+                }
+            }
+        },
+        _ => {},
+    }
+    Ok(rv)
 }
 
 /// executes q for the given config.
@@ -326,10 +364,9 @@ fn eval_function(
 
 fn eval_parens_op(ctx: &Context, ec: &EvalConfig, pe: &ParensExpr) -> RuntimeResult<QueryValue> {
     if pe.expressions.is_empty() {
-        // should not happen !!
-        return Err(RuntimeError::Internal(
-            "BUG: empty parens expression".to_string(),
-        ));
+        // () is valid in prometheus
+        let iv: InstantVector = Default::default();
+        return Ok(QueryValue::InstantVector(iv));
     }
     if pe.expressions.len() == 1 {
         return eval_expr(ctx, ec, &pe.expressions[0]);
