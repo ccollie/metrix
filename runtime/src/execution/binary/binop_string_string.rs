@@ -24,7 +24,7 @@ pub(crate) fn eval_string_string_binop(
             }
         }
         _ => {
-            let cmp = string_compare(right, left, op, is_bool).map_err(|_| {
+            let cmp = string_compare(left, right, op, is_bool).map_err(|_| {
                 RuntimeError::Internal(format!("Invalid operator {op} in string comparison"))
             })?;
             Ok(QueryValue::Scalar(cmp))
