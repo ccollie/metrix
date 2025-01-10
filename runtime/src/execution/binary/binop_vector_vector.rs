@@ -524,10 +524,6 @@ fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> 
     Ok(rvs)
 }
 
-fn sort_series_by_metric_name(tss: &mut [Timeseries]) {
-    tss.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
-}
-
 /// `vector1 or vector2` results in a vector that contains all original elements (label sets + values)
 /// of vector1 and additionally all elements of vector2 which do not have matching label sets in vector1.
 ///
