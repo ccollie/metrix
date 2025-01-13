@@ -23,7 +23,6 @@ use std::str::FromStr;
 use ahash::AHashSet;
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq)]
 pub struct Labels(pub(crate) Vec<String>);
 

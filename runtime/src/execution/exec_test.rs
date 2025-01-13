@@ -4426,8 +4426,9 @@ mod tests {
 
     #[test]
     fn running_sum_time_ex() {
+        let temp = exec_query("time()/1e3 > 1.2 < 1.8");
         assert_result_eq("running_sum(time()/1e3 > 1.2 < 1.8)",
-                         &[f64::NAN, f64::NAN, 1.4, 3.3, 3.3, 3.3]);
+                         &[f64::NAN, f64::NAN, 1.4, 3.0, 3.0, 3.0]);
     }
 
     #[test]

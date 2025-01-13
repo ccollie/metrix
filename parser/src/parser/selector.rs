@@ -135,7 +135,15 @@ fn parse_label_filters_internal(p: &mut Parser) -> ParseResult<Vec<Matcher>> {
 
     loop {
         let matcher = parse_label_filter(p)?;
-        matchers.push(matcher);
+        if matcher.is_metric_name_filter() {
+            if matchers.is_empty() {
+                matchers.push(matcher);
+            } else {
+                matchers.insert(0, matcher)
+            }
+        } else {
+            matchers.push(matcher);
+        }
 
         let tok = p.current_token()?;
         match tok.kind {

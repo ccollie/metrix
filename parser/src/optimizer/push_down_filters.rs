@@ -1,16 +1,16 @@
-use std::borrow::Cow;
-use std::iter::FromIterator;
-use std::vec::Vec;
-
 use crate::ast::{
     AggregateModifier, AggregationExpr, BinaryExpr, Expr, Operator, RollupExpr, VectorMatchModifier,
 };
 use crate::functions::BuiltinFunction::Transform;
 use crate::functions::{AggregateFunction, BuiltinFunction, RollupFunction, TransformFunction};
-use crate::label::{MatchOp, Matcher, Matchers, NAME_LABEL};
+use crate::label::{Matcher, Matchers, NAME_LABEL};
 use crate::parser::{ParseError, ParseResult};
 use crate::prelude::{can_accept_multiple_args_for_aggr_func, VectorMatchCardinality};
 use metricsql_common::hash::{FastHashSet, HashSetExt};
+use smallvec::SmallVec;
+use std::borrow::Cow;
+use std::iter::FromIterator;
+use std::vec::Vec;
 
 /// `push_down_filters` optimizes e in order to improve its performance.
 ///
@@ -253,7 +253,7 @@ fn get_common_label_filters_for_label_keep(args: &[Expr]) -> Vec<Matcher> {
         return vec![];
     }
     let mut lfs = get_common_label_filters(&args[0]);
-    keep_label_filters_for_label_names(&mut lfs, &args[1..]);
+    keep_label_filters_for_label_names(&mut lfs, args[1..].iter());
     lfs
 }
 
@@ -262,28 +262,22 @@ fn get_common_label_filters_for_label_del(args: &[Expr]) -> Vec<Matcher> {
         return vec![];
     }
     let mut lfs = get_common_label_filters(&args[0]);
-    drop_label_filters_for_label_names(&mut lfs, &args[1..]);
+    drop_label_filters_for_label_names(&mut lfs, args[1..].iter());
     lfs
 }
 
+/// Gets common label filters for `label_copy`.
 fn get_common_label_filters_for_label_copy(args: &[Expr]) -> Vec<Matcher> {
-    if args.is_empty() {
-        return vec![];
+    if args.len() > 1 {
+        return Vec::new();
     }
+
     let mut lfs = get_common_label_filters(&args[0]);
-    let args = &args[1..];
-    let mut label_names: FastHashSet<&str> = FastHashSet::with_capacity(args.len() / 2);
-    for i in (0..args.len()).step_by(2) {
-        if i + 1 >= args.len() {
-            return vec![];
-        }
-        if let Expr::StringLiteral(se) = args.get(i + 1).unwrap() {
-            label_names.insert(se.as_str());
-        } else {
-            return vec![];
-        }
-    }
-    lfs.retain(|x| !label_names.contains(x.label.as_str()));
+
+    let label_names  = args.iter().skip(1).step_by(2);
+
+    drop_label_filters_for_label_names(&mut lfs, label_names);
+
     lfs
 }
 
@@ -293,46 +287,6 @@ fn get_common_label_filters_for_label_replace(args: &[Expr]) -> Vec<Matcher> {
     }
     let mut lfs = get_common_label_filters(&args[0]);
     drop_label_filters_for_label_name(&mut lfs, &args[1]);
-    lfs
-}
-
-fn get_common_label_filters_for_label_set_2(args: &[Expr]) -> Vec<Matcher> {
-    if args.is_empty() {
-        return vec![];
-    }
-    if args.len() != 2 {
-        return vec![];
-    }
-    let mut lfs = get_common_label_filters(&args[0]);
-    let lfs2 = get_common_label_filters(&args[1]);
-    intersect_label_filters(&mut lfs, &lfs2);
-    let args = &args[1..];
-    for i in (0..args.len()).step_by(2) {
-        let label_name = &args[i];
-        if i + 1 >= args.len() {
-            return vec![];
-        }
-        let label_value = &args[i + 1];
-
-        let se_label_name = if let Some(v) = get_expr_as_string(label_name) {
-            v
-        } else {
-            return vec![];
-        };
-        let se_label_value = if let Some(v) = get_expr_as_string(label_value) {
-            v
-        } else {
-            return vec![];
-        };
-
-        if se_label_name == "__name__" {
-            continue;
-        }
-
-        drop_label_filters_for_label_name(&mut lfs, label_name);
-        // LabelFilter::new() errors only in the case where operator is regex eq/ne, so the following unwrap() is safe
-        lfs.push(Matcher::new(MatchOp::Equal, se_label_name, se_label_value).unwrap());
-    }
     lfs
 }
 
@@ -355,7 +309,7 @@ fn get_common_label_filters_for_label_set(args: &[Expr]) -> Vec<Matcher> {
         match (label_name, label_value) {
             (Expr::StringLiteral(se_label_name), Expr::StringLiteral(se_label_value)) => {
                 // Skip if the label name is "__name__"
-                if se_label_name.0 == "__name__" {
+                if NAME_LABEL == se_label_name.as_str() {
                     continue;
                 }
 
@@ -587,38 +541,37 @@ fn pushdown_label_filters_for_label_keep(args: &mut [Expr], lfs: &mut Vec<Matche
     if args.is_empty() {
         return;
     }
-    keep_label_filters_for_label_names(lfs, &args[1..]);
-    let arg = args.get_mut(0).unwrap();
-    push_down_binary_op_filters_in_place(arg, lfs)
+    keep_label_filters_for_label_names(lfs, args[1..].iter());
+    if let Some(arg) = args.get_mut(0) {
+        push_down_binary_op_filters_in_place(arg, lfs);
+    }
 }
 
 fn pushdown_label_filters_for_label_del(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
     if args.is_empty() {
         return;
     }
-    drop_label_filters_for_label_names(lfs, &args[1..]);
-    let arg = args.get_mut(0).unwrap();
-    push_down_binary_op_filters_in_place(arg, lfs)
+
+    drop_label_filters_for_label_names(lfs, args[1..].iter());
+    if let Some(arg) = args.get_mut(0) {
+        push_down_binary_op_filters_in_place(arg, lfs);
+    }
 }
 
 fn pushdown_label_filters_for_label_copy(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
     if args.is_empty() {
         return;
     }
-    let mut label_names: FastHashSet<&str> = FastHashSet::with_capacity(args.len());
-    for i in (1..args.len()).step_by(2) {
-        if i + 1 >= args.len() {
-            return;
-        }
-        if let Expr::StringLiteral(se) = args.get(i).unwrap() {
-            label_names.insert(se.as_str());
-        } else {
-            return;
-        }
+
+    let label_names = args.iter()
+        .skip(1)
+        .step_by(2);
+
+    drop_label_filters_for_label_names(lfs, label_names);
+
+    if let Some(arg) = args.get_mut(0) {
+        push_down_binary_op_filters_in_place(arg, lfs);
     }
-    lfs.retain(|x| !label_names.contains(x.label.as_str()));
-    let arg = args.get_mut(0).unwrap();
-    push_down_binary_op_filters_in_place(arg, lfs)
 }
 
 fn pushdown_label_filters_for_label_replace(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
@@ -626,8 +579,9 @@ fn pushdown_label_filters_for_label_replace(args: &mut [Expr], lfs: &mut Vec<Mat
         return;
     }
     drop_label_filters_for_label_name(lfs, &args[1]);
-    let arg = args.get_mut(0).unwrap();
-    push_down_binary_op_filters_in_place(arg, lfs)
+    if let Some(arg) = args.get_mut(0) {
+        push_down_binary_op_filters_in_place(arg, lfs);
+    }
 }
 
 fn pushdown_label_filters_for_label_set(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
@@ -635,18 +589,15 @@ fn pushdown_label_filters_for_label_set(args: &mut [Expr], lfs: &mut Vec<Matcher
         return;
     }
 
-    let mut label_names: FastHashSet<&str> = FastHashSet::with_capacity(args.len() / 2);
+    let label_names = args.iter()
+        .skip(1)
+        .step_by(2);
 
-    for i in (1..args.len()).step_by(2) {
-        if let Some(v) = get_expr_as_string(args.get(i).unwrap()) {
-            label_names.insert(v);
-        } else {
-            return;
-        }
+    drop_label_filters_for_label_names(lfs, label_names);
+
+    if let Some(arg) = args.get_mut(0) {
+        push_down_binary_op_filters_in_place(arg, lfs);
     }
-    lfs.retain(|x| !label_names.contains(x.label.as_str()));
-    let arg = args.get_mut(0).unwrap();
-    push_down_binary_op_filters_in_place(arg, lfs)
 }
 
 #[inline]
@@ -681,28 +632,28 @@ fn union_label_filters(a: &mut Vec<Matcher>, b: &[Matcher]) {
         }
     }
 }
-fn keep_label_filters_for_label_names(lfs: &mut Vec<Matcher>, label_names: &[Expr]) {
-    let mut names_set: FastHashSet<&str> = FastHashSet::with_capacity(label_names.len());
+fn keep_label_filters_for_label_names<'a>(lfs: &mut Vec<Matcher>, label_names: impl Iterator<Item=&'a Expr>) {
+    let mut names_set: SmallVec<&str, 4> = SmallVec::new();
     for label_name in label_names {
         if let Expr::StringLiteral(se_label_name) = label_name {
-            names_set.insert(se_label_name.as_str());
+            names_set.push(se_label_name.as_str());
         } else {
             return;
         }
     }
-    lfs.retain(|x| names_set.contains(x.label.as_str()))
+    lfs.retain(|x| names_set.contains(&x.label.as_str()))
 }
 
-fn drop_label_filters_for_label_names(lfs: &mut Vec<Matcher>, label_names: &[Expr]) {
-    let mut names_set: FastHashSet<&str> = FastHashSet::with_capacity(label_names.len());
+fn drop_label_filters_for_label_names<'a>(lfs: &mut Vec<Matcher>, label_names: impl Iterator<Item=&'a Expr>) {
+    let mut names_set: SmallVec<&str, 4> = SmallVec::new();
     for label_name in label_names {
         if let Expr::StringLiteral(se_label_name) = label_name {
-            names_set.insert(se_label_name.as_str());
+            names_set.push(se_label_name.as_str());
         } else {
             return;
         }
     }
-    lfs.retain(|x| !names_set.contains(x.label.as_str()))
+    lfs.retain(|x| !names_set.contains(&x.label.as_str()))
 }
 
 fn drop_label_filters_for_label_name(lfs: &mut Vec<Matcher>, label_name: &Expr) {
