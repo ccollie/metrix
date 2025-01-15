@@ -24,6 +24,7 @@ use metricsql_common::regex_util::StringMatchHandler;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use xxhash_rust::xxh3::Xxh3;
+use metricsql_common::hash::FastHasher;
 use metricsql_common::types::UnitVec;
 use metricsql_common::unitvec;
 
@@ -369,8 +370,8 @@ impl Display for Matcher {
 
 impl Hash for Matcher {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.op.hash(state);
         self.label.hash(state);
+        self.op.hash(state);
         self.value.hash(state);
     }
 }

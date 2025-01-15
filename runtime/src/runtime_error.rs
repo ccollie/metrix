@@ -43,6 +43,8 @@ pub enum RuntimeError {
     NotImplemented(String),
     #[error("Cannot optimize expression: {0}")]
     OptimizerError(String),
+    #[error("Duplicate metric labels: {0}")]
+    DuplicateMetricLabels(String),
 }
 
 impl RuntimeError {

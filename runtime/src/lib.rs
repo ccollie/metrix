@@ -1,3 +1,4 @@
+#![feature(hasher_prefixfree_extras)]
 extern crate ahash;
 extern crate chrono;
 extern crate chrono_tz;
@@ -19,6 +20,9 @@ extern crate scopeguard;
 extern crate topologic;
 extern crate xxhash_rust;
 
+#[cfg(test)]
+extern crate rs_unit;
+
 pub use cache::*;
 pub use provider::*;
 pub use query_stats::*;
@@ -34,9 +38,6 @@ pub mod runtime_error;
 pub mod types;
 
 mod common;
-
-#[cfg(test)]
-extern crate rs_unit;
 #[cfg(test)]
 mod tests;
 

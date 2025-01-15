@@ -491,21 +491,21 @@ pub const fn get_transform_arg_idx_for_optimization(
     func: TransformFunction,
     arg_count: usize,
 ) -> Option<usize> {
-    if func.manipulates_labels() {
-        return None;
-    }
 
     use TransformFunction::*;
     match func {
-        Absent | Scalar | Union | Vector => None,
-        DropCommonLabels => None,
-        End | Now | Pi | Start | Step | Time | Ru => None, // todo Ru
+        Absent | DropCommonLabels | Scalar => None,
+        End | Now | Pi | RangeNormalize | Ru | Start | Step | Time | Union | Vector => None, // todo Ru
+        LabelGraphiteGroup => Some(0),
         LimitOffset => Some(2),
         BucketsLimit | HistogramQuantile | HistogramShare | RangeQuantile |
-        RangeTrimSpikes | RangeTrimOutliers | RangeTrimZScore => {
-            Some(1)
-        }
+        RangeTrimSpikes | RangeTrimOutliers | RangeTrimZScore => Some(1),
         HistogramQuantiles => Some(arg_count - 1),
-        _ => Some(0),
+        _ => {
+            if func.manipulates_labels() {
+                return None;
+            }
+            Some(0)
+        },
     }
 }

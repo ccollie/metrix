@@ -6,9 +6,10 @@ use crate::functions::{AggregateFunction, BuiltinFunction, RollupFunction, Trans
 use crate::label::{Matcher, Matchers, NAME_LABEL};
 use crate::parser::{ParseError, ParseResult};
 use crate::prelude::{can_accept_multiple_args_for_aggr_func, VectorMatchCardinality};
-use metricsql_common::hash::{FastHashSet, HashSetExt};
+use metricsql_common::hash::{FastHashSet, HashSetExt, Signature};
 use smallvec::SmallVec;
 use std::borrow::Cow;
+use std::hash::Hash;
 use std::iter::FromIterator;
 use std::vec::Vec;
 
@@ -231,12 +232,15 @@ fn intersect_label_filters_for_all_args(args: &[Expr]) -> Vec<Matcher> {
     if args.is_empty() {
         return vec![];
     }
-    let mut lfs = get_common_label_filters(&args[0]);
+    let mut lfs_a = get_common_label_filters(&args[0]);
     for arg in &args[1..] {
+        if lfs_a.is_empty() {
+            return vec![];
+        }
         let lfs_next = get_common_label_filters(arg);
-        intersect_label_filters(&mut lfs, &lfs_next)
+        intersect_label_filters(&mut lfs_a, &lfs_next)
     }
-    lfs
+    lfs_a
 }
 
 fn get_common_label_filters_for_count_values_over_time(args: &[Expr]) -> Vec<Matcher> {
@@ -600,9 +604,46 @@ fn pushdown_label_filters_for_label_set(args: &mut [Expr], lfs: &mut Vec<Matcher
     }
 }
 
+enum SetOperation {
+    Union,
+    Intersect,
+}
+
+fn set_operation(dst: &mut Vec<Matcher>, b: &[Matcher], op: SetOperation)  {
+    // use SmallVec here because generally the number of filters is small, and we want to avoid allocations
+    let mut set: SmallVec<Signature, 6> = SmallVec::new();
+    for label in dst.iter() {
+        let sig = Signature::new(label);
+        set.push(sig);
+    }
+    match op {
+        SetOperation::Union => {
+            for matcher in b.iter() {
+                let k = Signature::new(matcher);
+                if !set.contains(&k) {
+                    dst.push(matcher.clone());
+                }
+            }
+        }
+        SetOperation::Intersect => {
+            let mut set_b: FastHashSet<Signature> = FastHashSet::new();
+            for matcher in b.iter() {
+                let k = Signature::new(matcher);
+                set_b.insert(k);
+            }
+            dst.retain(|x| set_b.contains(&Signature::new(x)));
+        }
+    }
+}
+
+
 #[inline]
-fn get_label_filters_map(filters: &[Matcher]) -> FastHashSet<String> {
-    let set: FastHashSet<String> = FastHashSet::from_iter(filters.iter().map(|x| x.to_string()));
+fn get_label_filters_map(filters: &[Matcher]) -> FastHashSet<Signature> {
+    let mut set: FastHashSet<Signature> = FastHashSet::with_capacity(filters.len());
+    for label in filters.iter() {
+        let sig = Signature::new(label);
+        set.insert(sig);
+    }
     set
 }
 
@@ -611,27 +652,37 @@ fn intersect_label_filters(first: &mut Vec<Matcher>, second: &[Matcher]) {
         return;
     }
     let set = get_label_filters_map(second);
-    first.retain(|x| set.contains(&x.to_string()));
+    first.retain(|matcher| {
+        let sig = Signature::new(matcher);
+        set.contains(&sig)
+    });
 }
 
 fn union_label_filters(a: &mut Vec<Matcher>, b: &[Matcher]) {
-    // todo (perf) do we need to clone, or can we drain ?
-    if a.is_empty() && !b.is_empty() {
-        a.append(&mut b.to_owned());
-        return;
-    }
-    if b.is_empty() {
-        return;
-    }
-    let m = get_label_filters_map(a);
-    for label in b.iter() {
-        let k = label.to_string();
-        if !m.contains(&k) {
-            // todo (perf): take from b, no alloc
-            a.push(label.clone());
+    match (a.is_empty(), b.is_empty()) {
+        (true, true) => return,
+        (false, true) => return,
+        (true, false) => {
+            a.extend_from_slice(b);
+        }
+        (false, false) => {
+            // use SmallVec here because generally the number of filters is small, and we want to avoid allocations
+            let mut set: SmallVec<Signature, 6> = SmallVec::new();
+            for label in a.iter() {
+                let sig = Signature::new(label);
+                set.push(sig);
+            }
+            for matcher in b.iter() {
+                let signature = Signature::new(matcher);
+                if !set.contains(&signature) {
+                    // todo (perf): take from b, no alloc
+                    a.push(matcher.clone());
+                }
+            }
         }
     }
 }
+
 fn keep_label_filters_for_label_names<'a>(lfs: &mut Vec<Matcher>, label_names: impl Iterator<Item=&'a Expr>) {
     let mut names_set: SmallVec<&str, 4> = SmallVec::new();
     for label_name in label_names {

@@ -4308,7 +4308,7 @@ mod tests {
 
     #[test]
     fn rate() {
-        // test_query("rate({})", vec![]);
+        test_query("rate({})", vec![]);
 
         assert_result_eq("rate(2000-time())", &[5.5, 4.5, 3.5, 2.5, 1.5, 0.5]);
 
@@ -4663,7 +4663,7 @@ mod tests {
 
     #[test]
     fn aggr_over_time_multi_func() {
-        let temp = exec_query("round(rand(0),0.1)[:10s]");
+        let temp = exec_raw_query("round(rand(0),0.1)").unwrap();
         let q = r#"sort(aggr_over_time(round(rand(0),0.1)[:10s], "min_over_time", "median_over_time", "max_over_time"))"#;
         let mut r1 = make_result(&[0.0, 0.0, 0.0, 0.0, 0.1, 0.1]);
         r1.metric.set("rollup", "min_over_time");

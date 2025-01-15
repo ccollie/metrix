@@ -62,11 +62,11 @@ mod tests {
 
         f("foo", "{}", "foo");
         f("foo", r#"{a="b"}"#, r#"foo{a="b"}"#);
-        // f(
-        //     r#"foo + bar{x="y"}"#,
-        //     r#"{c="d",a="b"}"#,
-        //     r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
-        // );
+        f(
+            r#"foo + bar{x="y"}"#,
+            r#"{c="d",a="b"}"#,
+            r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
+        );
         f("sum(x)", r#"{a="b"}"#, "sum(x)");
         f(r#"foo or bar"#, r#"{a="b"}"#, r#"foo{a="b"} or bar{a="b"}"#);
         f(r#"foo or on(x) bar"#, r#"{a="b"}"#, r#"foo or on (x) bar"#);
@@ -667,10 +667,10 @@ mod tests {
             r#"ABSENT(foo{bar="baz"}) + sqrt(a{z=~"c"})"#,
             r#"ABSENT(foo{bar="baz"}) + sqrt(a{z=~"c"})"#,
         );
-        // validate_optimized(
-        //     r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
-        //     r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
-        // );
+        validate_optimized(
+            r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
+            r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
+        );
         validate_optimized(
             r#"now() + foo{bar="baz"} + x{y="x"}"#,
             r#"(now() + foo{bar="baz", y="x"}) + x{bar="baz", y="x"}"#,

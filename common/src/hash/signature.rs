@@ -26,13 +26,9 @@ const EMPTY_LIST_SIGNATURE: u64 = 0x9e3779b97f4a7c15;
 const EMPTY_NAME_VALUE: u64 = 0x9e3779b97f4a7c16;
 
 impl Signature {
-    pub fn new(s: &str) -> Signature {
+    pub fn new<T: Hash>(value: &T) -> Signature {
         let mut hasher = FastHasher::default();
-        if !s.is_empty() {
-            hasher.write(s.as_bytes());
-        } else {
-            hasher.write_u64(EMPTY_NAME_VALUE);
-        }
+        value.hash(&mut hasher);
         Signature(hasher.finish())
     }
 
