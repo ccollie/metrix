@@ -67,7 +67,7 @@ mod tests {
             window,
             ..
         } = setup();
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
         assert_eq!(
             new_start, ec.start,
             "unexpected new_start; got {}; want {}",
@@ -90,9 +90,9 @@ mod tests {
         let tss = vec![create_ts(&[800, 1000, 1200], &[0_f64, 1_f64, 2_f64])];
 
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
         assert_eq!(
             new_start, 1400,
             "unexpected new_start; got {}; want {}",
@@ -118,10 +118,10 @@ mod tests {
         } = setup();
 
         cache
-            .put(&ec, &ae, window, &tss)
+            .put_series(&ec, &ae, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &ae, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &ae, window).unwrap();
         assert_eq!(
             new_start, 1400,
             "unexpected new_start; got {}; want {}",
@@ -151,10 +151,10 @@ mod tests {
         } = setup();
 
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 1000,
@@ -177,10 +177,10 @@ mod tests {
             ..
         } = setup();
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 1000,
@@ -203,10 +203,10 @@ mod tests {
             ..
         } = setup();
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 1000,
@@ -229,10 +229,10 @@ mod tests {
             ..
         } = setup();
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 1000,
@@ -258,10 +258,10 @@ mod tests {
             ..
         } = setup();
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 2200,
@@ -294,10 +294,10 @@ mod tests {
         } = setup();
 
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 2200,
@@ -335,10 +335,10 @@ mod tests {
         } = setup();
 
         cache
-            .put(&ec, &fe, window, &tss)
+            .put_series(&ec, &fe, window, &tss)
             .expect("error putting to cache");
 
-        let (tss_result, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss_result, new_start) = cache.get_series(&ec, &fe, window).unwrap();
 
         assert_eq!(
             new_start, 2200,
@@ -371,16 +371,16 @@ mod tests {
         } = setup();
 
         cache
-            .put(&ec, &fe, window, &tss1)
+            .put_series(&ec, &fe, window, &tss1)
             .expect("error putting value in cache");
         cache
-            .put(&ec, &fe, window, &tss2)
+            .put_series(&ec, &fe, window, &tss2)
             .expect("error putting value in cache");
         cache
-            .put(&ec, &fe, window, &tss3)
+            .put_series(&ec, &fe, window, &tss3)
             .expect("error putting value in cache");
 
-        let (tss, new_start) = cache.get(&ec, &fe, window).unwrap();
+        let (tss, new_start) = cache.get_series(&ec, &fe, window).unwrap();
         assert_eq!(
             new_start, 1400,
             "unexpected new_start; got {}; want {}",
@@ -462,7 +462,7 @@ mod tests {
     fn merge_b_empty() {
         let a = vec![create_ts(&[1000, 1200], &[2_f64, 1_f64])];
 
-        let b = vec![Timeseries::default()];
+        let b: Vec<Timeseries> = vec![];
 
         let MergeTestContext { ec, bstart } = setup_merge();
         let tss = merge_timeseries(a, b, bstart, &ec).expect("unable to merge timeseries");

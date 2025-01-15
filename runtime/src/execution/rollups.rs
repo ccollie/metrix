@@ -294,7 +294,7 @@ impl<'a> RollupEvaluator<'a> {
         let tss_cached: Vec<Timeseries>;
         let start: i64;
         {
-            let (cached, _start) = ctx.rollup_result_cache.get(ec, self.expr, window)?;
+            let (cached, _start) = ctx.rollup_result_cache.get_series(ec, self.expr, window)?;
             tss_cached = cached.unwrap_or_default();
             start = _start;
         }
@@ -405,7 +405,7 @@ impl<'a> RollupEvaluator<'a> {
         }?;
 
         merge_timeseries(tss_cached, tss, start, ec).and_then(|res| {
-            ctx.rollup_result_cache.put(ec, self.expr, window, &res)?;
+            ctx.rollup_result_cache.put_series(ec, self.expr, window, &res)?;
             Ok(res)
         })
     }

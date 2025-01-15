@@ -1,15 +1,20 @@
+use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::collections::HashMap;
 use std::hash::Hasher;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 /// import commonly used items from the prelude:
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use tracing::span::EnteredSpan;
 use tracing::{field, info, span_enabled, trace_span, Level, Span};
 use xxhash_rust::xxh3::Xxh3;
-
+use metricsql_common::hash::{FastHasher, Signature};
 use metricsql_common::prelude::{get_pooled_buffer, AtomicCounter, RelaxedU64Counter};
+use metricsql_common::time::Time;
+use metricsql_common::types::Label;
 use metricsql_parser::ast::Expr;
 use metricsql_parser::prelude::Matchers;
 
@@ -21,7 +26,7 @@ use crate::common::memory::memory_limit;
 use crate::common::memory_limiter::MemoryLimiter;
 use crate::execution::EvalConfig;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use crate::types::{assert_identical_timestamps, SeriesSlice, Timestamp, Timeseries, TimestampTrait};
+use crate::types::{assert_identical_timestamps, SeriesSlice, Timestamp, Timeseries, TimestampTrait, MetricName};
 
 /// The maximum duration since the current time for response data, which is always queried from the
 /// original raw data, without using the response cache. Increase this value if you see gaps in responses
@@ -122,7 +127,7 @@ impl RollupResultCache {
         self.memory_limiter.max_size
     }
 
-    pub fn get(
+    pub fn get_series(
         &self,
         ec: &EvalConfig,
         expr: &Expr,
@@ -136,7 +141,7 @@ impl RollupResultCache {
             let window = window.as_millis() as u64;
             let step = ec.step.as_millis() as u64;
             trace_span!(
-                "rollup_cache::get",
+                "rollup_cache::get_series",
                 query,
                 start = ec.start,
                 end = ec.end,
@@ -252,7 +257,7 @@ impl RollupResultCache {
         Ok((Some(tss), new_start))
     }
 
-    pub fn put(
+    pub fn put_series(
         &self,
         ec: &EvalConfig,
         expr: &Expr,
@@ -268,7 +273,7 @@ impl RollupResultCache {
             let step = ec.step.as_millis() as u64;
             
             trace_span!(
-                "rollup_cache::put",
+                "rollup_cache::put_series",
                 query,
                 start = ec.start,
                 end = ec.end,
@@ -291,10 +296,23 @@ impl RollupResultCache {
             return Ok(());
         }
 
+        if tss.len() > 1 {
+            // Verify whether tss contains series with duplicate naming.
+            // There is little sense in storing such series in the cache, since they cannot be merged in mergeSeries() later.
+            let mut map: AHashSet<u64> = AHashSet::with_capacity(tss.len());
+            for ts in tss {
+                let hash = metric_name_hash_sorted(&ts.metric_name);
+                if !map.insert(hash) {
+                    let msg = format!("BUG: cannot store series in the cache, since they contain duplicate metric names: {}", ts.metric_name);
+                    return Err(RuntimeError::DuplicateMetricLabels(msg));
+                }
+            }
+        }
+
         // Remove values up to currentTime - step - CACHE_TIMESTAMP_OFFSET,
         // since these values may be added later.
         let timestamps = tss[0].timestamps.as_slice();
-        let deadline = Timestamp::now() - (ec.step - CACHE_TIMESTAMP_OFFSET).as_millis() as i64;
+        let deadline = Timestamp::now() - (ec.step.as_millis() as i64) - (CACHE_TIMESTAMP_OFFSET.as_millis() as i64);
         
         let i = timestamps.partition_point(|&t| t <= deadline);
         if i == 0 {
@@ -316,7 +334,9 @@ impl RollupResultCache {
         } else {
             let rvs = tss
                 .iter()
-                .map(|ts| SeriesSlice::from_timeseries(ts, None))
+                .map(|ts| {
+                    SeriesSlice::from_timeseries(ts, None)
+                })
                 .collect::<Vec<SeriesSlice>>();
 
             self.put_internal(&rvs, ec, expr, window, &span)
@@ -451,6 +471,10 @@ impl RollupResultCache {
     }
 }
 
+fn put_series_to_cache(tss: & [Timeseries]) {
+
+}
+
 // let resultBufPool = ByteBufferPool
 
 /// Increment this value every time the format of the cache changes.
@@ -479,9 +503,9 @@ fn marshal_rollup_result_cache_key_internal(
     if let Some(etfs) = etfs {
         for etf in etfs.iter() {
             for f in etf.iter() {
-                hasher.write(f.label.as_bytes());
-                hasher.write(f.op.as_str().as_bytes());
-                hasher.write(f.value.as_bytes());
+                hasher.write_str(&f.label);
+                hasher.write_str(f.op.as_str());
+                hasher.write_str(&f.value);
             }
         }
     }
@@ -506,89 +530,137 @@ fn marshal_rollup_result_cache_key(
     )
 }
 
-/// `merge_timeseries` concatenates b with a and returns the result.
+/// Merges two sets of timeseries `a` and `b` and returns the result.
 ///
-/// Preconditions:
-/// - a mustn't intersect with b.
-/// - a timestamps must be smaller than b timestamps.
+/// ### Arguments
+/// * `a` - The first set of timeseries, covering the range [ec.Start .. bStart - ec.Step].
+/// * `b` - The second set of timeseries, covering the range [bStart .. ec.End].
+/// * `b_start` - The start timestamp for the `b` timeseries.
+/// * `ec` - The evaluation configuration containing the shared timestamps and step.
 ///
-/// Post conditions:
-/// - a and b cannot be used after returning from the call.
-pub fn merge_timeseries(
+/// ### Returns
+/// A tuple containing the merged timeseries. If the merge fails (e.g., due to duplicate metric names),
+/// `None` is returned.
+pub(crate) fn merge_timeseries(
     a: Vec<Timeseries>,
     b: Vec<Timeseries>,
     b_start: i64,
     ec: &EvalConfig,
 ) -> RuntimeResult<Vec<Timeseries>> {
     let shared_timestamps = ec.get_timestamps()?;
-    if b_start == ec.start {
-        // Nothing to merge - b covers all the time range.
-        // Verify b is correct.
-        let mut second = b;
-        for ts_second in second.iter_mut() {
-            ts_second.timestamps = Arc::clone(&shared_timestamps);
-            validate_timeseries_length(ts_second)?;
+
+    // Find the index where `b_start` begins in the shared timestamps.
+    let i = shared_timestamps
+        .iter()
+        .position(|&ts| ts >= b_start)
+        .unwrap_or(shared_timestamps.len());
+
+    let a_timestamps = &shared_timestamps[..i];
+    let b_timestamps = &shared_timestamps[i..];
+
+    // If `b` covers the entire range, return `b` directly.
+    if b_timestamps.len() == shared_timestamps.len() {
+        for ts_b in &b {
+            if ts_b.timestamps.as_slice() != b_timestamps {
+                panic!(
+                    "BUG: invalid timestamps in b series {}; got {:?}; want {:?}",
+                    ts_b.metric_name, ts_b.timestamps, b_timestamps
+                );
+            }
         }
-        // todo(perf): is this clone the most efficient
-        return Ok(second);
+        return Ok(b);
     }
 
-    // todo: use Signature
-    let mut map: AHashMap<String, Timeseries> = AHashMap::with_capacity(a.len());
+    // Create a map of metric names to timeseries for `a`.
+    let mut a_map: HashMap<Signature, Timeseries> = HashMap::with_capacity(a.len());
 
-    for ts in a.into_iter() {
-        let key = ts.metric_name.to_string();
-        map.insert(key, ts);
+    for ts_a in a.into_iter() {
+        if ts_a.timestamps.as_slice() != a_timestamps {
+            panic!(
+                "BUG: invalid timestamps in a series {}; got {:?}; want {:?}",
+                ts_a.metric_name, ts_a.timestamps, a_timestamps
+            );
+        }
+        let mut ts_a = ts_a;
+        ts_a.metric_name.sort_labels();
+        let signature = ts_a.signature();
+
+        match a_map.entry(signature) {
+            Occupied(_) => {
+                return Err(RuntimeError::DuplicateMetricLabels(ts_a.metric_name.to_string()));
+            }, // Duplicate metric names in `a`.
+            Vacant(entry) => {
+                entry.insert(ts_a);
+            }
+        }
     }
 
-    let mut rvs: Vec<Timeseries> = Vec::with_capacity(map.len());
+    // Create a map of metric names to timeseries for `b`.
+    let mut b_map: AHashSet<Signature> = AHashSet::with_capacity(b.len());
+    let mut merged_series = Vec::new();
+    let mut a_nans = Vec::new();
 
-    for mut ts_second in b.into_iter() {
-        let key = ts_second.metric_name.to_string();
+    let sample_count = shared_timestamps.len();
+    for ts_b in b.into_iter() {
+        if ts_b.timestamps.as_slice() != b_timestamps {
+            panic!(
+                "BUG: invalid timestamps in b series {}; got {:?}; want {:?}",
+                ts_b.metric_name, ts_b.timestamps, b_timestamps
+            );
+        }
 
-        let mut tmp: Timeseries = Timeseries {
-            metric_name: std::mem::take(&mut ts_second.metric_name), // todo(perf): how to avoid clone() (use into)?
+        let signature = ts_b.signature();
+
+        if !b_map.insert(signature) {
+            return Err(RuntimeError::DuplicateMetricLabels(ts_b.metric_name.to_string()));
+        }
+
+        // Create a new timeseries for the merged result.
+        let mut merged_ts = Timeseries {
+            metric_name: ts_b.metric_name,
             timestamps: Arc::clone(&shared_timestamps),
-            values: Vec::with_capacity(shared_timestamps.len()),
+            values: Vec::with_capacity(sample_count),
+            ..Default::default()
         };
 
-        match map.get_mut(&key) {
-            None => {
-                let mut t_start = ec.start;
-                let step = ec.step.as_millis() as i64;
-                while t_start < b_start {
-                    tmp.values.push(f64::NAN);
-                    t_start += step;
-                }
+        // Append values from `a` or NaNs if `a` doesn't have the series.
+        if let Some(ts_a) = a_map.remove(&signature) {
+            merged_ts.values.extend_from_slice(&ts_a.values);
+        } else {
+            if a_nans.is_empty() {
+                a_nans = vec![f64::NAN; a_timestamps.len()];
             }
-            Some(ts_a) => {
-                tmp.values.extend_from_slice(&ts_a.values);
-                map.remove(&key);
-            }
+            merged_ts.values.extend_from_slice(&a_nans);
         }
 
-        tmp.values.append(&mut ts_second.values);
-        validate_timeseries_length(&ts_second)?;
-
-        rvs.push(tmp);
+        // Append values from `b`.
+        merged_ts.values.extend_from_slice(&ts_b.values);
+        merged_series.push(merged_ts);
     }
 
-    // todo: collect() then rvs.extend()
-    // Copy the remaining timeseries from m.
-    let step_ms = ec.step.as_millis() as i64;
-    for ts_a in map.values_mut() {
-        let mut t_start = b_start;
-        while t_start <= ec.end {
-            ts_a.values.push(f64::NAN);
-            t_start += step_ms;
+    // Handle remaining series in `a` that weren't in `b`.
+    let mut b_nans = Vec::new();
+    for (_, ts_a) in a_map {
+        let mut merged_ts = Timeseries {
+            metric_name: ts_a.metric_name.clone(),
+            timestamps: Arc::clone(&shared_timestamps),
+            values: Vec::with_capacity(sample_count),
+            ..Default::default()
+        };
+
+        // Append values from `a`.
+        merged_ts.values.extend_from_slice(&ts_a.values);
+
+        // Append NaNs for the `b` range.
+        if b_nans.is_empty() {
+            b_nans = vec![f64::NAN; b_timestamps.len()];
         }
+        merged_ts.values.extend_from_slice(&b_nans);
 
-        validate_timeseries_length(ts_a)?;
-
-        rvs.push(std::mem::take(ts_a));
+        merged_series.push(merged_ts);
     }
 
-    Ok(rvs)
+    Ok(merged_series)
 }
 
 fn validate_timeseries_length(ts: &Timeseries) -> RuntimeResult<()> {
@@ -814,4 +886,23 @@ fn estimate_size(tss: &[SeriesSlice]) -> usize {
 
     // Calculate the required size for marshaled tss.
     labels_size + value_size + timestamp_size
+}
+
+fn metric_name_hash_sorted(metric_name: &MetricName) -> u64 {
+    let mut hasher = FastHasher::default();
+    let mut labels: SmallVec<&Label, 8> = SmallVec::with_capacity(metric_name.labels.len());
+
+    for label in metric_name.labels.iter() {
+        labels.push(label);
+    }
+
+    labels.sort_unstable_by(|a, b| a.cmp(&b));
+
+    hasher.write_str(&metric_name.measurement);
+    for label in labels.iter() {
+        hasher.write_str(&label.name);
+        hasher.write_str(&label.value);
+    }
+
+    hasher.finish()
 }
