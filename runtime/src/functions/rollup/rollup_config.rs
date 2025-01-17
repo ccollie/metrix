@@ -427,10 +427,19 @@ impl RollupConfig {
             rfa.real_prev_value = f64::NAN;
             if i > 0 {
                 let idx = i - 1;
+
                 // SAFETY: i > 0 is checked above
                 unsafe {
                     let prev_timestamp = timestamps.get_unchecked(idx);
-                    if (t_end - prev_timestamp) < max_prev_interval {
+
+                    // set realPrevValue if rc.LookbackDelta == 0
+                    // or if distance between datapoint in prev interval and beginning of this interval
+                    // doesn't exceed LookbackDelta.
+                    // https://github.com/VictoriaMetrics/VictoriaMetrics/pull/1381
+                    // https://github.com/VictoriaMetrics/VictoriaMetrics/issues/894
+                    // https://github.com/VictoriaMetrics/VictoriaMetrics/issues/8045
+
+                    if self.lookback_delta.is_zero() || (t_end - prev_timestamp) < max_prev_interval {
                         let prev_value = values.get_unchecked(idx);
                         rfa.real_prev_value = *prev_value;
                     }

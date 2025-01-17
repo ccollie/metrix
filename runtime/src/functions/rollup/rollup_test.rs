@@ -2,17 +2,13 @@
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
+    use metricsql_parser::ast::Expr::Duration;
     use crate::common::math::{linear_regression, STALE_NAN};
     use crate::functions::rollup::delta::*;
     use crate::functions::rollup::deriv::*;
     use crate::functions::rollup::integrate::rollup_integrate;
     use crate::functions::rollup::outlier_iqr::rollup_outlier_iqr;
-    use crate::functions::rollup::rollup_fns::{
-        remove_counter_resets, rollup_avg, rollup_changes, rollup_changes_prometheus, rollup_count,
-        rollup_default, rollup_distinct, rollup_first, rollup_lag, rollup_lifetime, rollup_max,
-        rollup_min, rollup_mode_over_time, rollup_rate_over_sum, rollup_resets,
-        rollup_scrape_interval, rollup_stddev, rollup_sum, rollup_zscore_over_time, ROLLUP_LAST,
-    };
+    use crate::functions::rollup::rollup_fns::{remove_counter_resets, rollup_avg, rollup_changes, rollup_changes_prometheus, rollup_count, rollup_default, rollup_distinct, rollup_first, rollup_increase_pure, rollup_lag, rollup_lifetime, rollup_max, rollup_min, rollup_mode_over_time, rollup_rate_over_sum, rollup_resets, rollup_scrape_interval, rollup_stddev, rollup_sum, rollup_zscore_over_time, ROLLUP_LAST};
     use crate::functions::rollup::{
         get_rollup_func_by_name, get_rollup_function_factory, get_rollup_function_handler,
         RollupConfig, RollupFuncArg, RollupHandler, RollupHandlerFactory,
@@ -940,6 +936,99 @@ mod tests {
     }
 
     #[test]
+    fn test_rollup_delta_with_staleness_step_gt_gap() {
+        let timestamps = vec![0, 15000, 30000, 70000];
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+
+        // step > gap
+        let mut rc = RollupConfig {
+            handler: RollupHandler::Wrapped(rollup_delta),
+            start: 0,
+            end: 70000,
+            step: Duration::from_millis(45000),
+            max_points_per_series: 10_000,
+            lookback_delta: Duration::Zero(),
+            ..Default::default()
+        };
+        rc.ensure_timestamps().expect("failed to ensure timestamps");
+        let mut dst_values: Vec<f64> = vec![];
+        let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+        assert_eq!(samples_scanned, 7);
+        let values_expected = vec![1.0, 0.0];
+        let timestamps_expected = vec![0, 45000];
+        test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+
+        // step > gap ; lookback_delta < gap
+        let mut rc = RollupConfig {
+            handler: RollupHandler::Wrapped(rollup_delta),
+            start: 0,
+            end: 70000,
+            step: Duration::from_millis(45000),
+            max_points_per_series: 10_000,
+            lookback_delta: Duration::from_millis(10000),
+            ..Default::default()
+        };
+
+        rc.ensure_timestamps().expect("failed to ensure timestamps");
+        let mut dst_values: Vec<f64> = vec![];
+        let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+        assert_eq!(samples_scanned, 7);
+
+        let values_expected = vec![1.0, 0.0];
+        let timestamps_expected = vec![0, 45000];
+        test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+    }
+
+    #[test]
+    fn test_rollup_delta_with_staleness_step_lt_gap() {
+
+        let timestamps = vec![0, 15000, 30000, 70000];
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+
+        // step < gap ; lookback_delta=0
+        let mut rc = RollupConfig {
+            handler: RollupHandler::Wrapped(rollup_delta),
+            start: 0,
+            end: 70000,
+            step: Duration::from_millis(10000),
+            max_points_per_series: 10_000,
+            lookback_delta: Duration::Zero(),
+            ..Default::default()
+        };
+
+        rc.ensure_timestamps().expect("failed to ensure timestamps");
+        let mut dst_values: Vec<f64> = vec![];
+        let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+        assert_eq!(samples_scanned, 8);
+        let values_expected = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let timestamps_expected = vec![0, 10000, 20000, 30000, 40000, 50000, 60000, 70000];
+        test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+
+        // step < gap ; lookback_delta > 0
+        let mut rc = RollupConfig {
+            handler: RollupHandler::Wrapped(rollup_delta),
+            start: 0,
+            end: 70000,
+            step: Duration::from_millis(10000),
+            max_points_per_series: 10_000,
+            lookback_delta: Duration::from_millis(30000),
+            ..Default::default()
+        };
+        rc.ensure_timestamps().expect("failed to ensure timestamps");
+        let mut dst_values: Vec<f64> = vec![];
+        let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+        assert_eq!(samples_scanned, 8);
+        let values_expected = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+        let timestamps_expected = vec![0, 10000, 20000, 30000, 40000, 50000, 60000, 70000];
+        test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+    }
+
+
+    #[test]
     fn test_rollup_increase_with_staleness_step_gt_gap() {
         // there is a gap between samples in the dataset below
         let timestamps = Arc::new(vec![0, 15000, 30000, 70000]);
@@ -1023,6 +1112,128 @@ mod tests {
         let values_expected = vec![1.0, 0.0, 0.0, f64::NAN, 1.0];
         let timestamps_expected = vec![0, 10000, 20000, 30000, 40000];
         test_rows_equal(&dst_values, &rc.timestamps, &values_expected, &timestamps_expected);
+    }
+
+    #[test]
+    fn test_rollup_increase_pure_with_staleness_step_gt_gap() {
+        let timestamps = vec![0, 15000, 30000, 70000];
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+
+        // Test case: step > gap
+        {
+            let mut rc = RollupConfig {
+                handler: RollupHandler::Wrapped(rollup_increase_pure),
+                start: 0,
+                end: 70000,
+                step: Duration::from_millis(45000),
+                max_points_per_series: 10_000,
+                ..Default::default()
+            };
+            rc.ensure_timestamps().expect("failed to ensure timestamps");
+            let mut dst_values: Vec<f64> = vec![];
+
+            let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+            assert_eq!(samples_scanned, 7);
+            let values_expected = vec![1.0, 0.0];
+            let timestamps_expected = vec![0, 45000];
+            test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+        }
+
+        // Test case: step > gap; LookbackDelta < gap
+        {
+            let mut rc = RollupConfig {
+                handler: RollupHandler::Wrapped(rollup_increase_pure),
+                end: 70000,
+                step: Duration::from_millis(45000),
+                max_points_per_series: 10_000,
+                lookback_delta: Duration::from_millis(10000),
+                ..Default::default()
+            };
+            rc.ensure_timestamps().expect("failed to ensure timestamps");
+            let mut dst_values: Vec<f64> = vec![];
+
+            let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+            assert_eq!(samples_scanned, 7);
+            let values_expected = vec![1.0, 0.0];
+            let timestamps_expected = vec![0, 45000];
+            test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+        }
+
+    }
+
+    #[test]
+    fn test_rollup_increase_pure_with_staleness_step_lt_gap() {
+        let timestamps = vec![0, 15000, 30000, 70000];
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+
+        // Test case: step < gap; LookbackDelta == 0
+        {
+            let mut rc = RollupConfig {
+                handler: RollupHandler::Wrapped(rollup_increase_pure),
+                start: 0,
+                end: 70000,
+                step: Duration::from_millis(10000),
+                max_points_per_series: 10_000,
+                lookback_delta: Duration::Zero(),
+                ..Default::default()
+            };
+            rc.ensure_timestamps().expect("failed to ensure timestamps");
+            let mut dst_values: Vec<f64> = vec![];
+            let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+            assert_eq!(samples_scanned, 8);
+            let values_expected = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+            let timestamps_expected = vec![0, 10000, 20000, 30000, 40000, 50000, 60000, 70000];
+            test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+        }
+
+        // Test case: step < gap; LookbackDelta > 0
+        {
+            let mut rc = RollupConfig {
+                handler: RollupHandler::Wrapped(rollup_increase_pure),
+                end: 70000,
+                step: Duration::from_millis(10000),
+                max_points_per_series: 10_000,
+                lookback_delta: Duration::from_millis(30000),
+                ..Default::default()
+            };
+            rc.ensure_timestamps().expect("failed to ensure timestamps");
+            let mut dst_values: Vec<f64> = vec![];
+            let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+            assert_eq!(samples_scanned, 8);
+            let values_expected = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+            let timestamps_expected = vec![0, 10000, 20000, 30000, 40000, 50000, 60000, 70000];
+            test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
+        }
+    }
+
+    #[test]
+    fn test_rollup_increase_pure_with_staleness_staleness_marker() {
+        let timestamps = vec![0, 15000, 30000, 70000];
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+
+        // Test case: staleness marker
+        let timestamps = vec![0, 10000, 20000, 30000, 40000];
+        let values = vec![1.0, 1.0, 1.0, NAN, 1.0];
+        let mut rc = RollupConfig {
+            handler: RollupHandler::Wrapped(rollup_increase_pure),
+            start: 0,
+            end: 40000,
+            step: Duration::from_millis(10000),
+            max_points_per_series: 10_000,
+            ..Default::default()
+        };
+        rc.ensure_timestamps().expect("failed to ensure timestamps");
+        let mut dst_values: Vec<f64> = vec![];
+        let samples_scanned = rc.exec_internal(&mut dst_values, None, &values, &timestamps).expect("failed to exec");
+
+        assert_eq!(samples_scanned, 10);
+        let values_expected = vec![1.0, 0.0, 0.0, NAN, 1.0];
+        let timestamps_expected = vec![0, 10000, 20000, 30000, 40000];
+        test_rows_equal(&dst_values, &timestamps, &values_expected, &timestamps_expected);
     }
 
     #[test]
