@@ -300,7 +300,6 @@ fn parse_ident_expr(p: &mut Parser) -> ParseResult<Expr> {
             if kind.is_operator() {
                 return handle_metric_expression(p);
             }
-            // todo: check if we're parsing WITH
         }
     }
 

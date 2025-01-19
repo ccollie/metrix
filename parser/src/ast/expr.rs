@@ -1450,7 +1450,7 @@ impl BinaryExpr {
 
     fn get_op_matching_string(&self) -> String {
         match &self.modifier {
-            Some(modifier) => format!("{}{modifier}", self.op),
+            Some(modifier) => format!("{} {modifier}", self.op),
             None => self.op.to_string(),
         }
     }

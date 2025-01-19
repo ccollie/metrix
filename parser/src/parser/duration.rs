@@ -10,7 +10,7 @@ const MILLIS_PER_WEEK: f64 = 7.0 * MILLIS_PER_DAY;
 const MILLIS_PER_YEAR: f64 = 365.0 * MILLIS_PER_DAY;
 
 
-/// positive_duration_value returns positive duration in milliseconds for the given s
+/// `positive_duration_value` returns positive duration in milliseconds for the given s
 /// and the given step.
 ///
 /// Duration in s may be combined, i.e. 2h5m or 2h-5m.
@@ -27,7 +27,7 @@ pub fn positive_duration_value(s: &str, step: i64) -> Result<i64, ParseError> {
     Ok(d)
 }
 
-/// parse_duration_value returns the duration in milliseconds for the given s
+/// `parse_duration_value` returns the duration in milliseconds for the given s
 /// and the given step.
 ///
 /// Duration in s may be combined, i.e. 2h5m, -2h5m or 2h-5m.

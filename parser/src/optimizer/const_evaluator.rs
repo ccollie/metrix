@@ -1,11 +1,11 @@
-use std::time::Duration;
 use num_traits::FloatConst;
+use std::time::Duration;
 
 use metricsql_common::prelude::{datetime_part, timestamp_secs_to_utc_datetime, DateTimePart};
 
 use crate::ast::{
     AggregationExpr, BinaryExpr, DurationExpr, Expr, FunctionExpr, NumberLiteral, Operator,
-    ParensExpr, RollupExpr, UnaryExpr
+    ParensExpr, RollupExpr, UnaryExpr,
 };
 use crate::binaryop::{scalar_binary_operation, string_compare};
 use crate::common::{RewriteRecursion, TreeNodeRewriter};
@@ -66,7 +66,7 @@ impl TreeNodeRewriter for ConstEvaluator {
 
     fn mutate(&mut self, expr: Expr) -> ParseResult<Expr> {
         match self.can_evaluate.pop() {
-            Some(true) => evaluate_to_scalar(expr),
+            Some(true) => Ok(const_simplify(expr)),
             Some(false) => Ok(expr),
             // todo: specific optimize error
             _ => Err(ParseError::General(
@@ -110,69 +110,91 @@ pub(super) fn can_evaluate(expr: &Expr) -> bool {
     }
 }
 
-pub fn const_simplify(expr: Expr) -> ParseResult<Expr> {
+pub fn const_simplify(expr: Expr) -> Expr {
     match expr {
         Expr::UnaryOperator(uo) => handle_unary_expr(uo),
-        Expr::BinaryOperator(be) => handle_binary_expr(be),
+        Expr::BinaryOperator(_) => handle_binop_internal(expr),
         Expr::Function(fe) => handle_function_expr(fe),
         Expr::Aggregation(ae) => handle_aggregation_expr(ae),
         Expr::Rollup(re) => handle_rollup_expr(re),
         Expr::Parens(p) => {
-            let expressions = handle_expr_vecs(p.expressions)?;
-            Ok(Expr::Parens(ParensExpr { expressions }))
+            let mut expressions = handle_expr_vecs(p.expressions);
+            if expressions.len() == 1 {
+                return expressions.remove(0);
+            }
+            Expr::Parens(ParensExpr { expressions })
         }
-        _ => Ok(expr),
+        _ => expr,
     }
 }
 
-/// Internal helper to evaluate an Expr
-fn evaluate_to_scalar(expr: Expr) -> ParseResult<Expr> {
-    match expr {
-        Expr::UnaryOperator(ue) => handle_unary_expr(ue),
-        Expr::BinaryOperator(be) => handle_binary_expr(be),
-        Expr::Function(fe) => handle_function_expr(fe),
-        _ => Ok(expr),
-    }
-}
-
-fn handle_unary_expr(ue: UnaryExpr) -> ParseResult<Expr> {
+fn handle_unary_expr(ue: UnaryExpr) -> Expr {
     let mut ue = ue;
     match ue.expr.as_mut() {
         Expr::NumberLiteral(n) => {
-            return Ok(Expr::from(n.value * -1.0));
+            return Expr::from(n.value * -1.0);
         }
         Expr::Duration(d) => {
             return match d {
                 DurationExpr::Millis(left_val) => {
                     let dur = DurationExpr::new(*left_val * -1);
-                    Ok(Expr::Duration(dur))
+                    Expr::Duration(dur)
                 }
                 DurationExpr::StepValue(left_val) => {
                     let n = *left_val * -1.0;
                     let dur = DurationExpr::new_step(n);
-                    Ok(Expr::Duration(dur))
+                    Expr::Duration(dur)
                 }
             }
         }
         Expr::UnaryOperator(ue2) => {
-            return Ok(std::mem::take(&mut ue2.expr));
+            return std::mem::take(&mut ue2.expr);
         }
         _ => {}
     }
-    Ok(Expr::UnaryOperator(ue))
+    Expr::UnaryOperator(ue)
 }
 
-fn handle_binary_expr(be: BinaryExpr) -> ParseResult<Expr> {
+fn handle_binop_internal(be: Expr) -> Expr {
+    if let Expr::BinaryOperator(be) = be {
+        let left = if let Expr::BinaryOperator(_) = *be.left {
+            handle_binop_internal(*be.left)
+        } else {
+            const_simplify(*be.left)
+        };
+        let right = if let Expr::BinaryOperator(_) = *be.right {
+            handle_binop_internal(*be.right)
+        } else {
+            const_simplify(*be.right)
+        };
+        let new_be = BinaryExpr {
+            left: Box::new(left),
+            right: Box::new(right),
+            op: be.op,
+            modifier: be.modifier,
+        };
+        return handle_binary_expr(new_be)
+    }
+    be
+}
+
+fn handle_binary_expr(be: BinaryExpr) -> Expr {
     let is_bool = be.returns_bool();
 
     match (be.left.as_ref(), be.right.as_ref(), be.op) {
-        (Expr::Duration(ln), Expr::Duration(rn), op) if op == Operator::Add || op == Operator::Sub => {
+        (Expr::Duration(ln), Expr::Duration(rn), op)
+            if op == Operator::Add || op == Operator::Sub =>
+        {
             handle_duration_duration(ln, rn, op, is_bool)
         }
-        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op) if !ln.requires_step() && (op == Operator::Add || op == Operator::Sub) => {
+        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op)
+            if !ln.requires_step() && (op == Operator::Add || op == Operator::Sub) =>
+        {
             handle_duration_number(ln, *value, op, is_bool)
         }
-        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op) if ln.requires_step() && (op == Operator::Mul || op == Operator::Div) => {
+        (Expr::Duration(ln), Expr::NumberLiteral(NumberLiteral { value }), op)
+            if ln.requires_step() && (op == Operator::Mul || op == Operator::Div) =>
+        {
             handle_duration_step(ln, *value, op, is_bool)
         }
         (Expr::NumberLiteral(ln), Expr::NumberLiteral(rn), op) => {
@@ -181,69 +203,92 @@ fn handle_binary_expr(be: BinaryExpr) -> ParseResult<Expr> {
         (Expr::StringLiteral(left), Expr::StringLiteral(right), op) => {
             handle_string_string(left, right, op, is_bool)
         }
-        _ => Ok(Expr::BinaryOperator(be)),
+        _ => Expr::BinaryOperator(be),
     }
 }
 
-fn handle_duration_duration(ln: &DurationExpr, rn: &DurationExpr, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+
+fn handle_duration_duration(
+    ln: &DurationExpr,
+    rn: &DurationExpr,
+    op: Operator,
+    is_bool: bool,
+) -> Expr {
     match (ln, rn) {
-        (DurationExpr::Millis(left_val), DurationExpr::Millis(right_val)) => {
-            let n = scalar_binary_operation(*left_val as f64, *right_val as f64, op, is_bool)? as i64;
-            Ok(Expr::Duration(DurationExpr::new(n)))
+        (DurationExpr::Millis(left_val), DurationExpr::Millis(right_val))
+            if op == Operator::Add =>
+        {
+            let n = scalar_binary_operation(*left_val as f64, *right_val as f64, op, is_bool)
+                .expect("invalid duration duration binary op") as i64;
+            Expr::Duration(DurationExpr::new(n))
         }
-        (DurationExpr::StepValue(left_val), DurationExpr::StepValue(right_val)) => {
-            let n = scalar_binary_operation(*left_val, *right_val, op, is_bool)?;
-            Ok(Expr::Duration(DurationExpr::new_step(n)))
+        (DurationExpr::StepValue(left_val), DurationExpr::StepValue(right_val))
+            if op == Operator::Add || op == Operator::Sub =>
+        {
+            let n = scalar_binary_operation(*left_val, *right_val, op, is_bool)
+                .expect("invalid duration step value binary op");
+            Expr::Duration(DurationExpr::new_step(n))
         }
-        _ => Ok(Expr::BinaryOperator(BinaryExpr { left: Box::new(Expr::Duration(ln.clone())), right: Box::new(Expr::Duration(rn.clone())), op, modifier: None })),
+        _ => Expr::BinaryOperator(BinaryExpr {
+            left: Box::new(Expr::Duration(ln.clone())),
+            right: Box::new(Expr::Duration(rn.clone())),
+            op,
+            modifier: None,
+        }),
     }
 }
 
-fn handle_duration_number(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+fn handle_duration_number(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> Expr {
     let secs = value * 1e3_f64;
-    let n = scalar_binary_operation(ln.value(Duration::from_millis(1)) as f64, secs, op, is_bool)? as i64;
-    Ok(Expr::Duration(DurationExpr::new(n)))
+    let n = scalar_binary_operation(ln.value(Duration::from_millis(1)) as f64, secs, op, is_bool)
+        .expect("invalid duration binary operation");
+    Expr::Duration(DurationExpr::new(n as i64))
 }
 
-fn handle_duration_step(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+fn handle_duration_step(ln: &DurationExpr, value: f64, op: Operator, is_bool: bool) -> Expr {
     if let DurationExpr::StepValue(step_value) = ln {
-        let n = scalar_binary_operation(*step_value, value, op, is_bool)?;
-        Ok(Expr::Duration(DurationExpr::new_step(n)))
+        // panic should not happen for expressions constructed by the parser
+        let n = scalar_binary_operation(*step_value, value, op, is_bool)
+            .expect("binary operation failed");
+        Expr::Duration(DurationExpr::new_step(n))
     } else {
-        Ok(Expr::BinaryOperator(BinaryExpr { left: Box::new(Expr::Duration(ln.clone())), right: Box::new(Expr::NumberLiteral(NumberLiteral { value })), op, modifier: None }))
+        Expr::BinaryOperator(BinaryExpr {
+            left: Box::new(Expr::Duration(ln.clone())),
+            right: Box::new(Expr::NumberLiteral(NumberLiteral { value })),
+            op,
+            modifier: None,
+        })
     }
 }
 
-fn handle_number_number(ln: f64, rn: f64, op: Operator, is_bool: bool) -> ParseResult<Expr> {
-    let n = scalar_binary_operation(ln, rn, op, is_bool)?;
-    Ok(Expr::from(n))
+fn handle_number_number(ln: f64, rn: f64, op: Operator, is_bool: bool) -> Expr {
+    // properly constructed expressions (from the parser) should not panic
+    let n = scalar_binary_operation(ln, rn, op, is_bool).expect("binary operation failed");
+    Expr::from(n)
 }
 
-fn handle_string_string(left: &str, right: &str, op: Operator, is_bool: bool) -> ParseResult<Expr> {
+fn handle_string_string(left: &str, right: &str, op: Operator, is_bool: bool) -> Expr {
     if op == Operator::Add {
         if left.is_empty() {
-            return Ok(Expr::from(right));
+            return Expr::from(right);
         } else if right.is_empty() {
-            return Ok(Expr::from(left));
+            return Expr::from(left);
         }
         let mut res = String::with_capacity(left.len() + right.len());
         res += left;
         res += right;
-        Ok(Expr::from(res))
+        Expr::from(res)
     } else if op.is_comparison() {
-        let n = string_compare(left, right, op, is_bool)?;
-        Ok(Expr::from(n))
+        // comparison checked in condition, so panic is not possible
+        let n = string_compare(left, right, op, is_bool).expect("string compare failed");
+        Expr::from(n)
     } else {
-        Ok(
-            Expr::BinaryOperator(
-                BinaryExpr { 
-                    left: Box::new(Expr::from(left)),
-                    right: Box::new(Expr::from(right)),
-                    op, 
-                    modifier: None 
-                }
-            )
-        )
+        Expr::BinaryOperator(BinaryExpr {
+            left: Box::new(Expr::from(left)),
+            right: Box::new(Expr::from(right)),
+            op,
+            modifier: None,
+        })
     }
 }
 
@@ -256,29 +301,45 @@ fn get_single_scalar_arg(fe: &FunctionExpr) -> Option<f64> {
     None
 }
 
-fn handle_function_expr(fe: FunctionExpr) -> ParseResult<Expr> {
+fn handle_function_expr(mut fe: FunctionExpr) -> Expr {
     let arg_count = fe.args.len();
     match fe.function {
         BuiltinFunction::Transform(func) if arg_count == 1 && func == TransformFunction::Scalar => {
-            if let Some(value) = handle_scalar_fn(&fe.args[0]) {
-                return Ok(Expr::from(value));
+            let arg = &fe.args[0];
+            match arg {
+                // Verify whether the arg is a string.
+                // Then try converting the string to number.
+                Expr::StringLiteral(s) => {
+                    let n = parse_number(s).unwrap_or(f64::NAN);
+                    Expr::from(n)
+                }
+                Expr::NumberLiteral(n) => Expr::from(n.value),
+                _ => {
+                    let expr = const_simplify(arg.clone());
+                    // `Scalar(q)` returns q if q contains only a single time series. Otherwise, it returns nothing.
+                    // It's difficult to determine if a time series is a single time series from a vector selector.
+                    match expr {
+                        Expr::NumberLiteral(_) | Expr::Duration(_) | Expr::StringLiteral(_) => expr,
+                        Expr::BinaryOperator(_) => handle_binop_internal(expr),
+                        Expr::Function(_) => Expr::Function(fe),
+                        _ => Expr::Function(fe),
+                    }
+                }
             }
-            Ok(Expr::Function(fe))
         }
         BuiltinFunction::Transform(func) if arg_count == 1 && func == TransformFunction::Vector => {
             let mut fe = fe;
-            let arg = fe.args.remove(0);
-            Ok(arg)
+            fe.args.remove(0)
         }
         BuiltinFunction::Transform(func) => {
             use TransformFunction::*;
 
             if func == Pi && arg_count == 0 {
-                return Ok(Expr::from(f64::PI()));
+                return Expr::from(f64::PI());
             }
             let arg = get_single_scalar_arg(&fe);
             if arg.is_none() {
-                return Ok(Expr::Function(fe));
+                return Expr::Function(fe);
             }
             let arg = arg.unwrap();
             let mut valid = true;
@@ -320,12 +381,12 @@ fn handle_function_expr(fe: FunctionExpr) -> ParseResult<Expr> {
                 }
             };
             if valid {
-                Ok(Expr::from(value))
+                Expr::from(value)
             } else {
-                Ok(Expr::Function(fe.clone()))
+                Expr::Function(fe.clone())
             }
         }
-        _ => Ok(Expr::Function(fe)),
+        _ => Expr::Function(fe),
     }
 }
 
@@ -341,30 +402,17 @@ pub(crate) fn extract_datetime_part(epoch_secs: f64, part: DateTimePart) -> f64 
     f64::NAN
 }
 
-fn handle_scalar_fn(arg: &Expr) -> Option<f64> {
-    match arg {
-        // Verify whether the arg is a string.
-        // Then try converting the string to number.
-        Expr::StringLiteral(s) => {
-            let n = parse_number(s).unwrap_or(f64::NAN);
-            Some(n)
-        }
-        Expr::NumberLiteral(n) => Some(n.value),
-        _ => None,
-    }
-}
-
-fn handle_aggregation_expr(ae: AggregationExpr) -> ParseResult<Expr> {
-    let args = handle_expr_vecs(ae.args)?;
+fn handle_aggregation_expr(ae: AggregationExpr) -> Expr {
+    let args = handle_expr_vecs(ae.args);
     let new_aggregation = AggregationExpr { args, ..ae };
-    Ok(Expr::Aggregation(new_aggregation))
+    Expr::Aggregation(new_aggregation)
 }
 
-fn handle_rollup_expr(re: RollupExpr) -> ParseResult<Expr> {
-    let expr = const_simplify(*re.expr)?;
+fn handle_rollup_expr(re: RollupExpr) -> Expr {
+    let expr = const_simplify(*re.expr);
     let at = if let Some(at) = re.at {
         if can_evaluate(&at) {
-            let simplified = const_simplify(*at)?;
+            let simplified = const_simplify(*at);
             Some(Box::new(simplified))
         } else {
             None
@@ -377,13 +425,11 @@ fn handle_rollup_expr(re: RollupExpr) -> ParseResult<Expr> {
         at,
         ..re
     };
-    Ok(Expr::Rollup(new_expr))
+    Expr::Rollup(new_expr)
 }
 
-fn handle_expr_vecs(args: Vec<Expr>) -> ParseResult<Vec<Expr>> {
-    args.into_iter()
-        .map(const_simplify)
-        .collect::<ParseResult<Vec<Expr>>>()
+fn handle_expr_vecs(args: Vec<Expr>) -> Vec<Expr> {
+    args.into_iter().map(const_simplify).collect::<Vec<Expr>>()
 }
 
 #[cfg(test)]
@@ -392,7 +438,6 @@ mod tests {
 
     use crate::ast::binary_expr;
     use crate::ast::utils::{expr_equals, lit, number, selector};
-    use crate::common::TreeNode;
     use crate::parser::parse;
 
     use super::*;
@@ -401,16 +446,28 @@ mod tests {
     // --- ConstEvaluator tests -----
     // ------------------------------
     fn test_const_simplify(input_expr: Expr, expected_expr: Expr) {
-        let mut const_evaluator = ConstEvaluator::new();
-        let evaluated_expr = input_expr
-            .clone()
-            .rewrite(&mut const_evaluator)
-            .expect("successfully evaluated");
-
+        let evaluated_expr = const_simplify(input_expr.clone());
         assert!(
             expr_equals(&evaluated_expr, &expected_expr),
             "Mismatch evaluating {input_expr}\n  Expected:{expected_expr}\n  Got:{evaluated_expr}"
         );
+    }
+
+    fn set_bool_modifier(expr: Expr) -> Expr {
+        match expr {
+            Expr::BinaryOperator(mut be) => Expr::BinaryOperator(be.with_bool_modifier()),
+            _ => expr,
+        }
+    }
+
+    fn remove_bool_modifier(expr: Expr) -> Expr {
+        match expr {
+            Expr::BinaryOperator(mut be) => {
+                be.modifier = None;
+                Expr::BinaryOperator(be)
+            },
+            _ => expr,
+        }
     }
 
     #[test]
@@ -422,19 +479,14 @@ mod tests {
         // true or false --> true
         test_const_simplify(number(1.0).or(number(0.0)), number(1.0));
 
-        // "foo" == "foo" --> true
-        test_const_simplify(lit("foo").eq(lit("foo")), number(1.0));
-        // "foo" != "foo" --> false
-        test_const_simplify(lit("foo").not_eq(lit("foo")), number(0.0));
-
-        // c = 1 --> c = 1
+        // c == 1 --> c == 1
         test_const_simplify(selector("c").eq(number(1.0)), selector("c").eq(number(1.0)));
         // c = 1 + 2 --> c + 3
         test_const_simplify(
             selector("c").eq(number(1.0) + number(2.0)),
             selector("c").eq(number(3.0)),
         );
-        // (foo != foo) OR (c = 1) --> false OR (c = 1)
+        // (foo != foo) OR (c == 1) --> false OR (c == 1)
         test_const_simplify(
             lit("foo")
                 .not_eq(lit("foo"))
@@ -448,31 +500,35 @@ mod tests {
         // "foo" + "bar" --> "foobar"
         test_const_simplify(lit("foo") + lit("bar"), lit("foobar"));
 
-        // "foo" == "foo" --> true
+        // "foo" == bool "foo" --> 1.0
         test_const_simplify(lit("foo").eq(lit("foo")), number(1.0));
 
-        // "foo" != "foo" --> false
+        // "foo" != bool "foo" --> 0.0
         test_const_simplify(lit("foo").not_eq(lit("foo")), number(0.0));
+        // "foo" != "foo" --> NAN
+        test_const_simplify(remove_bool_modifier(lit("foo").not_eq(lit("foo"))), number(f64::NAN));
 
-        // "foo" != "bar" --> false
+        // "foo" != bool "bar" --> 1.0
         test_const_simplify(lit("foo").not_eq(lit("bar")), number(1.0));
 
-        // "foo" > "bar" --> true
+        // "foo" > bool "bar" --> 1.0
         test_const_simplify(lit("foo").gt(lit("bar")), number(1.0));
 
-        // "foo" < "bar" --> false
+        // "foo" < bool "bar" --> 0.0
         test_const_simplify(lit("foo").lt(lit("bar")), number(0.0));
+        // "foo" < "bar" --> NAN
+        test_const_simplify(remove_bool_modifier(lit("foo").lt(lit("bar"))), number(f64::NAN));
 
-        // "foo" >= "foo" --> true
+        // "foo" >= bool "foo" --> 1.0
         test_const_simplify(lit("foo").gt_eq(lit("foo")), number(1.0));
 
-        // "foo_99" >= "foo" --> true
+        // "foo_99" >= bool "foo" --> 1.0
         test_const_simplify(lit("foo_99").gt_eq(lit("foo")), number(1.0));
 
-        // "foo" <= "foo1" --> true
+        // "foo" <= bool "foo1" --> 1.0
         test_const_simplify(lit("foo").lt_eq(lit("foo1")), number(1.0));
 
-        // "foo" <= "foo" --> true
+        // "foo" <= bool "foo" --> 1.0
         test_const_simplify(lit("foo").lt_eq(lit("foo")), number(1.0));
     }
 
@@ -628,28 +684,30 @@ mod tests {
         let expr = binary_expr(left, Operator::Div, right);
         let expected = duration_step(2.5);
         test_const_simplify(expr, expected);
+    }
 
+    #[test]
+    fn test_duration_plus_duration() {
         // duration(millis) + duration(millis)
         let left = duration_millis(1000);
         let right = duration_millis(2500);
         let expr = binary_expr(left, Operator::Add, right);
         let expected = duration_millis(3500);
         test_const_simplify(expr, expected);
+    }
 
-        // duration(millis) - duration(millis)
-        let left = duration_millis(1000);
-        let right = duration_millis(2500);
-        let expr = binary_expr(left, Operator::Sub, right);
-        let expected = duration_millis(-1500);
-        test_const_simplify(expr, expected);
-
+    #[test]
+    fn test_duration_plus_number() {
         // duration(millis) + number
         let left = duration_millis(1000);
         let right = number(2.0);
         let expr = binary_expr(left, Operator::Add, right);
         let expected = duration_millis(3000);
         test_const_simplify(expr, expected);
+    }
 
+    #[test]
+    fn test_duration_minus_number() {
         // duration(millis) - number
         let left = duration_millis(1000);
         let right = number(2.0);
