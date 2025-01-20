@@ -1285,6 +1285,14 @@ impl Prettier for RollupExpr {
 }
 
 /// BinaryOpExpr represents a binary operation.
+///
+/// Grammar:
+/// ``` norust
+/// <vector expr> <bin-op> ignoring(<label list>) group_left(<label list>) <vector expr>
+/// <vector expr> <bin-op> ignoring(<label list>) group_right(<label list>) <vector expr>
+/// <vector expr> <bin-op> on(<label list>) group_left(<label list>) <vector expr>
+/// <vector expr> <bin-op> on(<label list>) group_right(<label list>) <vector expr>
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct BinaryExpr {
     /// `left` contains left arg for the `left op right` expression.
@@ -1296,7 +1304,7 @@ pub struct BinaryExpr {
     /// `op` is the operation itself, i.e. `+`, `-`, `*`, etc.
     pub op: Operator,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub modifier: Option<BinModifier>,
 }
 
