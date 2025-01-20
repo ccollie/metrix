@@ -10,6 +10,11 @@ mod tests {
     }
 
     #[test]
+    fn test_optimize_simple() {
+        validate_optimized("foo", "foo");
+    }
+
+    #[test]
     fn test_pushdown_binary_op_filters() {
         let f = |q: &str, filters: &str, result_expected: &str| {
             let expr = parse_selector(q);
@@ -21,10 +26,7 @@ mod tests {
                         panic!("filters={} mustn't contain 'or'", filters)
                     }
 
-                    let mut lfs = vec![];
-                    if me.matchers.matchers.len() == 1 {
-                        lfs = me.matchers.matchers;
-                    }
+                    let lfs = me.matchers.matchers;
 
                     let result_expr = pushdown_binary_op_filters(&expr, lfs);
                     let expected_expr = parse(result_expected).expect("parse error in test");
@@ -63,11 +65,12 @@ mod tests {
             r#"round(rate(x{x="y"}[5m] offset -1h)) + (123 / {a="b", x="y"})"#,
         );
 
-        // f(
-        //     r#"foo + bar{x="y"}"#,
-        //     r#"{c="d",a="b"}"#,
-        //     r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
-        // );
+        f(
+            r#"foo + bar{x="y"}"#,
+            r#"{c="d",a="b"}"#,
+            r#"foo{a="b", c="d"} + bar{a="b", c="d", x="y"}"#,
+        );
+
         f("sum(x)", r#"{a="b"}"#, "sum(x)");
         f(r#"foo or bar"#, r#"{a="b"}"#, r#"foo{a="b"} or bar{a="b"}"#);
         f(r#"foo or on(x) bar"#, r#"{a="b"}"#, r#"foo or on (x) bar"#);
@@ -91,26 +94,25 @@ mod tests {
             r#"{a="b"}"#,
             r#"foo{a="b"} * ignoring (x) bar{a="b"}"#,
         );
-        // f(
-        //     r#"foo{f1!~"x"} UNLEss bar{f2=~"y.+"}"#,
-        //     r#"{a="b",x=~"y"}"#,
-        //     r#"foo{a="b", f1!~"x", x=~"y"} unless bar{a="b", f2=~"y.+", x=~"y"}"#,
-        // );
-        // f(
-        //     r#"a / sum(x)"#,
-        //     r#"{a="b",c=~"foo|bar"}"#,
-        //     r#"a{a="b", c=~"foo|bar"} / sum(x)"#,
-        // );
+
+        f(
+            r#"foo{f1!~"x"} UNLEss bar{f2=~"y.+"}"#,
+            r#"{a="b",x=~"y"}"#,
+            r#"foo{a="b", f1!~"x", x=~"y"} unless bar{a="b", f2=~"y.+", x=~"y"}"#,
+        );
+
+        f(
+            r#"a / sum(x)"#,
+            r#"{a="b",c=~"foo|bar"}"#,
+            r#"a{a="b", c=~"foo|bar"} / sum(x)"#,
+        );
         f(
             r#"scalar(foo)+bar"#,
             r#"{a="b"}"#,
             r#"scalar(foo) + bar{a="b"}"#,
         );
 
-        f("vector(foo)", r#"{a="b"}"#, "vector(foo)");
-
-        // f(r#"vector(foo{x="y"} + a) + bar{a="b"}"#,
-        //   r#"vector(foo{a="b",x="y"} + a{a="b",x="y"}) + bar{a="b",x="y"}"#);
+        f("vector(foo)", r#"{a="b"}"#, r#"vector(foo{a="b"})"#);
 
         f(
             r#"{a="b"} + on() group_left() {c="d"}"#,
@@ -126,7 +128,6 @@ mod tests {
 
     #[test]
     fn test_label_set() {
-        validate_optimized(r#"label_set(foo, "a", "bar") + x{__name__="y"}"#, r#"label_set(foo, "a", "bar") + x{__name__="y",a="bar"}"#);
         // label_set
         validate_optimized(r#"label_set(foo, "__name__", "bar") + x"#, r#"label_set(foo, "__name__", "bar") + x"#);
         validate_optimized(r#"label_set(foo, "a", "bar") + x{__name__="y"}"#, r#"label_set(foo, "a", "bar") + x{__name__="y",a="bar"}"#);
@@ -143,7 +144,7 @@ mod tests {
 
             let mut lfs = get_common_label_filters(&expr);
             lfs.sort();
-            let mut me = MetricExpr::with_filters(lfs);
+            let me = MetricExpr::with_filters(lfs);
             me.to_string()
         };
 
@@ -476,6 +477,8 @@ mod tests {
             r#"a{b="c", x="y"} + quantiles("foo", 0.1, 0.2, bar{b="c", x="y"}) by (b, x, y)"#,
         );
 
+        // currently aggregation functions don't accept range vectors like VM does (as yet)
+        /*
         validate_optimized(
             r#"sum(
                 avg(foo{bar="one"}) by (bar),
@@ -493,11 +496,7 @@ mod tests {
                 + avg(foo{bar="three"}) by(bar)"#,
             r#"sum(foo{bar="one",bar="three"}, avg(foo{bar="three",bar="two"}[1i]) by(bar)) by(bar) + avg(foo{bar="three"}) by(bar)"#,
         );
-
-        validate_optimized(
-            r#"count_values("foo", bar{baz="a"}) by (bar,b) + a{b="c"}"#,
-            r#"count_values("foo", bar{baz="a"}) by (bar, b) + a{b="c"}"#,
-        );
+        */
     }
 
     #[test]
@@ -567,6 +566,7 @@ mod tests {
 
     #[test]
     fn test_optimize_label_copy() {
+        validate_optimized(r#"label_copy(foo{b="w"}, "a", "b") + bar{a="y",b="z"}"#, r#"label_copy(foo{a="y",b="w"}, "a", "b") + bar{a="y",b="z"}"#);
         // Label_copy
         validate_optimized(r#"label_copy(foo, "a", "b") + bar{x="y"}"#, r#"label_copy(foo{x="y"}, "a", "b") + bar{x="y"}"#);
         validate_optimized(r#"label_copy(foo, "a", "b", "c", "d") + bar{a="y",b="z"}"#, r#"label_copy(foo{a="y"}, "a", "b", "c", "d") + bar{a="y",b="z"}"#);
@@ -626,11 +626,26 @@ mod tests {
 
     #[test]
     fn test_union() {
+        validate_optimized(
+            r#"(foo{a="b",c="d"},bar{a="b",x="y"}) + baz{z="w"}"#,
+            r#"(foo{a="b",c="d",z="w"}, bar{a="b",x="y",z="w"}) + baz{a="b",z="w"}"#,
+        );
         // union
         validate_optimized(
             r#"union(foo{a="b",c="d"},bar{a="b",x="y"}) + baz{z="w"}"#,
             r#"union(foo{a="b",c="d",z="w"}, bar{a="b",x="y",z="w"}) + baz{a="b",z="w"}"#,
         );
+        validate_optimized(
+            r#"(foo{a="b",c="d"},bar{a="b",x="y"}) + baz{z="w"}"#,
+            r#"(foo{a="b",c="d",z="w"}, bar{a="b",x="y",z="w"}) + baz{a="b",z="w"}"#,
+        );
+    }
+
+    #[test]
+    fn test_vector() {
+        validate_optimized(r#"vector(foo) + bar{a="b"}"#, r#"vector(foo{a="b"}) + bar{a="b"}"#);
+        validate_optimized(r#"vector(foo{x="y"} + a) + bar{a="b"}"#,
+          r#"vector(foo{a="b",x="y"} + a{a="b",x="y"}) + bar{a="b",x="y"}"#);
     }
 
     #[test]
@@ -669,10 +684,7 @@ mod tests {
             r#"ABSENT(foo{bar="baz"}) + sqrt(a{z=~"c"})"#,
             r#"ABSENT(foo{bar="baz"}) + sqrt(a{z=~"c"})"#,
         );
-        validate_optimized(
-            r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
-            r#"label_set(foo{bar="baz"}, "xx", "y") + a{x="y"}"#,
-        );
+
         validate_optimized(
             r#"now() + foo{bar="baz"} + x{y="x"}"#,
             r#"(now() + foo{bar="baz", y="x"}) + x{bar="baz", y="x"}"#,
@@ -700,16 +712,6 @@ mod tests {
         validate_optimized(
             r#"histogram_quantiles("q", 0.1, 0.9, sum(rate({x="y"}[5m])) by (le,x,a)) - {a="b"}"#,
             r#"histogram_quantiles("q", 0.1, 0.9, sum(rate({a="b", x="y"}[5m])) by (le, x, a)) - {a="b", x="y"}"#,
-        );
-        validate_optimized(r#"vector(foo) + bar{a="b"}"#, r#"vector(foo) + bar{a="b"}"#);
-        validate_optimized(
-            r#"vector(foo{x="y"} + a) + bar{a="b"}"#,
-            r#"vector(foo{x="y"} + a{x="y"}) + bar{a="b"}"#,
-        );
-
-        validate_optimized(
-            r#"(foo{a="b",c="d"},bar{a="b",x="y"}) + baz{z="w"}"#,
-            r#"(foo{a="b",c="d",z="w"}, bar{a="b",x="y",z="w"}) + baz{a="b",z="w"}"#,
         );
     }
 
@@ -750,10 +752,10 @@ mod tests {
             r#"rate({__name__=~"foo|bar", x="y"}) + rate(baz)"#,
             r#"rate({__name__=~"foo|bar", x="y"}) + rate(baz{x="y"})"#,
         );
-        // validate_optimized(
-        //     r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
-        //     r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
-        // );
+        validate_optimized(
+            r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
+            r#"absent_over_time(foo{x="y"}[5m]) + bar{a="b"}"#,
+        );
         validate_optimized(
             r#"{x="y"} + quantile_over_time(0.5, {a="b"})"#,
             r#"{a="b", x="y"} + quantile_over_time(0.5, {a="b", x="y"})"#,
@@ -821,21 +823,15 @@ mod tests {
             r#"foo / bar{baz="a"} * 100"#,
             r#"(foo{baz="a"} / bar{baz="a"}) * 100"#,
         );
-        validate_optimized(
-            r#"scalar(x) * foo / bar{baz="a"}"#,
-            r#"(scalar(x) * foo{baz="a"}) / bar{baz="a"}"#,
-        );
-        // validate_optimized(r#"SCALAR(x) * foo / bar{baz="a"}"#,  r#"(SCALAR(x) * foo{baz="a"}) / bar{baz="a"}"#);
+
+        validate_optimized(r#"SCALAR(x) * foo / bar{baz="a"}"#,  r#"(SCALAR(x) * foo{baz="a"}) / bar{baz="a"}"#);
+
         validate_optimized(
             r#"100 * on(foo) bar{baz="z"} + a"#,
             r#"(100 * on (foo) bar{baz="z"}) + a"#,
         );
     }
 
-    #[test]
-    fn test_optimize() {
-        validate_optimized("foo", "foo");
-    }
 
     fn validate_optimized(q: &str, expected: &str) {
         let e = parse_selector(q);

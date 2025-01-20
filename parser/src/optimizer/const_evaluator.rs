@@ -183,7 +183,7 @@ fn handle_binary_expr(be: BinaryExpr) -> Expr {
 
     match (be.left.as_ref(), be.right.as_ref(), be.op) {
         (Expr::Duration(ln), Expr::Duration(rn), op)
-            if op == Operator::Add || op == Operator::Sub =>
+            if op == Operator::Add =>
         {
             handle_duration_duration(ln, rn, op, is_bool)
         }
@@ -301,7 +301,7 @@ fn get_single_scalar_arg(fe: &FunctionExpr) -> Option<f64> {
     None
 }
 
-fn handle_function_expr(mut fe: FunctionExpr) -> Expr {
+fn handle_function_expr(fe: FunctionExpr) -> Expr {
     let arg_count = fe.args.len();
     match fe.function {
         BuiltinFunction::Transform(func) if arg_count == 1 && func == TransformFunction::Scalar => {
@@ -315,13 +315,13 @@ fn handle_function_expr(mut fe: FunctionExpr) -> Expr {
                 }
                 Expr::NumberLiteral(n) => Expr::from(n.value),
                 _ => {
-                    let expr = const_simplify(arg.clone());
+                    let mut expr = const_simplify(arg.clone());
                     // `Scalar(q)` returns q if q contains only a single time series. Otherwise, it returns nothing.
                     // It's difficult to determine if a time series is a single time series from a vector selector.
                     match expr {
                         Expr::NumberLiteral(_) | Expr::Duration(_) | Expr::StringLiteral(_) => expr,
                         Expr::BinaryOperator(_) => handle_binop_internal(expr),
-                        Expr::Function(_) => Expr::Function(fe),
+                        Expr::Function(fe1) => handle_function_expr(fe1),
                         _ => Expr::Function(fe),
                     }
                 }

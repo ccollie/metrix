@@ -22,10 +22,11 @@ use std::ops::Deref;
 
 use crate::ast::utils::{expr_contains, is_null, is_one, is_op_with, is_zero};
 use crate::ast::{BinaryExpr, Expr, Operator};
+use crate::ast::Operator::{Add, And, Div, Mod, Mul, Or};
 use crate::common::{RewriteRecursion, TreeNode, TreeNodeRewriter};
 use crate::optimizer::const_evaluator::ConstEvaluator;
 use crate::optimizer::push_down_filters::{can_pushdown_filters, optimize_in_place};
-use crate::optimizer::remove_parens_expr;
+use crate::optimizer::remove_parens;
 use crate::parser::{ParseError, ParseResult};
 use crate::prelude::BuiltinFunction;
 
@@ -89,7 +90,7 @@ impl ExprSimplifier {
         let mut simplifier = Simplifier::new();
         let mut const_evaluator = ConstEvaluator::new();
 
-        let expr = remove_parens_expr(expr);
+        let expr = remove_parens(expr);
 
         // TODO iterate until no changes are made during rewrite
         // (evaluating constants can enable new simplifications and
@@ -203,24 +204,17 @@ impl Simplifier {
     pub fn new() -> Self {
         Self {}
     }
-}
 
-// see https://prometheus.io/docs/prometheus/latest/querying/operators/
-
-impl TreeNodeRewriter for Simplifier {
-    type N = Expr;
-
-    /// rewrite the expression simplifying any constant expressions
-    fn mutate(&mut self, expr: Expr) -> ParseResult<Expr> {
+    pub fn simplify(&self, expr: Expr) -> Expr {
         use Operator::{Add, And, Div, Mod, Mul, Or};
 
-        let new_expr = match expr {
+        match expr {
             Expr::BinaryOperator(BinaryExpr {
-                left,
-                right,
-                op,
-                modifier,
-            }) => {
+                                     left,
+                                     right,
+                                     op,
+                                     modifier,
+                                 }) => {
                 match op {
                     //
                     // Rules for Add
@@ -245,15 +239,15 @@ impl TreeNodeRewriter for Simplifier {
                             left.deref(),
                             Expr::MetricExpression(_) | Expr::Rollup(_) | Expr::Aggregation(_)
                         ) =>
-                    {
-                        let two = Expr::from(2.0);
-                        Expr::BinaryOperator(BinaryExpr {
-                            right: Box::new(two),
-                            left,
-                            op: Mul,
-                            modifier,
-                        })
-                    }
+                        {
+                            let two = Expr::from(2.0);
+                            Expr::BinaryOperator(BinaryExpr {
+                                right: Box::new(two),
+                                left,
+                                op: Mul,
+                                modifier,
+                            })
+                        }
 
                     // Rules for OR
                     //
@@ -330,12 +324,12 @@ impl TreeNodeRewriter for Simplifier {
                             }
                         }
                         if should_keep_metric_names {
-                            return Ok(Expr::BinaryOperator(BinaryExpr {
+                            return Expr::BinaryOperator(BinaryExpr {
                                 left,
                                 right,
                                 op,
                                 modifier,
-                            }));
+                            });
                         }
 
                         Expr::from(f64::NAN)
@@ -372,9 +366,18 @@ impl TreeNodeRewriter for Simplifier {
                 }
             }
             expr => expr,
-        };
+        }
+    }
+}
 
-        Ok(new_expr)
+// see https://prometheus.io/docs/prometheus/latest/querying/operators/
+
+impl TreeNodeRewriter for Simplifier {
+    type N = Expr;
+
+    /// rewrite the expression simplifying any constant expressions
+    fn mutate(&mut self, expr: Expr) -> ParseResult<Expr> {
+        Ok(self.simplify(expr))
     }
 }
 

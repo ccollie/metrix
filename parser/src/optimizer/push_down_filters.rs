@@ -115,7 +115,7 @@ pub fn get_common_label_filters(e: &Expr) -> Vec<Matcher> {
                 },
                 _ => {}
             }
-            if let Some(arg) = fe.arg_for_optimization() {
+            if let Ok(Some(arg)) = get_func_arg_for_optimization(fe.function, &fe.args) {
                 get_common_label_filters(arg)
             } else {
                 vec![]
@@ -147,6 +147,7 @@ pub fn get_common_label_filters(e: &Expr) -> Vec<Matcher> {
             }
         }
         UnaryOperator(unary) => get_common_label_filters(&unary.expr),
+        Parens(p) => intersect_label_filters_for_all_args(&p.expressions),
         BinaryOperator(binary) => {
             let mut lfs_left = get_common_label_filters(&binary.left);
             let mut lfs_right = get_common_label_filters(&binary.right);
@@ -260,17 +261,25 @@ fn get_common_label_filters_for_label_del(args: &[Expr]) -> Vec<Matcher> {
         return vec![];
     }
     let lfs = get_common_label_filters(&args[0]);
+    if lfs.is_empty() {
+        return vec![];
+    }
     drop_label_filters_for_label_names(&lfs, args[1..].iter())
 }
 
 /// Gets common label filters for `label_copy`.
 fn get_common_label_filters_for_label_copy(args: &[Expr]) -> Vec<Matcher> {
-    if args.len() > 1 {
+    if args.is_empty() {
         return Vec::new();
     }
 
     let lfs = get_common_label_filters(&args[0]);
-    let label_names  = args.iter().skip(1).step_by(2);
+
+    if lfs.is_empty() {
+        return Vec::new();
+    }
+
+    let label_names  = args.iter().skip(2).step_by(2);
 
     drop_label_filters_for_label_names(&lfs, label_names)
 }
@@ -456,7 +465,6 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
             }
             if !me.matchers.matchers.is_empty() {
                 union_label_filters_internal(&mut me.matchers.matchers, common_filters);
-                // union_label_filters_internal(&mut me.matchers.matchers, &common_filters);
             } else if !me.matchers.or_matchers.is_empty() {
                 for matcher in me.matchers.or_matchers.iter_mut() {
                     union_label_filters_internal(matcher, &common_filters);
@@ -471,13 +479,8 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
             use TransformFunction::*;
 
             match fe.function {
-                BuiltinFunction::Rollup(rf) => {
-                    if rf == RollupFunction::CountValuesOverTime {
-                        return pushdown_label_filters_for_count_values_over_time(
-                            &mut fe.args,
-                            common_filters,
-                        );
-                    }
+                BuiltinFunction::Rollup(rf) if rf == RollupFunction::CountValuesOverTime => {
+                    return pushdown_label_filters_for_count_values_over_time(&mut fe.args, common_filters);
                 }
                 Transform(tf) => match tf {
                     LabelSet => {
@@ -505,7 +508,7 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
                 },
                 _ => {}
             }
-            if let Some(idx) = fe.arg_idx_for_optimization() {
+            if let Ok(Some(idx)) = get_func_arg_idx_for_optimization(fe.function, &fe.args) {
                 if let Some(val) = fe.args.get_mut(idx) {
                     push_down_binary_op_filters_in_place(val, common_filters);
                 }
@@ -538,6 +541,9 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
         }
         Rollup(re) => {
             push_down_binary_op_filters_in_place(&mut re.expr, common_filters);
+        }
+        Parens(p) => {
+            pushdown_label_filters_for_all_args(common_filters, &mut p.expressions)
         }
         _ => {
         }
@@ -588,13 +594,13 @@ fn pushdown_label_filters_for_label_copy(args: &mut [Expr], lfs: &mut Vec<Matche
     }
 
     let label_names = args.iter()
-        .skip(1)
+        .skip(2)
         .step_by(2);
 
-    *lfs = drop_label_filters_for_label_names(lfs, label_names);
+    let mut lfs = drop_label_filters_for_label_names(lfs, label_names);
 
     if let Some(arg) = args.get_mut(0) {
-        push_down_binary_op_filters_in_place(arg, lfs);
+        push_down_binary_op_filters_in_place(arg, &mut lfs);
     }
 }
 
@@ -693,15 +699,17 @@ fn keep_label_filters_for_label_names<'a>(lfs: &mut Vec<Matcher>, label_names: i
 }
 
 fn drop_label_filters_for_label_names<'a>(lfs: &[Matcher], label_names: impl Iterator<Item=&'a Expr>) -> Vec<Matcher> {
+    if lfs.is_empty() {
+        return vec![];
+    }
     let mut names_set: SmallVec<&str, 4> = SmallVec::new();
     for label_name in label_names {
         if let Some(v) = get_expr_as_string(label_name) {
             names_set.push(v);
-        } else {
-            return vec![];
         }
     }
-    lfs.iter().filter(|x|!names_set.contains(&x.label.as_str())).cloned().collect()
+    let res = lfs.iter().filter(|x|!names_set.contains(&x.label.as_str())).cloned().collect();
+    res
 }
 
 fn drop_label_filters_for_label_name(lfs: &[Matcher], label_name: &Expr) -> Vec<Matcher> {

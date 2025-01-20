@@ -9,7 +9,7 @@ pub use selector::parse_metric_expr;
 pub(crate) use utils::{escape_ident, extract_string_value, quote, unescape_ident};
 
 use crate::ast::{check_ast, Expr};
-use crate::optimizer::remove_parens_expr;
+use crate::optimizer::remove_parens;
 use crate::parser::expr::parse_expression;
 mod aggregation;
 mod expr;
@@ -39,7 +39,7 @@ pub fn parse(input: &str) -> ParseResult<Expr> {
         let msg = "unparsed data".to_string();
         return Err(ParseError::General(msg));
     }
-    expr = remove_parens_expr(expr);
+    expr = remove_parens(expr);
     check_ast(expr).map_err(|err| ParseError::General(err.to_string()))
 }
 

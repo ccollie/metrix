@@ -7,7 +7,7 @@ use crate::parser::{unescape_ident, ParseResult, Parser};
 use crate::prelude::ParseError;
 use smallvec::SmallVec;
 
-/// parse_metric_expr parses a metric selector.
+/// `parse_metric_expr` parses a metric selector.
 ///
 ///    <label_set>
 ///
@@ -74,7 +74,7 @@ pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     Ok(Expr::MetricExpression(me))
 }
 
-/// parse_label_filters parses a set of label matchers.
+/// `parse_label_filters` parses a set of label matchers.
 ///
 /// `{` [ <label_name> <match_op> <match_string>, ... [or <label_name> <match_op> <match_string>, ...] `}`
 ///

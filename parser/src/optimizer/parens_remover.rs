@@ -23,7 +23,7 @@ impl TreeNodeRewriter for ParensRemover {
     }
 
     fn mutate(&mut self, node: Self::N) -> ParseResult<Self::N> {
-        Ok(remove_parens_expr(node))
+        Ok(remove_parens(node))
     }
 }
 
@@ -39,52 +39,39 @@ impl ParensRemover {
     }
 
     pub fn remove_parens(&self, e: Expr) -> Expr {
-        remove_parens_expr(e)
+        remove_parens(e)
     }
 }
 
-fn unnest_parens(pe: &mut ParensExpr) {
-    while pe.expressions.len() == 1 {
-        if let Some(Expr::Parens(pe2)) = pe.expressions.get_mut(0) {
-            *pe = pe2.clone(); // todo: take/swap
-        } else {
-            break;
-        }
-    }
-}
-
-fn remove_parens_args(args: Vec<Expr>) -> Vec<Expr> {
-    args.into_iter().map(remove_parens_expr).collect()
-}
 
 /// remove_parens_expr removes parensExpr for (Expr) case.
-pub fn remove_parens_expr(e: Expr) -> Expr {
+pub fn remove_parens(e: Expr) -> Expr {
     if !should_remove_parens(&e) {
         return e;
     }
     match e {
         Expr::Rollup(re) => Expr::Rollup(RollupExpr {
-            expr: Box::new(remove_parens_expr(*re.expr)),
+            expr: Box::new(remove_parens(*re.expr)),
             at: re
                 .at
-                .map(|at| Box::new(remove_parens_expr(*at))),
+                .map(|at| Box::new(remove_parens(*at))),
             window: re.window,
             step: re.step,
             offset: re.offset,
             inherit_step: re.inherit_step,
         }),
         Expr::BinaryOperator(be) => Expr::BinaryOperator(BinaryExpr {
-            left: Box::new(remove_parens_expr(*be.left)),
-            right: Box::new(remove_parens_expr(*be.right)),
+            left: Box::new(remove_parens(*be.left)),
+            right: Box::new(remove_parens(*be.right)),
             op: be.op,
             modifier: be.modifier,
         }),
         Expr::UnaryOperator(ue) => Expr::UnaryOperator(UnaryExpr {
-            expr: Box::new(remove_parens_expr(*ue.expr)),
+            expr: Box::new(remove_parens(*ue.expr)),
         }),
         Expr::Aggregation(ae) => Expr::Aggregation(AggregationExpr {
             function: ae.function,
-            args: ae.args.into_iter().map(remove_parens_expr).collect(),
+            args: ae.args.into_iter().map(remove_parens).collect(),
             modifier: ae.modifier,
             limit: ae.limit,
             keep_metric_names: ae.keep_metric_names,
@@ -108,7 +95,21 @@ pub fn remove_parens_expr(e: Expr) -> Expr {
     }
 }
 
-pub fn should_remove_parens(e: &Expr) -> bool {
+fn unnest_parens(pe: &mut ParensExpr) {
+    while pe.expressions.len() == 1 {
+        if let Some(Expr::Parens(pe2)) = pe.expressions.get_mut(0) {
+            *pe = pe2.clone(); // todo: take/swap
+        } else {
+            break;
+        }
+    }
+}
+
+fn remove_parens_args(args: Vec<Expr>) -> Vec<Expr> {
+    args.into_iter().map(remove_parens).collect()
+}
+
+fn should_remove_parens(e: &Expr) -> bool {
     match e {
         Expr::Rollup(re) => {
             let mut should_remove = should_remove_parens(&re.expr);
@@ -131,14 +132,14 @@ pub fn should_remove_parens(e: &Expr) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::ast::{Expr, ParensExpr};
-    use crate::optimizer::parens_remover::remove_parens_expr;
+    use crate::optimizer::parens_remover::remove_parens;
 
     #[test]
     fn test_remove_parens_expr() {
         let empty_parens = Expr::Parens(ParensExpr::new(vec![]));
         let actual = Expr::Parens(ParensExpr::new(vec![empty_parens.clone()]));
 
-        let result = remove_parens_expr(actual);
+        let result = remove_parens(actual);
         assert_expr_eq(&empty_parens, &result);
     }
 
