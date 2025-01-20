@@ -217,7 +217,6 @@ impl<T> UnitVec<T> {
     /// Takes *O*([`Vec::len`]) time. All items after the insertion index must be
     /// shifted to the right. In the worst case, all elements are shifted when
     /// the insertion index is 0.
-    #[cfg(not(no_global_oom_handling))]
     pub fn insert(&mut self, index: usize, element: T) {
         fn assert_failed(index: usize, len: usize) -> ! {
             panic!("insertion index (is {index}) should be <= len (is {len})");

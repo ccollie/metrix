@@ -4,9 +4,10 @@ use crate::parser::{extract_string_value, ParseErr, ParseError, ParseResult};
 use logos::{Lexer, Logos};
 use metricsql_common::types::{Label};
 
-/// specialized parser for a Prometheus compatible metric name (as opposed to a metric selector).
+/// specialized parser for a `Prometheus` compatible metric name (as opposed to a metric selector).
 ///
 ///    <label_set>
+///
 ///    <metric_identifier> [<label_set>]
 ///
 pub fn parse_metric_name(s: &str) -> ParseResult<Vec<Label>> {

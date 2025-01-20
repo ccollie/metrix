@@ -8,11 +8,11 @@ use crate::types::Timestamp;
 /// STALE_NAN_BITS is a bit representation of Prometheus staleness mark (aka stale NaN).
 /// This mark is put by Prometheus at the end of time series for improving staleness detection.
 /// See https://www.robustperception.io/staleness-and-promql
-/// StaleNaN is a special NaN value, which is used as Prometheus staleness mark.
+/// StaleNaN is a special NaN value which is used as Prometheus staleness mark.
 pub const STALE_NAN_BITS: u64 = 0x7ff0000000000002;
 pub const STALE_NAN: f64 = f64::from_bits(STALE_NAN_BITS);
 
-/// is_stale_nan returns true if f represents Prometheus staleness mark.
+/// `is_stale_nan` returns true if f represents Prometheus staleness mark.
 #[inline]
 pub fn is_stale_nan(f: f64) -> bool {
     f.to_bits() == STALE_NAN_BITS
@@ -22,7 +22,7 @@ pub static IQR_PHIS: [f64; 2] = [0.25, 0.75];
 
 const SMALL_VEC_THRESHOLD: usize = 64;
 
-/// mode_no_nans returns mode for a.
+/// `mode_no_nans` returns mode for a.
 ///
 /// It is expected that a doesn't contain NaNs.
 ///
@@ -198,7 +198,7 @@ fn quantiles_sorted_internal(scope: &mut Scope, phis: &[f64], values: &[f64]) ->
     }
 }
 
-/// quantile_sorted calculates the given quantile over a sorted list of values.
+/// `quantile_sorted` calculates the given quantile over a sorted list of values.
 ///
 /// It is expected that values won't contain NaN items.
 /// The implementation mimics Prometheus implementation for compatibility's sake.

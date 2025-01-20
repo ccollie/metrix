@@ -54,21 +54,21 @@ pub(super) fn build_hir(pattern: &str) -> Result<Hir, RegexError> {
 }
 
 
-/// get_optimized_match_func tries returning optimized function for matching the given expr.
+/// `string_matcher_from_regex` tries returning optimized function for matching the given expr.
 ///
-///    '.*'
-///    '.+'
-///    'literal.*'
-///    'literal.+'
-///    '.*literal'
-///    '.+literal
-///    '.*literal.*'
-///    '.*literal.+'
-///    '.+literal.*'
-///    '.+literal.+'
-///     'foo|bar|baz|quux'
-///     '(foo|bar|baz)quux'
-///     'foo(bar|baz)'
+///    - '.*'
+///    - '.+'
+///    - 'literal.*'
+///    - 'literal.+'
+///    - '.*literal'
+///    - '.+literal
+///    - '.*literal.*'
+///    - '.*literal.+'
+///    - '.+literal.*'
+///    - '.+literal.+'
+///    - 'foo|bar|baz|quux'
+///    - '(foo|bar|baz)quux'
+///    - 'foo(bar|baz)'
 ///
 /// It returns re_match if it cannot find optimized function.
 pub fn string_matcher_from_regex(expr: &str) -> Result<StringMatchHandler, RegexError> {
@@ -947,9 +947,9 @@ pub(super) fn optimize_concat_regex(subs: &Vec<Hir>) -> (String, String, Vec<Str
     (prefix, suffix, contains, new_subs)
 }
 
-// findSetMatches extract equality matches from a regexp.
-// Returns nil if we can't replace the regexp by only equality matchers or the regexp contains
-// a mix of case-sensitive and case-insensitive matchers.
+/// Extract equality matches from a regexp.
+/// Returns an empty vec if we can't replace the regexp by only equality matchers or the regexp contains
+/// a mix of case-sensitive and case-insensitive matchers.
 pub(super) fn find_set_matches(hir: &mut Hir) -> Option<(Vec<String>, bool)> {
     clear_begin_end_anchor(hir);
     find_set_matches_internal(hir, "")
