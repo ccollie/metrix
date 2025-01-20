@@ -200,7 +200,10 @@ impl<'a> Parser<'a> {
     pub fn parse_duration(&mut self) -> ParseResult<DurationExpr> {
         use Token::*;
 
-        let token = self.expect_one_of(&[Number, Duration])?;
+        let token = self.expect_one_of(&[Number, Duration, Interval, RateInterval])?;
+        if token.kind == Interval || token.kind == RateInterval {
+            return Ok(DurationExpr::StepValue(1.0));
+        }
         let last_ch = token.text.chars().last().unwrap();
 
         if token.kind == Number {

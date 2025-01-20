@@ -82,6 +82,12 @@ pub enum Token {
     #[token("without", ignore(ascii_case))]
     Without,
 
+    #[token("$__interval")]
+    Interval,
+
+    #[token("$__rate_interval")]
+    RateInterval,
+
     #[regex("(?&duration)+", priority = 5)]
     Duration,
 
@@ -343,6 +349,8 @@ impl Token {
             // other
             Self::ErrorInvalidNumber => "<invalid number>",
             Self::ErrorStringUnterminated => "<unterminated string literal>",
+            Self::Interval => "$__interval",
+            Self::RateInterval => "$__rate_interval",
         }
     }
 }
@@ -599,6 +607,12 @@ mod tests {
         test_tokens!("foobar123", [Identifier]);
     }
 
+    #[test_case("$__interval", Interval)]
+    #[test_case("$__rate_interval", RateInterval)]
+    fn interval(src: &str, tok: Token) {
+        test_tokens!(src, [tok]);
+    }
+
     #[test_case("123ms")]
     #[test_case("123s")]
     #[test_case("123m")]
@@ -777,6 +791,8 @@ mod tests {
         ];
         test_success(s, &expected);
     }
+
+
 
     #[test]
     fn binary_op() {

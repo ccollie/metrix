@@ -615,6 +615,13 @@ mod tests {
         same("rate(rate(m[5m])[1h:3s])");
     }
 
+    #[test]
+    fn test_parse_interval() {
+        // $__interval and $__rate_interval must be replaced with 1i
+        another(r#"rate(m[$__interval] offset $__interval) * $__rate_interval"#, r#"rate(m[1i] offset 1i) * 1i"#);
+        another(r#"increase(m[$__rate_interval])"#, r#"increase(m[1i])"#);
+    }
+
 
     fn assert_invalid_ex(s: &str, msg_to_check: Option<&str>) {
         match parse(s) {

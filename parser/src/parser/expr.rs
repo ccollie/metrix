@@ -206,7 +206,7 @@ pub(super) fn parse_single_expr_without_rollup_suffix(p: &mut Parser) -> ParseRe
         Number => parse_number_expr(p),
         LeftParen => p.parse_parens_expr(),
         LeftBrace => parse_metric_expr(p),
-        Duration => parse_duration_expr(p),
+        Interval | RateInterval | Duration => parse_duration_expr(p),
         OpPlus => parse_unary_plus_expr(p),
         OpMinus => parse_unary_minus_expr(p),
         _ => {
