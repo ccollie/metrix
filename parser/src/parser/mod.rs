@@ -43,13 +43,6 @@ pub fn parse(input: &str) -> ParseResult<Expr> {
     check_ast(expr).map_err(|err| ParseError::General(err.to_string()))
 }
 
-/// Expands WITH expressions inside q and returns the resulting
-/// PromQL without WITH expressions.
-pub fn expand_with_exprs(q: &str) -> Result<String, ParseError> {
-    let e = parse(q)?;
-    Ok(format!("{}", e))
-}
-
 /// Parses a string into a unix timestamp (milliseconds). Accepts a positive integer or an RFC3339 timestamp.
 /// Included here only to avoid having to include chrono in the public API
 pub fn parse_timestamp(s: &str) -> ParseResult<i64> {
