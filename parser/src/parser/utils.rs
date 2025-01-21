@@ -63,7 +63,7 @@ pub fn unescape_ident(s: &str) -> ParseResult<Cow<str>> {
     let s = &s[v..];
     let mut chars = s.chars();
 
-    fn map_err(_: ParseIntError) -> ParseError {
+    fn map_err(_e: ParseIntError) -> ParseError {
         ParseError::SyntaxError("invalid escape sequence".to_string())
     }
 
@@ -220,6 +220,6 @@ mod tests {
         f(r"foo\ bar", "foo bar");
         f(r"\x21", "!");
         f(r"\п\р\и\в\е\т123", "привет123");
-        f(r"\xeDfoo\x2Fbar\-\xqw\x", r"\xedfoo\x2fbar-xqwx");
+        f(r"\xedfoo\x2Fbar\-xqw\x", r"\xedfoo\x2fbar-xqwx");
     }
 }
