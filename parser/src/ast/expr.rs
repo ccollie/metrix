@@ -504,6 +504,20 @@ impl Deref for NumberLiteral {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for NumberLiteral {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry("value", &self.to_string())?;
+
+        map.end()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StringLiteral(pub String);
 
