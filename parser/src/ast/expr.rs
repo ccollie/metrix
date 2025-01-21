@@ -770,6 +770,14 @@ impl MetricExpr {
     pub fn has_or_matchers(&self) -> bool {
         !self.matchers.or_matchers.is_empty()
     }
+
+    pub fn or_matchers(&self) -> &Vec<Vec<Matcher>> {
+        &self.matchers.or_matchers
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Vec<Matcher>> {
+        self.matchers.iter()
+    }
 }
 
 impl Value for MetricExpr {
