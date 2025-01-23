@@ -8,7 +8,7 @@ use crate::pool::get_pooled_buffer;
 
 const U64_SIZE: usize = 8;
 const SIZEOF_USIZE: usize = size_of::<usize>();
-const METADATA_SIZE: usize = 8 /* sizeof u64 */ + SIZEOF_USIZE;
+const METADATA_SIZE: usize = size_of::<u64>() + SIZEOF_USIZE;
 const BUCKETS_COUNT: usize = 512;
 const BUCKETS_COUNT_SMALL: usize = 256;
 const CHUNK_SIZE: usize = 64 * 1024;
@@ -779,11 +779,22 @@ mod tests {
             String::from_utf8_lossy(&v)
         );
 
+
+        assert!(!c.has(b"foobar"), "non-existing entry found in the cache");
+    }
+
+    #[test]
+    fn test_cache_empty_value() {
+        let mut c = FastCache::new(1);
+
+        let mut v: Vec<u8> = vec![];
+
         // Test empty value
         let k = b"empty";
         c.set(k, &[]);
+        let got = c.get(k, &mut v);
         assert!(
-            c.get(k, &mut v) && v.is_empty(),
+            got && v.is_empty(),
             "unexpected non-empty value obtained from empty entry: {}",
             String::from_utf8_lossy(&v)
         );
@@ -803,8 +814,6 @@ mod tests {
             "cannot find empty entry for key {}",
             String::from_utf8_lossy(k)
         );
-
-        assert!(!c.has(b"foobar"), "non-existing entry found in the cache");
     }
 
     #[test]

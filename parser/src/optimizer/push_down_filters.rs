@@ -335,10 +335,6 @@ fn get_common_label_filters_for_label_set(args: &[Expr]) -> Vec<Matcher> {
     lfs
 }
 
-fn is_string_expr(expr: &Expr) -> bool {
-    matches!(expr, Expr::StringExpr(_) | Expr::StringLiteral(_))
-}
-
 fn get_expr_as_string(expr: &Expr) -> Option<&str> {
     match expr {
         Expr::StringExpr(se) => {

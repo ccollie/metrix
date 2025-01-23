@@ -1,8 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::time::Duration;
-    use metricsql_parser::ast::Expr::Duration;
     use crate::common::math::{linear_regression, STALE_NAN};
     use crate::functions::rollup::delta::*;
     use crate::functions::rollup::deriv::*;
@@ -15,6 +12,8 @@ mod tests {
     };
     use crate::types::{QueryValue, Timeseries, Timestamp};
     use crate::{compare_floats, compare_values, test_rows_equal, RuntimeResult};
+    use std::sync::Arc;
+    use std::time::Duration;
     // https://github.com/VictoriaMetrics/VictoriaMetrics/blob/master/app/vmselect/promql/rollup_test.go
 
     const NAN: f64 = f64::NAN;
@@ -947,7 +946,7 @@ mod tests {
             end: 70000,
             step: Duration::from_millis(45000),
             max_points_per_series: 10_000,
-            lookback_delta: Duration::Zero(),
+            lookback_delta: Duration::ZERO,
             ..Default::default()
         };
         rc.ensure_timestamps().expect("failed to ensure timestamps");
@@ -994,7 +993,7 @@ mod tests {
             end: 70000,
             step: Duration::from_millis(10000),
             max_points_per_series: 10_000,
-            lookback_delta: Duration::Zero(),
+            lookback_delta: Duration::ZERO,
             ..Default::default()
         };
 
@@ -1176,7 +1175,7 @@ mod tests {
                 end: 70000,
                 step: Duration::from_millis(10000),
                 max_points_per_series: 10_000,
-                lookback_delta: Duration::Zero(),
+                lookback_delta: Duration::ZERO,
                 ..Default::default()
             };
             rc.ensure_timestamps().expect("failed to ensure timestamps");

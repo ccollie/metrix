@@ -18,7 +18,7 @@ pub mod pool;
 pub mod regex_util;
 pub mod time;
 pub mod humanize;
-mod threads;
+pub mod threads;
 pub mod types;
 
 pub mod prelude {
@@ -34,4 +34,5 @@ pub mod prelude {
     pub use crate::time::*;
     pub use crate::humanize::*;
     pub use crate::types::*;
+    pub use crate::threads::*;
 }

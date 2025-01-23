@@ -190,7 +190,7 @@ impl<T> UnitVec<T> {
         } else {
             unsafe {
                 self.len -= 1;
-                Some(std::ptr::read(self.as_ptr().add(self.len())))
+                Some(ptr::read(self.as_ptr().add(self.len())))
             }
         }
     }

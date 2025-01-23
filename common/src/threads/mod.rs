@@ -3,12 +3,14 @@ use chili::Scope;
 pub fn par_join_slice<T: Send + Sync, F, R>(slice: &[T], f: F) -> Vec<R>
 where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
 {
+    #[inline]
     fn handle_two<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T) -> (R, R)
     where F: Fn(&T) -> R + Send + Sync
     {
         s.join(|_| f(first), |_| f(second))
     }
 
+    #[inline]
     fn handle_three<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T, third: &T) -> (R, R, R)
     where F: Fn(&T) -> R + Send + Sync
     {
@@ -17,6 +19,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
         (one, two, three)
     }
 
+    #[inline]
     fn handle_four<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T, third: &T, fourth: &T) -> (R, R, R, R)
     where F: Fn(&T) -> R + Send + Sync
     {
@@ -26,6 +29,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
         (one, two, three, four)
     }
 
+    #[inline]
     fn handle_five<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T, third: &T, fourth: &T, fifth: &T) -> (R, R, R, R, R)
     where F: Fn(&T) -> R + Send + Sync
     {
@@ -34,6 +38,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
         (one, two, three, four, five)
     }
 
+    #[inline]
     fn handle_six<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T, third: &T, fourth: &T, fifth: &T, sixth: &T) -> (R, R, R, R, R, R)
     where F: Fn(&T) -> R + Send + Sync
     {

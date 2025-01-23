@@ -148,8 +148,6 @@ mod tests {
             ),
         ];
 
-
-
         for (input, expected) in cases {
             let mut got = parse_metric_name(input).unwrap();
             got.sort();

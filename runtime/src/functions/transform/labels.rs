@@ -3,12 +3,10 @@ use std::borrow::Cow;
 use ahash::AHashMap;
 use regex::Regex;
 
-use metricsql_parser::parser::compile_regexp;
-
 use crate::functions::arg_parse::{get_series_arg, get_string_arg};
 use crate::functions::transform::TransformFuncArg;
-use crate::{RuntimeError, RuntimeResult};
 use crate::types::{MetricName, Timeseries, METRIC_NAME_LABEL};
+use crate::{RuntimeError, RuntimeResult};
 
 const DOT_SEPARATOR: &str = ".";
 
@@ -274,18 +272,15 @@ pub(crate) fn label_transform(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<T
     let replacement = get_string_arg(&tfa.args, 3)?;
 
     // todo: would it be useful to use a cache ?
-    let r = compile_regexp(&regex);
-    match r {
-        Ok(_) => {}
-        Err(err) => {
-            return Err(
-                RuntimeError::from(format!("cannot compile regex {regex}: {:?}", err))
-            );
-        }
-    }
+    let r = match Regex::new(&regex) {
+        Err(err) => Err(
+            RuntimeError::from(format!("cannot compile regex {regex}: {:?}", err))
+        ),
+        Ok(regex) => Ok(regex),
+    }?;
 
     let mut series = get_series_arg(&tfa.args, 0, tfa.ec)?;
-    handle_label_replace(&mut series, &label, &r.unwrap(), &label, &replacement)
+    handle_label_replace(&mut series, &label, &r, &label, &replacement)
 }
 
 pub(crate) fn label_replace(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {

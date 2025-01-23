@@ -62,15 +62,15 @@ pub fn is_number_value(s: &Expr, val: f64) -> bool {
     }
 }
 
-pub fn is_zero(s: &Expr) -> bool {
+pub(crate) fn is_zero(s: &Expr) -> bool {
     is_number_value(s, 0.0)
 }
 
-pub fn is_one(s: &Expr) -> bool {
+pub(crate) fn is_one(s: &Expr) -> bool {
     is_number_value(s, 1.0)
 }
 
-pub fn is_null(expr: &Expr) -> bool {
+pub(crate) fn is_null(expr: &Expr) -> bool {
     match expr {
         Expr::NumberLiteral(NumberLiteral { value, .. }) => value.is_nan(),
         _ => false,

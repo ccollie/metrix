@@ -7,7 +7,6 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 // todo: read from env
 static USE_REGEXP_CACHE: LazyLock<bool> = LazyLock::new(|| false);
 
-const DEFAULT_MAX_SIZE_BYTES: usize = 1024 * 1024 * 1024;
 const DEFAULT_CACHE_SIZE: usize = 100;
 
 #[derive(Clone, Debug)]

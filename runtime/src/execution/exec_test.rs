@@ -4346,7 +4346,7 @@ mod tests {
     }
 
     #[test]
-    fn sum_rate_time_by__name__keep_metric_names() {
+    fn sum_rate_time_by_name_keep_metric_names() {
         let q = r#"sum(rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names) by (__name__)"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
         r.metric.set_metric_group("foo");

@@ -426,7 +426,6 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
     }
 
     let mut set_matches_result: Option<(Vec<String>, bool)> = None;
-    let mut set_matches_attempted = false;
 
     if match_len == 2 {
         // NOTE: the parser optimizes concats of successive literals into a single literal, so if we have only two nodes,
@@ -487,7 +486,7 @@ fn get_concat_matcher(hirs: &[Hir], expr: &str) -> Result<Option<StringMatchHand
         _ => {}
     }
 
-    if !set_matches_attempted && set_matches_result.is_none() {
+    if set_matches_result.is_none() {
         set_matches_result = get_set_matches(hirs_new)
     };
 
