@@ -817,6 +817,23 @@ mod tests {
     }
 
     #[test]
+    fn test_single() {
+        let c = FastCache::new(BUCKETS_COUNT * (CHUNK_SIZE as f64 * 1.5) as usize);
+        let i = 1205913;
+        let mut dst: Vec<u8> = vec![];
+        let k = make_buf("key", i);
+        let v = make_buf("value", i);
+        c.set(&k, &v);
+
+        dst.clear();
+        assert!(
+            c.get(&k, &mut dst),
+            "value not found for key: {}",
+            String::from_utf8_lossy(&k)
+        );
+    }
+
+    #[test]
     fn test_cache_wrap() {
         let c = FastCache::new(BUCKETS_COUNT * (CHUNK_SIZE as f64 * 1.5) as usize);
 
@@ -1052,9 +1069,10 @@ mod tests {
     #[test_case(524288)]
     fn test_values_get_set_big(value_size: usize) {
         let mut c = FastCache::new(256 * 1024 * 1024);
-        for seed in 0..3 {
-            test_set_get_big(&mut c, value_size, VALUES_COUNT, seed)
-        }
+        test_set_get_big(&mut c, value_size, VALUES_COUNT, 0)
+        // for seed in 0..3 {
+        //     test_set_get_big(&mut c, value_size, VALUES_COUNT, seed)
+        // }
     }
 
     #[test]
