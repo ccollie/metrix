@@ -1,13 +1,13 @@
 pub(crate) use binary::merge_non_overlapping_timeseries;
 pub use context::*;
-pub use eval::*;
+pub use eval_config::*;
 pub use exec::*;
 pub use traits::*;
 
 pub mod active_queries;
 pub mod binary;
 mod context;
-mod eval;
+mod eval_config;
 #[cfg(test)]
 mod eval_test;
 #[cfg(test)]
