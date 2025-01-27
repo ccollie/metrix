@@ -88,30 +88,91 @@ pub(crate) fn float_cmp_with_nans_desc(a: f64, b: f64) -> Ordering {
 }
 
 // todo: can we use SIMD here?
+#[inline]
 pub(crate) fn max_with_nans(values: &[f64]) -> f64 {
-    let mut max = f64::NAN;
-    let mut iter = values.iter().skip_while(|v| v.is_nan());
-    if let Some(&v) = iter.next() {
-        max = v;
-        for v in iter {
-            if !v.is_nan() && max < *v {
-                max = *v;
-            }
-        }
-    }
+    let max =
+        values
+            .iter()
+            .copied()
+            .filter(|v| !v.is_nan())
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(f64::NAN);
     max
 }
 
 pub(crate) fn min_with_nans(values: &[f64]) -> f64 {
-    let mut min = f64::NAN;
-    let mut iter = values.iter().skip_while(|v| v.is_nan());
-    if let Some(&v) = iter.next() {
-        min = v;
-        for v in iter {
-            if !v.is_nan() && min > *v {
-                min = *v;
-            }
-        }
-    }
+    let min =
+        values
+            .iter()
+            .copied()
+            .filter(|v| !v.is_nan())
+            .min_by(|a, b| a.total_cmp(b))
+            .unwrap_or(f64::NAN);
     min
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_with_nans_all_valid() {
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(max_with_nans(&values), 5.0);
+    }
+
+    #[test]
+    fn test_max_with_nans_with_nans() {
+        let values = vec![1.0, f64::NAN, 3.0, 4.0, f64::NAN];
+        assert_eq!(max_with_nans(&values), 4.0);
+    }
+
+    #[test]
+    fn test_max_with_nans_all_nans() {
+        let values = vec![f64::NAN, f64::NAN, f64::NAN];
+        assert!(max_with_nans(&values).is_nan());
+    }
+
+    #[test]
+    fn test_max_with_nans_empty() {
+        let values: Vec<f64> = vec![];
+        assert!(max_with_nans(&values).is_nan());
+    }
+
+    #[test]
+    fn test_max_with_nans_single_value() {
+        let values = vec![42.0];
+        assert_eq!(max_with_nans(&values), 42.0);
+    }
+
+    #[test]
+    fn test_min_with_nans_all_valid() {
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(min_with_nans(&values), 1.0);
+    }
+
+    #[test]
+    fn test_min_with_nans_with_nans() {
+        let values = vec![1.0, f64::NAN, 3.0, 4.0, f64::NAN];
+        assert_eq!(min_with_nans(&values), 1.0);
+    }
+
+    #[test]
+    fn test_min_with_nans_all_nans() {
+        let values = vec![f64::NAN, f64::NAN, f64::NAN];
+        assert!(min_with_nans(&values).is_nan());
+    }
+
+    #[test]
+    fn test_min_with_nans_empty() {
+        let values: Vec<f64> = vec![];
+        assert!(min_with_nans(&values).is_nan());
+    }
+
+    #[test]
+    fn test_min_with_nans_single_value() {
+        let values = vec![42.0];
+        assert_eq!(min_with_nans(&values), 42.0);
+    }
 }
