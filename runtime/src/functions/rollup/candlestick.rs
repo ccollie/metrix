@@ -44,17 +44,17 @@ pub(super) fn rollup_close(rfa: &RollupFuncArg) -> f64 {
 
 pub(super) fn rollup_high(rfa: &RollupFuncArg) -> f64 {
     let mut max = get_first_value_for_candlestick(rfa);
-    let values = get_candlestick_values(rfa);
-    let mut start = 0;
+    let mut values = get_candlestick_values(rfa);
+
     if max.is_nan() {
         if values.is_empty() {
             return f64::NAN;
         }
         max = values[0];
-        start = 1;
+        values = &values[1..];
     }
 
-    for v in values.iter().skip(start).copied() {
+    for v in values.iter().copied() {
         if v > max {
             max = v;
         }
@@ -65,16 +65,15 @@ pub(super) fn rollup_high(rfa: &RollupFuncArg) -> f64 {
 
 pub(super) fn rollup_low(rfa: &RollupFuncArg) -> f64 {
     let mut min = get_first_value_for_candlestick(rfa);
-    let values = get_candlestick_values(rfa);
-    let mut start = 0;
+    let mut values = get_candlestick_values(rfa);
     if min.is_nan() {
         if values.is_empty() {
             return f64::NAN;
         }
         min = values[0];
-        start = 1;
+        values = &values[1..];
     }
-    for v in values.iter().skip(start).copied() {
+    for v in values.iter().copied() {
         if v < min {
             min = v
         }
