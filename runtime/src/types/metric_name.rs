@@ -89,7 +89,7 @@ impl MetricName {
         self.labels.clear();
     }
 
-    pub fn set_metric_group(&mut self, value: &str) {
+    pub fn set_measurement(&mut self, value: &str) {
         self.measurement = value.to_string();
     }
 
@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn test_metric_name() {
         let mut mn = MetricName::default();
-        mn.set_metric_group("foo");
+        mn.set_measurement("foo");
         mn.add_label("bar", "baz");
         mn.add_label("qux", "quux");
         mn.add_label("qux", "quuz");
