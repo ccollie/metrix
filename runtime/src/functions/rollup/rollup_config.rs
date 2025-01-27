@@ -43,6 +43,11 @@ fn remove_counter_resets_pre_func(values: &mut [f64], _: &[Timestamp]) {
 }
 
 #[inline]
+fn deriv_values_pre_func(values: &mut [f64], timestamps: &[Timestamp]) {
+    deriv_values(values, timestamps)
+}
+
+#[inline]
 fn delta_values_pre_func(values: &mut [f64], _: &[Timestamp]) {
     delta_values(values);
 }
@@ -292,10 +297,12 @@ impl RollupConfig {
     ) -> RuntimeResult<(u64, Vec<Timeseries>)> {
         let func_keeps_metric_name = func.keep_metric_name();
         if TimeSeriesMap::is_valid_function(func) {
-            let tsm = Arc::new(TimeSeriesMap::new(
-                keep_metric_names || func_keeps_metric_name,
-                shared_timestamps,
-                metric,
+            let tsm = Arc::new(Box::new(
+                TimeSeriesMap::new(
+                    keep_metric_names || func_keeps_metric_name,
+                    shared_timestamps,
+                    metric,
+                )
             ));
             let scanned = self.do_timeseries_map(tsm.clone(), values, timestamps)?;
             let len = tsm.series_len();
@@ -326,7 +333,7 @@ impl RollupConfig {
     /// returns the number of samples scanned
     pub(crate) fn do_timeseries_map(
         &self,
-        tsm: Arc<TimeSeriesMap>,
+        tsm: Arc<Box<TimeSeriesMap>>,
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
@@ -337,7 +344,7 @@ impl RollupConfig {
     pub(crate) fn exec_internal(
         &self,
         dst_values: &mut Vec<f64>,
-        tsm: Option<Arc<TimeSeriesMap>>,
+        tsm: Option<Arc<Box<TimeSeriesMap>>>,
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
@@ -432,7 +439,7 @@ impl RollupConfig {
                 unsafe {
                     let prev_timestamp = timestamps.get_unchecked(idx);
 
-                    // set realPrevValue if rc.LookbackDelta == 0
+                    // set real_prev_value if rc.LookbackDelta == 0
                     // or if distance between datapoint in prev interval and beginning of this interval
                     // doesn't exceed LookbackDelta.
                     // https://github.com/VictoriaMetrics/VictoriaMetrics/pull/1381
@@ -732,7 +739,7 @@ fn get_rollup_function_handler_meta(
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupRate | RollupFunction::RollupDeriv => {
-            pre_funcs.push(deriv_values);
+            pre_funcs.push(deriv_values_pre_func);
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupIncrease | RollupFunction::RollupDelta => {

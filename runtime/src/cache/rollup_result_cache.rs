@@ -471,10 +471,6 @@ impl RollupResultCache {
     }
 }
 
-fn put_series_to_cache(tss: & [Timeseries]) {
-
-}
-
 // let resultBufPool = ByteBufferPool
 
 /// Increment this value every time the format of the cache changes.

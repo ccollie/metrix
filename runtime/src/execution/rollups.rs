@@ -643,12 +643,12 @@ fn new_timeseries_map(
     keep_metric_names: bool,
     shared_timestamps: &Arc<Vec<Timestamp>>,
     mn: &MetricName,
-) -> Option<Arc<TimeSeriesMap>> {
+) -> Option<Arc<Box<TimeSeriesMap>>> {
     if !TimeSeriesMap::is_valid_function(func) {
         return None;
     }
     let map = TimeSeriesMap::new(keep_metric_names, shared_timestamps, mn);
-    Some(Arc::new(map))
+    Some(Arc::new(Box::new(map)))
 }
 
 fn process_result(

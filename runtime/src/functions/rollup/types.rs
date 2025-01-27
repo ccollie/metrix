@@ -38,12 +38,12 @@ pub struct RollupFuncArg<'a> {
     /// Time window for rollup calculations.
     pub(super) window: i64,
 
-    pub(super) tsm: Option<Arc<TimeSeriesMap>>, // todo: move to Option<Arc<Box>>, since its not frequently used
+    pub(super) tsm: Option<Arc<Box<TimeSeriesMap>>>, // todo: move to Option<Arc<Box>>, since its not frequently used
 }
 
 
 impl RollupFuncArg<'_> {
-    pub(crate) fn get_tsm(&self) -> Arc<TimeSeriesMap> {
+    pub(crate) fn get_tsm(&self) -> Arc<Box<TimeSeriesMap>> {
         if let Some(tsm) = &self.tsm {
             tsm.clone()
         } else {
