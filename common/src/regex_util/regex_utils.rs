@@ -1055,8 +1055,8 @@ fn find_set_matches_from_concat(hir: &Hir, base: &str) -> Option<(Vec<String>, b
                         return None;
                     }
 
-                    if let Some(sensitive) = matches_case_sensitive {
-                        if sensitive != sensitive {
+                    if let Some(new_sensitive) = matches_case_sensitive {
+                        if new_sensitive != sensitive {
                             return None;
                         }
                     } else {

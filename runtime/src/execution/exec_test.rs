@@ -527,7 +527,7 @@ mod tests {
     fn timestamp_with_name() {
         let q = r#"timestamp_with_name(alias(time()>=1600.0,"foo"))"#;
         let mut r = make_result(&[NAN, NAN, NAN, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foo");
+        r.metric.set_measurement("foo");
         test_query(q, vec![r]);
     }
 
@@ -699,12 +699,12 @@ mod tests {
 
         let q = r#"clamp_max(alias(time(), "foobar"), 1400)"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1400.0, 1400.0, 1400.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
 
         let q = r#"CLAmp_MAx(alias(time(), "foobar"), 1400)"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1400.0, 1400.0, 1400.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -745,7 +745,7 @@ mod tests {
             6.0496474644129465,
             7.38905609893065,
         ]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -1043,7 +1043,7 @@ mod tests {
     fn alias() {
         let q = r#"alias(time(), "foobar")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -1059,7 +1059,7 @@ mod tests {
     fn label_set_metric_name() {
         let q = r#"label_set(time(), "__name__", "foobar")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -1070,7 +1070,7 @@ mod tests {
         "tag_name", "tag_value"
         )"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         r.metric.set("tag_name", "tag_value");
         test_query(q, vec![r]);
     }
@@ -1098,7 +1098,7 @@ mod tests {
     fn r#label_set_multi() {
         let q = r#"label_set(time()+100, "t1", "v1", "t2", "v2", "__name__", "v3")"#;
         let mut r = make_result(&[1100_f64, 1300.0, 1500.0, 1700.0, 1900.0, 2100.0]);
-        r.metric.set_metric_group("v3");
+        r.metric.set_measurement("v3");
         r.metric.set("t1", "v1");
         r.metric.set("t2", "v2");
 
@@ -1259,7 +1259,7 @@ mod tests {
         "__name__", "aa"
         )"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("yy");
+        r.metric.set_measurement("yy");
         r.metric.set("aa", "yy");
         r.metric.set("tagname", "foobar");
 
@@ -1286,7 +1286,7 @@ mod tests {
         "tagname", "__name__"
         )"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         r.metric.set("tagname", "foobar");
 
         test_query(q, vec![r]);
@@ -1299,7 +1299,7 @@ mod tests {
         "tagname", "__name__"
         )"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -1331,7 +1331,7 @@ mod tests {
                             ) default 123)"#;
 
         let mut r = make_result(&[123.0, 123.0, 123.0, 2100.0, 2300.0, 2500.0]);
-        r.metric.set_metric_group("bar");
+        r.metric.set_measurement("bar");
         test_query(q, vec![r])
     }
 
@@ -1345,9 +1345,9 @@ mod tests {
                     ) default 123)"#;
 
         let mut r1 = make_result(&[123.0, 123.0, 123.0, 123.0, 123.0, 123.0]);
-        r1.metric.set_metric_group("foo");
+        r1.metric.set_measurement("foo");
         let mut r2 = make_result(&[123.0, 123.0, 123.0, 2100.0, 2300.0, 2500.0]);
-        r2.metric.set_metric_group("bar");
+        r2.metric.set_measurement("bar");
         test_query(q, vec![r1, r2])
     }
 
@@ -1365,10 +1365,10 @@ mod tests {
         label_set(time()/10, "foo", "bar", "__name__", "yyy"),
         )))"#;
         let mut r1 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r1.metric.set_metric_group("xxx");
+        r1.metric.set_measurement("xxx");
         r1.metric.set("q", "we");
         let mut r2 = make_result(&[100_f64, 120.0, 140.0, 160.0, 180.0, 200.0]);
-        r2.metric.set_metric_group("yyy");
+        r2.metric.set_measurement("yyy");
         test_query(q, vec![r1, r2]);
     }
 
@@ -1402,7 +1402,7 @@ mod tests {
     fn label_keep_metric_name() {
         let q = r#"label_keep(label_set(time(), "foo", "bar", "__name__", "xxx", "q", "we"), "nonexisting-label", "__name__")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("xxx");
+        r.metric.set_measurement("xxx");
         test_query(q, vec![r]);
     }
 
@@ -1418,7 +1418,7 @@ mod tests {
     fn label_del_certain_labels() {
         let q = r#"label_del(label_set(time(), "foo", "bar", "__name__", "xxx", "q", "we"), "foo", "nonexisting-label")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("xxx");
+        r.metric.set_measurement("xxx");
         r.metric.set("q", "we");
         test_query(q, vec![r]);
     }
@@ -1450,7 +1450,7 @@ mod tests {
     fn label_join_name() {
         let q = r#"label_join(time(), "__name__", "(sep)", "foo", "BAR", "")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("(sep)(sep)");
+        r.metric.set_measurement("(sep)(sep)");
         test_query(q, vec![r]);
     }
 
@@ -1458,7 +1458,7 @@ mod tests {
     fn label_join_label_join() {
         let q = r#"label_join(label_join(time(), "__name__", "(sep)", "foo", "BAR"), "xxx", ",", "foobar", "__name__")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("(sep)");
+        r.metric.set_measurement("(sep)");
         r.metric.set("xxx", ",(sep)");
         test_query(q, vec![r]);
     }
@@ -1522,7 +1522,7 @@ mod tests {
     fn label_replace_match() {
         let q = r#"label_replace(time(), "__name__", "x${1}y", "foo", ".*")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("xy");
+        r.metric.set_measurement("xy");
         test_query(q, vec![r])
     }
 
@@ -1536,7 +1536,7 @@ mod tests {
         "xxx", "AA$1", "xxx", "foox(.+)"
         )"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("xy");
+        r.metric.set_measurement("xy");
         r.metric.set("xxx", "AAybar(xy)");
         test_query(q, vec![r]);
     }
@@ -1549,7 +1549,7 @@ mod tests {
         alias(2*time(), "bar"),
         ), "__name__", "f.+")"#;
         let mut r = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("foo");
+        r.metric.set_measurement("foo");
         test_query(q, vec![r]);
     }
 
@@ -1561,7 +1561,7 @@ mod tests {
         alias(2*time(), "bar"),
         ), "__name__", "f.+")"#;
         let mut r = make_result(&[2000_f64, 2400.0, 2800.0, 3200.0, 3600.0, 4000.0]);
-        r.metric.set_metric_group("bar");
+        r.metric.set_measurement("bar");
         test_query(q, vec![r]);
     }
 
@@ -1573,11 +1573,11 @@ mod tests {
         label_set(alias(3, "a.xx.zz.asd"), "qwe", "rty"),
         ), 1, 3))"#;
         let mut r1 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r1.metric.set_metric_group("bar.");
+        r1.metric.set_measurement("bar.");
         let mut r2 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r2.metric.set_metric_group(".");
+        r2.metric.set_measurement(".");
         let mut r3 = make_result(&[3_f64, 3.0, 3.0, 3.0, 3.0, 3.0]);
-        r3.metric.set_metric_group("xx.asd");
+        r3.metric.set_measurement("xx.asd");
         r3.metric.set("qwe", "rty");
         let result_expected: Vec<QueryResult> = vec![r1, r2, r3];
         test_query(q, result_expected)
@@ -1649,9 +1649,9 @@ mod tests {
         ), 1)
         ))"#;
         let mut r1 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r1.metric.set_metric_group("y");
+        r1.metric.set_measurement("y");
         let mut r2 = make_result(&[4_f64, 4.0, 4.0, 4.0, 4.0, 4.0]);
-        r2.metric.set_metric_group("bar");
+        r2.metric.set_measurement("bar");
         test_query(q, vec![r1, r2]);
     }
 
@@ -1714,9 +1714,9 @@ mod tests {
         alias(2, "bar"),
         ), "__name__")"#;
         let mut r1 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r1.metric.set_metric_group("bar");
+        r1.metric.set_measurement("bar");
         let mut r2 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r2.metric.set_metric_group("foo");
+        r2.metric.set_measurement("foo");
         test_query(q, vec![r1, r2]);
     }
 
@@ -1727,9 +1727,9 @@ mod tests {
         alias(2, "bar"),
         ), "__name__")"#;
         let mut r1 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r1.metric.set_metric_group("foo");
+        r1.metric.set_measurement("foo");
         let mut r2 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r2.metric.set_metric_group("bar");
+        r2.metric.set_measurement("bar");
         test_query(q, vec![r1, r2]);
     }
 
@@ -1789,10 +1789,10 @@ mod tests {
         label_set(time()+200, "__name__", "bar", "a", "x"),
         ) > 1300)"#;
         let mut r1 = make_result(&[NAN, 1400.0, 1600.0, 1800.0, 2000.0, 2200.0]);
-        r1.metric.set_metric_group("bar");
+        r1.metric.set_measurement("bar");
         r1.metric.set("a", "x");
         let mut r2 = make_result(&[NAN, NAN, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r2.metric.set_metric_group("foo");
+        r2.metric.set_measurement("foo");
         r2.metric.set("a", "x");
         test_query(q, vec![r1, r2]);
     }
@@ -1925,10 +1925,10 @@ mod tests {
         label_set(time() > 1400.0, "__name__", "x", "foo", "bar"),
         label_set(time() < 1700, "__name__", "y", "foo", "baz")) default 123)"#;
         let mut r1 = make_result(&[123_f64, 123.0, 123.0, 1600.0, 1800.0, 2000.0]);
-        r1.metric.set_metric_group("x");
+        r1.metric.set_measurement("x");
         r1.metric.set("foo", "bar");
         let mut r2 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 123.0, 123.0]);
-        r2.metric.set_metric_group("y");
+        r2.metric.set_measurement("y");
         r2.metric.set("foo", "baz");
         test_query(q, vec![r1, r2]);
     }
@@ -2126,7 +2126,7 @@ mod tests {
         let q = r#"label_set(time()/10, "foo", "bar", "xx", "yy", "__name__", "qwert") + on(foo) group_left(__name__)
         label_set(time(), "foo", "bar", "__name__", "aaa")"#;
         let mut r1 = make_result(&[1100_f64, 1320.0, 1540.0, 1760.0, 1980.0, 2200.0]);
-        r1.metric.set_metric_group("aaa");
+        r1.metric.set_measurement("aaa");
         r1.metric.set("foo", "bar");
         r1.metric.set("xx", "yy");
 
@@ -2250,12 +2250,12 @@ mod tests {
         (label_set(100, "t1", "v1") or label_set(time(), "t2", "v3", "__name__", "abc"))
         )"#;
         let mut r1 = make_result(&[2000_f64, 2400.0, 2800.0, 3200.0, 3600.0, 4000.0]);
-        r1.metric.set_metric_group("abc");
+        r1.metric.set_measurement("abc");
         r1.metric.set("t2", "v3");
         r1.metric.set("x", "y");
 
         let mut r2 = make_result(&[1010_f64, 1210.0, 1410.0, 1610.0, 1810.0, 2010.0]);
-        r2.metric.set_metric_group("abc");
+        r2.metric.set_measurement("abc");
         r2.metric.set("t2", "v3");
         test_query(q, vec![r1, r2]);
     }
@@ -2697,12 +2697,12 @@ mod tests {
         )))"#;
 
         let mut r1 = make_result(&[50_f64, 50.0, 50.0, 50.0, 50.0, 50.0]);
-        r1.metric.set_metric_group("metric");
+        r1.metric.set_measurement("metric");
         r1.metric.set("le", "120");
         r1.metric.set("x", "y");
 
         let mut r2 = make_result(&[100_f64, 100.0, 100.0, 100.0, 100.0, 100.0]);
-        r2.metric.set_metric_group("metric");
+        r2.metric.set_measurement("metric");
         r2.metric.set("le", "INF");
         r2.metric.set("x", "y");
 
@@ -2721,17 +2721,17 @@ mod tests {
         alias(label_set(9, "le", "10", "x", "y"), "metric"),
         )))"#;
         let mut r1 = make_result(&[9_f64, 9.0, 9.0, 9.0, 9.0, 9.0]);
-        r1.metric.set_metric_group("metric");
+        r1.metric.set_measurement("metric");
         r1.metric.set("le", "10");
         r1.metric.set("x", "y");
 
         let mut r2 = make_result(&[98_f64, 98.0, 98.0, 98.0, 98.0, 98.0]);
-        r2.metric.set_metric_group("metric");
+        r2.metric.set_measurement("metric");
         r2.metric.set("le", "300");
         r2.metric.set("x", "y");
 
         let mut r3 = make_result(&[100_f64, 100.0, 100.0, 100.0, 100.0, 100.0]);
-        r3.metric.set_metric_group("metric");
+        r3.metric.set_measurement("metric");
         r3.metric.set("le", "INF");
         r3.metric.set("x", "y");
 
@@ -2749,32 +2749,32 @@ mod tests {
         alias(label_set(time()/40, "foo", "bar", "vmrange", "900...+Inf", "le", "2343"), "yyy"),
         )))"#;
         let mut r1 = make_result(&[0_f64, 0.0, 0.0, 0.0, 0.0, 0.0]);
-        r1.metric.set_metric_group("xxx");
+        r1.metric.set_measurement("xxx");
         r1.metric.set("foo", "bar");
         r1.metric.set("le", "30");
 
         let mut r2 = make_result(&[10_f64, 12.0, 14.0, 16.0, 18.0, 20.0]);
-        r2.metric.set_metric_group("xxx");
+        r2.metric.set_measurement("xxx");
         r2.metric.set("foo", "bar");
         r2.metric.set("le", "40");
 
         let mut r3 = make_result(&[10_f64, 12.0, 14.0, 16.0, 18.0, 20.0]);
-        r3.metric.set_metric_group("xxx");
+        r3.metric.set_measurement("xxx");
         r3.metric.set("foo", "bar");
         r3.metric.set("le", "+Inf");
 
         let mut r4 = make_result(&[12.5, 15.0, 17.5, 20.0, 22.5, 25.0]);
-        r4.metric.set_metric_group("yyy");
+        r4.metric.set_measurement("yyy");
         r4.metric.set("foo", "bar");
         r4.metric.set("le", "900");
 
         let mut r5 = make_result(&[37.5, 45.0, 52.5, 60.0, 67.5, 75.0]);
-        r5.metric.set_metric_group("yyy");
+        r5.metric.set_measurement("yyy");
         r5.metric.set("foo", "bar");
         r5.metric.set("le", "+Inf");
 
         let mut r6 = make_result(&[50_f64, 60.0, 70.0, 80.0, 90.0, 100.0]);
-        r6.metric.set_metric_group("xyz");
+        r6.metric.set_measurement("xyz");
         r6.metric.set("foo", "bar");
         r6.metric.set("le", "0.2");
 
@@ -2797,22 +2797,22 @@ mod tests {
         alias(label_set(time()/10, "foo", "bar", "vmrange", "40...Inf"), "xxx"),
         )))"#;
         let mut r1 = make_result(&[90_f64, 90.0, 90.0, 90.0, 90.0, 90.0]);
-        r1.metric.set_metric_group("xxx");
+        r1.metric.set_measurement("xxx");
         r1.metric.set("foo", "bar");
         r1.metric.set("le", "0");
 
         let mut r2 = make_result(&[140_f64, 150.0, 160.0, 170.0, 180.0, 190.0]);
-        r2.metric.set_metric_group("xxx");
+        r2.metric.set_measurement("xxx");
         r2.metric.set("foo", "bar");
         r2.metric.set("le", "0.2");
 
         let mut r3 = make_result(&[150_f64, 162.0, 174.0, 186.0, 198.0, 210.0]);
-        r3.metric.set_metric_group("xxx");
+        r3.metric.set_measurement("xxx");
         r3.metric.set("foo", "bar");
         r3.metric.set("le", "40");
 
         let mut r4 = make_result(&[250_f64, 282.0, 314.0, 346.0, 378.0, 410.0]);
-        r4.metric.set_metric_group("xxx");
+        r4.metric.set_measurement("xxx");
         r4.metric.set("foo", "bar");
         r4.metric.set("le", "Inf");
 
@@ -2831,32 +2831,32 @@ mod tests {
         alias(label_set(time()/10, "foo", "bar", "vmrange", "40...Inf"), "xxx"),
         )))"#;
         let mut r1 = make_result(&[90_f64, 90.0, 90.0, 90.0, 90.0, 90.0]);
-        r1.metric.set_metric_group("xxx");
+        r1.metric.set_measurement("xxx");
         r1.metric.set("foo", "bar");
         r1.metric.set("le", "0");
 
         let mut r2 = make_result(&[140_f64, 150.0, 160.0, 170.0, 180.0, 190.0]);
-        r2.metric.set_metric_group("xxx");
+        r2.metric.set_measurement("xxx");
         r2.metric.set("foo", "bar");
         r2.metric.set("le", "0.2");
 
         let mut r3 = make_result(&[190_f64, 210.0, 230.0, 250.0, 270.0, 290.0]);
-        r3.metric.set_metric_group("xxx");
+        r3.metric.set_measurement("xxx");
         r3.metric.set("foo", "bar");
         r3.metric.set("le", "0.25");
 
         let mut r4 = make_result(&[240_f64, 270.0, 300.0, 330.0, 360.0, 390.0]);
-        r4.metric.set_metric_group("xxx");
+        r4.metric.set_measurement("xxx");
         r4.metric.set("foo", "bar");
         r4.metric.set("le", "0.26");
 
         let mut r5 = make_result(&[250_f64, 282.0, 314.0, 346.0, 378.0, 410.0]);
-        r5.metric.set_metric_group("xxx");
+        r5.metric.set_measurement("xxx");
         r5.metric.set("foo", "bar");
         r5.metric.set("le", "40");
 
         let mut r6 = make_result(&[350_f64, 402.0, 454.0, 506.0, 558.0, 610.0]);
-        r6.metric.set_metric_group("xxx");
+        r6.metric.set_measurement("xxx");
         r6.metric.set("foo", "bar");
         r6.metric.set("le", "Inf");
 
@@ -2875,27 +2875,27 @@ mod tests {
         alias(label_set(time()/10, "foo", "bar", "vmrange", "40...Inf"), "xxx"),
         )))"#;
         let mut r1 = make_result(&[90_f64, 90.0, 90.0, 90.0, 90.0, 90.0]);
-        r1.metric.set_metric_group("xxx");
+        r1.metric.set_measurement("xxx");
         r1.metric.set("foo", "bar");
         r1.metric.set("le", "0");
 
         let mut r2 = make_result(&[140_f64, 150.0, 160.0, 170.0, 180.0, 190.0]);
-        r2.metric.set_metric_group("xxx");
+        r2.metric.set_measurement("xxx");
         r2.metric.set("foo", "bar");
         r2.metric.set("le", "0.2");
 
         let mut r3 = make_result(&[190_f64, 210.0, 230.0, 250.0, 270.0, 290.0]);
-        r3.metric.set_metric_group("xxx");
+        r3.metric.set_measurement("xxx");
         r3.metric.set("foo", "bar");
         r3.metric.set("le", "0.25");
 
         let mut r4 = make_result(&[200_f64, 222.0, 244.0, 266.0, 288.0, 310.0]);
-        r4.metric.set_metric_group("xxx");
+        r4.metric.set_measurement("xxx");
         r4.metric.set("foo", "bar");
         r4.metric.set("le", "40");
 
         let mut r5 = make_result(&[300_f64, 342.0, 384.0, 426.0, 468.0, 510.0]);
-        r5.metric.set_metric_group("xxx");
+        r5.metric.set_measurement("xxx");
         r5.metric.set("foo", "bar");
         r5.metric.set("le", "Inf");
 
@@ -3105,7 +3105,7 @@ mod tests {
     fn geomean_over_time() {
         let q = r#"round(geomean_over_time(alias(time()/100, "foobar")[3i]), 0.1)"#;
         let mut r = make_result(&[7.8, 9.9, 11.9, 13.9, 15.9, 17.9]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r]);
     }
 
@@ -3198,9 +3198,9 @@ mod tests {
     fn sum_multi_vector_by_name() {
         let q = r#"sort(sum(label_set(10, "__name__", "bar", "baz", "sss", "x", "y") or label_set(time()/100, "baz", "sss", "__name__", "aaa")) by (__name__))"#;
         let mut r1 = make_result(&[10_f64, 10.0, 10.0, 10.0, 10.0, 10.0]);
-        r1.metric.set_metric_group("bar");
+        r1.metric.set_measurement("bar");
         let mut r2 = make_result(&[10_f64, 12.0, 14.0, 16.0, 18.0, 20.0]);
-        r2.metric.set_metric_group("aaa");
+        r2.metric.set_measurement("aaa");
         test_query(q, vec![r1, r2]);
     }
 
@@ -3240,7 +3240,7 @@ mod tests {
             0.9250000000000002,
             0.891,
         ]);
-        r.metric.set_metric_group("foo");
+        r.metric.set_measurement("foo");
         r.metric.set("xx", "yy");
 
         test_query(q, vec![r]);
@@ -3270,7 +3270,7 @@ mod tests {
         "phi",
         )"#;
         let mut r1 = make_result(&[0.46499999999999997, 0.57, 0.485, 0.54, 0.555, 0.515]);
-        r1.metric.set_metric_group("foo");
+        r1.metric.set_measurement("foo");
         r1.metric.set("phi", "0.5");
         r1.metric.set("xx", "yy");
 
@@ -3282,7 +3282,7 @@ mod tests {
             0.9250000000000002,
             0.891,
         ]);
-        r2.metric.set_metric_group("foo");
+        r2.metric.set_measurement("foo");
         r2.metric.set("phi", "0.9");
         r2.metric.set("xx", "yy");
 
@@ -3515,7 +3515,7 @@ mod tests {
     fn any() {
         let q = r#"any(label_set(10, "__name__", "x", "foo", "bar") or label_set(time()/150, "__name__", "y", "baz", "sss"))"#;
         let mut r = make_result(&[10_f64, 10.0, 10.0, 10.0, 10.0, 10.0]);
-        r.metric.set_metric_group("x");
+        r.metric.set_measurement("x");
         r.metric.set("foo", "bar");
         test_query(q, vec![r]);
     }
@@ -3814,7 +3814,7 @@ mod tests {
     fn keep_last_value() {
         let q = r#"keep_last_value(label_set(time() < 1300 default time() > 1700, "__name__", "foobar", "x", "y"))"#;
         let mut r1 = make_result(&[1000_f64, 1200.0, 1200.0, 1200.0, 1800.0, 2000.0]);
-        r1.metric.set_metric_group("foobar");
+        r1.metric.set_measurement("foobar");
         r1.metric.set("x", "y");
         test_query(q, vec![r1]);
     }
@@ -3823,7 +3823,7 @@ mod tests {
     fn keep_next_value() {
         let q = r#"keep_next_value(label_set(time() < 1300 default time() > 1700, "__name__", "foobar", "x", "y"))"#;
         let mut r1 = make_result(&[1000_f64, 1200.0, 1800.0, 1800.0, 1800.0, 2000.0]);
-        r1.metric.set_metric_group("foobar");
+        r1.metric.set_measurement("foobar");
         r1.metric.set("x", "y");
         test_query(q, vec![r1]);
     }
@@ -3832,7 +3832,7 @@ mod tests {
     fn interpolate() {
         let q = r#"interpolate(label_set(time() < 1300 default time() > 1700, "__name__", "foobar", "x", "y"))"#;
         let mut r1 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
-        r1.metric.set_metric_group("foobar");
+        r1.metric.set_measurement("foobar");
         r1.metric.set("x", "y");
         test_query(q, vec![r1]);
     }
@@ -3894,7 +3894,7 @@ mod tests {
         label_set(time()>1400.0, "foo", "bar"),
         )"#;
         let mut r = make_result(&[NAN, NAN, NAN, 1600.0, 1800.0, 2000.0]);
-        r.metric.set_metric_group("x");
+        r.metric.set_measurement("x");
         r.metric.set("foo", "bar");
         test_query(q, vec![r]);
     }
@@ -3911,7 +3911,7 @@ mod tests {
         let mut r1 = make_result(&[100_f64, 120.0, NAN, NAN, NAN, NAN]);
         r1.metric.set("x", "y");
         let mut r2 = make_result(&[NAN, NAN, NAN, 1600.0, 1800.0, 2000.0]);
-        r2.metric.set_metric_group("x");
+        r2.metric.set_measurement("x");
         r2.metric.set("foo", "bar");
         test_query(q, vec![r1, r2]);
     }
@@ -4087,7 +4087,7 @@ mod tests {
         label_set(time()*0.9, "baz", "sss"),
         ))"#;
         let mut r = make_result(&[1500_f64, 1800.0, 2100.0, 2400.0, 2700.0, 3000.0]);
-        r.metric.set_metric_group("metric2");
+        r.metric.set_measurement("metric2");
         test_query(q, vec![r]);
     }
 
@@ -4340,7 +4340,7 @@ mod tests {
     fn rate_time_keep_metric_names() {
         let q = r#"rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("foo");
+        r.metric.set_measurement("foo");
         r.metric.set("x", "y");
         test_query(q, vec![r]);
     }
@@ -4349,7 +4349,7 @@ mod tests {
     fn sum_rate_time_by_name_keep_metric_names() {
         let q = r#"sum(rate(label_set(alias(time(), "foo"), "x", "y")) keep_metric_names) by (__name__)"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("foo");
+        r.metric.set_measurement("foo");
         test_query(q, vec![r]);
     }
 
@@ -4649,7 +4649,7 @@ mod tests {
             0.7173342952485633,
             0.6585571598032428,
         ]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         test_query(q, vec![r])
     }
 
@@ -4695,19 +4695,20 @@ mod tests {
 
     #[test]
     fn rollup_candlestick() {
-        let temp = exec_query("round(rand(0),0.01)");
+        let temp = exec_raw_query(r#"alias(round(rand(0),0.01), "foobar")"#).unwrap();
+        println!("candlestick: {:?}", temp);
         let q = r#"sort(rollup_candlestick(alias(round(rand(0),0.01),"foobar")[:10s]))"#;
         let mut r1 = make_result(&[0.02, 0.02, 0.03, 0.0, 0.03, 0.02]);
-        r1.metric.set_metric_group("foobar");
+        r1.metric.set_measurement("foobar");
         r1.metric.set("rollup", "low");
         let mut r2 = make_result(&[0.9, 0.32, 0.82, 0.13, 0.28, 0.86]);
-        r2.metric.set_metric_group("foobar");
+        r2.metric.set_measurement("foobar");
         r2.metric.set("rollup", "open");
         let mut r3 = make_result(&[0.1, 0.04, 0.49, 0.46, 0.57, 0.92]);
-        r3.metric.set_metric_group("foobar");
+        r3.metric.set_measurement("foobar");
         r3.metric.set("rollup", "close");
         let mut r4 = make_result(&[0.9, 0.94, 0.97, 0.93, 0.98, 0.92]);
-        r4.metric.set_metric_group("foobar");
+        r4.metric.set_measurement("foobar");
         r4.metric.set("rollup", "high");
         let result_expected: Vec<QueryResult> = vec![r1, r2, r3, r4];
         test_query(q, result_expected)
@@ -4718,7 +4719,7 @@ mod tests {
     fn rollup_candlestick_high() {
         let q = r#"rollup_candlestick(alias(round(rand(0),0.01),"foobar")[:10s], "high")"#;
         let mut r = make_result(&[0.99, 0.98, 0.98, 0.92, 0.98, 0.99]);
-        r.metric.set_metric_group("foobar");
+        r.metric.set_measurement("foobar");
         r.metric.set("rollup", "high");
         let result_expected: Vec<QueryResult> = vec![r];
         test_query(q, result_expected);
@@ -4857,7 +4858,7 @@ mod tests {
     fn parens_expr_identical_labels_with_names() {
         let q = r#"(label_set(1, "foo", "bar", "__name__", "xx"), label_set(2, "__name__", "xx", "foo", "bar"))"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("xx");
+        r.metric.set_measurement("xx");
         r.metric.set("foo", "bar");
         test_query(q, vec![r]);
     }
@@ -4880,7 +4881,7 @@ mod tests {
     fn union_identical_labels_with_names() {
         let q = r#"union(label_set(1, "foo", "bar", "__name__", "xx"), label_set(2, "__name__", "xx", "foo", "bar"))"#;
         let mut r = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r.metric.set_metric_group("xx");
+        r.metric.set_measurement("xx");
         r.metric.set("foo", "bar");
         test_query(q, vec![r]);
     }
@@ -4894,12 +4895,12 @@ mod tests {
         let mut r1 = make_result(&[1000_f64, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0]);
         r1.metric.set("qwe", "123");
         let mut r2 = make_result(&[3_f64, 3.0, 3.0, 3.0, 3.0, 3.0]);
-        r2.metric.set_metric_group("rt");
+        r2.metric.set_measurement("rt");
         let mut r3 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r3.metric.set_metric_group("xx");
+        r3.metric.set_measurement("xx");
         r3.metric.set("foo", "bar");
         let mut r4 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r4.metric.set_metric_group("yy");
+        r4.metric.set_measurement("yy");
         r4.metric.set("foo", "bar");
         let result_expected: Vec<QueryResult> = vec![r1, r2, r3, r4];
         test_query(q, result_expected)
@@ -4909,10 +4910,10 @@ mod tests {
     fn union_identical_labels_different_names() {
         let q = r#"union(label_set(1, "foo", "bar", "__name__", "xx"), label_set(2, "__name__", "yy", "foo", "bar"))"#;
         let mut r1 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r1.metric.set_metric_group("xx");
+        r1.metric.set_measurement("xx");
         r1.metric.set("foo", "bar");
         let mut r2 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r2.metric.set_metric_group("yy");
+        r2.metric.set_measurement("yy");
         r2.metric.set("foo", "bar");
         test_query(q, vec![r1, r2]);
     }
@@ -4921,10 +4922,10 @@ mod tests {
     fn parens_expr_identical_labels_different_names() {
         let q = r#"(label_set(1, "foo", "bar", "__name__", "xx"), label_set(2, "__name__", "yy", "foo", "bar"))"#;
         let mut r1 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r1.metric.set_metric_group("xx");
+        r1.metric.set_measurement("xx");
         r1.metric.set("foo", "bar");
         let mut r2 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r2.metric.set_metric_group("yy");
+        r2.metric.set_measurement("yy");
         r2.metric.set("foo", "bar");
         test_query(q, vec![r1, r2]);
     }
@@ -4938,11 +4939,11 @@ mod tests {
         alias(3, "x3"),
         ))"#;
         let mut r1 = make_result(&[1_f64, 1.0, 1.0, 1.0, 1.0, 1.0]);
-        r1.metric.set_metric_group("x1");
+        r1.metric.set_measurement("x1");
         let mut r2 = make_result(&[2_f64, 2.0, 2.0, 2.0, 2.0, 2.0]);
-        r2.metric.set_metric_group("x2");
+        r2.metric.set_measurement("x2");
         let mut r3 = make_result(&[3_f64, 3.0, 3.0, 3.0, 3.0, 3.0]);
-        r3.metric.set_metric_group("x3");
+        r3.metric.set_measurement("x3");
         test_query(q, vec![r1, r2, r3]);
     }
 

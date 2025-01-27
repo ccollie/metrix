@@ -28,7 +28,7 @@ fn rand_fn_inner<D>(tfa: &mut TransformFuncArg, distro: D) -> RuntimeResult<Vec<
 where
     D: Distribution<f64>,
 {
-    let mut rng: StdRng = create_rng(tfa)?;
+    let rng: StdRng = create_rng(tfa)?;
     let mut tss = eval_number(tfa.ec, 0.0)?;
     let randos = rng.sample_iter(distro);
     for (value, rand_num) in tss[0].values.iter_mut().zip(randos) {
