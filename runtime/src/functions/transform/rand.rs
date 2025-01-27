@@ -1,12 +1,11 @@
-use rand::prelude::StdRng;
-use rand::Rng;
-use rand::{distributions::Distribution, thread_rng, SeedableRng};
+use rand::distributions::Standard;
+use rand::prelude::{Rng, StdRng, SeedableRng, Distribution};
+use rand::rngs::ThreadRng;
 use rand_distr::{Exp1, StandardNormal};
-
 use crate::execution::eval_number;
 use crate::functions::transform::TransformFuncArg;
-use crate::{RuntimeError, RuntimeResult};
 use crate::types::Timeseries;
+use crate::{RuntimeError, RuntimeResult};
 
 fn create_rng(tfa: &mut TransformFuncArg) -> RuntimeResult<StdRng> {
     if tfa.args.len() == 1 {
@@ -20,40 +19,32 @@ fn create_rng(tfa: &mut TransformFuncArg) -> RuntimeResult<StdRng> {
             },
         };
     }
-    match StdRng::from_rng(thread_rng()) {
-        Err(e) => Err(RuntimeError::ArgumentError(
-            format!("Error constructing rng {:?}", e).to_string(),
-        )),
-        Ok(rng) => Ok(rng),
-    }
+    let rng = ThreadRng::default();
+    StdRng::from_rng(rng)
+        .map_err(|_| RuntimeError::ArgumentError("unable to create rng".to_string()))
 }
 
-fn rand_fn_inner<F>(tfa: &mut TransformFuncArg, f: F) -> RuntimeResult<Vec<Timeseries>>
+fn rand_fn_inner<D>(tfa: &mut TransformFuncArg, distro: D) -> RuntimeResult<Vec<Timeseries>>
 where
-    F: Fn(&mut StdRng) -> f64,
+    D: Distribution<f64>,
 {
     let mut rng: StdRng = create_rng(tfa)?;
     let mut tss = eval_number(tfa.ec, 0.0)?;
-    for value in tss[0].values.iter_mut() {
-        *value = f(&mut rng);
+    let randos = rng.sample_iter(distro);
+    for (value, rand_num) in tss[0].values.iter_mut().zip(randos) {
+        *value = rand_num;
     }
     Ok(tss)
 }
 
-macro_rules! create_rand_func {
-    ($name: ident, $f:expr) => {
-        pub(crate) fn $name(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
-            rand_fn_inner(tfa, $f)
-        }
-    };
+pub(crate) fn rand(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+    rand_fn_inner(tfa, Standard)
 }
 
-create_rand_func!(rand, |r: &mut StdRng| r.gen::<f64>());
+pub(crate) fn rand_norm(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+    rand_fn_inner(tfa, StandardNormal)
+}
 
-create_rand_func!(rand_norm, |r: &mut StdRng| {
-    <StandardNormal as Distribution<f64>>::sample::<StdRng>(&StandardNormal, r)
-});
-
-create_rand_func!(rand_exp, |r: &mut StdRng| {
-    <Exp1 as Distribution<f64>>::sample::<StdRng>(&Exp1, r)
-});
+pub(crate) fn rand_exp(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
+    rand_fn_inner(tfa, Exp1)
+}
