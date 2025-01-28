@@ -11,7 +11,7 @@ pub mod async_runtime;
 pub mod atomic_counter;
 pub mod duration;
 pub mod error;
-pub mod fast_cache;
+pub mod cache;
 pub mod hash;
 pub mod histogram;
 pub mod pool;
@@ -25,7 +25,7 @@ pub mod prelude {
     pub use crate::async_runtime::*;
     pub use crate::atomic_counter::*;
     pub use crate::duration::*;
-    pub use crate::fast_cache::*;
+    pub use crate::cache::*;
     pub use crate::hash::*;
     pub use crate::histogram::*;
     pub use crate::pool::*;

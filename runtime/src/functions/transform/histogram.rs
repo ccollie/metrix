@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use ahash::AHashMap;
 use metricsql_common::hash::Signature;
-use metricsql_parser::parser::parse_number;
+use metricsql_parser::parse_number;
 
 use crate::execution::merge_non_overlapping_timeseries;
 use crate::functions::arg_parse::{

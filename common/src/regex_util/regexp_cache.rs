@@ -161,21 +161,12 @@ pub fn get_regexp_from_cache(expr: &str) -> Result<Arc<RegexpCacheValue>, String
 }
 
 const DEFAULT_MAX_REGEXP_CACHE_SIZE: usize = 2048;
-const DEFAULT_MAX_PREFIX_CACHE_SIZE: usize = 2048;
 
 fn get_regexp_cache_max_size() -> &'static usize {
     static REGEXP_CACHE_MAX_SIZE: OnceLock<usize> = OnceLock::new();
     REGEXP_CACHE_MAX_SIZE.get_or_init(|| {
         // todo: read value from env
         DEFAULT_MAX_REGEXP_CACHE_SIZE
-    })
-}
-
-fn get_prefix_cache_max_size() -> &'static usize {
-    static REGEXP_CACHE_MAX_SIZE: OnceLock<usize> = OnceLock::new();
-    REGEXP_CACHE_MAX_SIZE.get_or_init(|| {
-        // todo: read value from env
-        DEFAULT_MAX_PREFIX_CACHE_SIZE
     })
 }
 

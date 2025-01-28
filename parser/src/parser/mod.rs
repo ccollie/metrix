@@ -9,7 +9,7 @@ pub(crate) use utils::{escape_ident, extract_string_value, quote, unescape_ident
 
 use crate::ast::{check_ast, Expr};
 use crate::optimizer::remove_parens;
-use crate::parser::expr::parse_expression;
+
 mod aggregation;
 mod expr;
 mod function;
@@ -30,6 +30,8 @@ mod timestamp;
 
 pub use metric_name::parse_metric_name;
 pub use utils::is_valid_identifier;
+
+use crate::parser::expr::parse_expression;
 
 pub fn parse(input: &str) -> ParseResult<Expr> {
     let mut parser = Parser::new(input)?;

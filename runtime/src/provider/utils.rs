@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use metricsql_parser::ast::Expr;
 use metricsql_parser::label::Matchers;
-use metricsql_parser::parser::parse;
+use metricsql_parser::parse;
 
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 

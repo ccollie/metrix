@@ -38,8 +38,8 @@ pub struct StringMatchOptions {
 
 impl StringMatchOptions {
     pub fn is_default(&self) -> bool {
-        self.anchor_end == false &&
-        self.anchor_start == false &&
+        !self.anchor_end &&
+        !self.anchor_start &&
         self.prefix_quantifier.is_none() &&
         self.suffix_quantifier.is_none()
     }
@@ -105,7 +105,7 @@ impl ZeroOrOneCharsMatcher {
         if self.match_nl {
             s.is_empty() || s.chars().count() == 1
         } else {
-            s.is_empty() || (s.chars().count() == 1 && s.chars().next().unwrap() != '\n')
+            s.is_empty() || (s.chars().count() == 1 && !s.starts_with('\n'))
         }
     }
 
@@ -152,6 +152,10 @@ impl EqualMultiStringMatcher {
 
     pub fn len(&self) -> usize {
         self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
     fn cost(&self) -> usize {
@@ -265,8 +269,8 @@ pub struct ContainsMultiStringMatcher {
 
 impl ContainsMultiStringMatcher {
     pub(crate) fn new(substrings: Vec<String>, left: Option<StringMatchHandler>, right: Option<StringMatchHandler>) -> Self {
-        let left = left.map(|l| Box::new(l));
-        let right = right.map(|r| Box::new(r));
+        let left = left.map(Box::new);
+        let right = right.map(Box::new);
         Self {
             substrings,
             left,
@@ -389,7 +393,7 @@ impl RepetitionMatcher {
         }
         if let Some(max) = &self.max {
             let pat_len = self.sub.len();
-            let mut cursor = &s[..];
+            let mut cursor = s;
             let mut i = 0;
 
             while i <= (*max + 1) {
@@ -569,7 +573,7 @@ impl StringMatchHandler {
         get_optimized_literal_matcher(value, options)
     }
     pub fn equals(value: String) -> Self {
-        StringMatchHandler::literal(value.into(), true)
+        StringMatchHandler::literal(value, true)
     }
 
     pub fn prefix(value: String, right: Option<StringMatchHandler>, case_sensitive: bool) -> Self {
@@ -592,12 +596,10 @@ impl StringMatchHandler {
     }
 
     pub fn is_quantifier(&self) -> bool {
-        match self {
-            StringMatchHandler::Repetition(_) => true,
-            StringMatchHandler::ZeroOrOneChars(_) => true,
-            StringMatchHandler::MatchAny(_) => true,
-            _ => false,
-        }
+        matches!(self,
+            StringMatchHandler::Repetition(_) |
+            StringMatchHandler::ZeroOrOneChars(_) |
+            StringMatchHandler::MatchAny(_))
     }
 
     pub(super) fn is_literal(&self) -> bool {
@@ -609,9 +611,9 @@ impl StringMatchHandler {
             StringMatchHandler::Repetition(r) => {
                 if r.min == 0 && r.max == Some(1) {
                     Some(Quantifier::ZeroOrOne)
-                } else if r.min == 0 && r.max == None {
+                } else if r.min == 0 && r.max.is_none() {
                     Some(Quantifier::ZeroOrMore)
-                } else if r.min == 1 && r.max == None {
+                } else if r.min == 1 && r.max.is_none() {
                     Some(Quantifier::OneOrMore)
                 } else {
                     None
@@ -980,7 +982,7 @@ pub(super) fn get_optimized_literal_matcher(value: String, options: &StringMatch
             }
             (None, None) => {
                 // ^foobar$
-                StringMatchHandler::literal(value.into(), true)
+                StringMatchHandler::literal(value, true)
             }
             _ => {
                 handle_default(options, value)
@@ -1058,7 +1060,7 @@ pub(super) fn get_optimized_literal_matcher(value: String, options: &StringMatch
             }
             (None, None) => {
                 // foobar
-                StringMatchHandler::literal(value.into(), true)
+                StringMatchHandler::literal(value, true)
             }
             _ => {
                 // foobar

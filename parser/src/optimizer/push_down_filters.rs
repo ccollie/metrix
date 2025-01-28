@@ -6,10 +6,9 @@ use crate::functions::{AggregateFunction, BuiltinFunction, RollupFunction, Trans
 use crate::label::{Matcher, Matchers, NAME_LABEL};
 use crate::parser::{ParseError, ParseResult};
 use crate::prelude::{can_accept_multiple_args_for_aggr_func, VectorMatchCardinality};
-use metricsql_common::hash::{FastHashSet, HashSetExt, Signature};
+use metricsql_common::hash::{FastHashSet, Signature};
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::hash::Hash;
 use std::iter::FromIterator;
 use std::vec::Vec;
 
@@ -463,7 +462,7 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
                 union_label_filters_internal(&mut me.matchers.matchers, common_filters);
             } else if !me.matchers.or_matchers.is_empty() {
                 for matcher in me.matchers.or_matchers.iter_mut() {
-                    union_label_filters_internal(matcher, &common_filters);
+                    union_label_filters_internal(matcher, common_filters);
                 }
             } else {
                 me.matchers.matchers = common_filters.clone();
@@ -475,7 +474,7 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
             use TransformFunction::*;
 
             match fe.function {
-                BuiltinFunction::Rollup(rf) if rf == RollupFunction::CountValuesOverTime => {
+                BuiltinFunction::Rollup(RollupFunction::CountValuesOverTime) => {
                     return pushdown_label_filters_for_count_values_over_time(&mut fe.args, common_filters);
                 }
                 Transform(tf) => match tf {
@@ -524,7 +523,7 @@ pub fn push_down_binary_op_filters_in_place(e: &mut Expr, common_filters: &mut V
             trim_filters_by_aggr_modifier(common_filters, aggr);
             if aggr.function == AggregateFunction::CountValues {
                 if aggr.args.len() == 2 {
-                    *common_filters = drop_label_filters_for_label_name(&common_filters, &aggr.args[0]);
+                    *common_filters = drop_label_filters_for_label_name(common_filters, &aggr.args[0]);
                     push_down_binary_op_filters_in_place(&mut aggr.args[1], common_filters);
                 }
             } else if can_accept_multiple_args_for_aggr_func(aggr.function) {
@@ -559,7 +558,7 @@ fn pushdown_label_filters_for_count_values_over_time(
     if args.len() != 2 {
         return;
     }
-    *lfs = drop_label_filters_for_label_name(&lfs, &args[0]);
+    *lfs = drop_label_filters_for_label_name(lfs, &args[0]);
     push_down_binary_op_filters_in_place(&mut args[1], lfs);
 }
 
@@ -584,7 +583,7 @@ fn pushdown_label_filters_for_label_del(args: &mut [Expr], lfs: &mut Vec<Matcher
     }
 }
 
-fn pushdown_label_filters_for_label_copy(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
+fn pushdown_label_filters_for_label_copy(args: &mut [Expr], lfs: &mut [Matcher]) {
     if args.is_empty() {
         return;
     }
@@ -610,7 +609,7 @@ fn pushdown_label_filters_for_label_replace(args: &mut [Expr], lfs: &mut Vec<Mat
     }
 }
 
-fn pushdown_label_filters_for_label_set(args: &mut [Expr], lfs: &mut Vec<Matcher>) {
+fn pushdown_label_filters_for_label_set(args: &mut [Expr], lfs: &mut [Matcher]) {
     if args.is_empty() {
         return;
     }
@@ -671,7 +670,7 @@ fn union_label_filters(first: Vec<Matcher>, second: Vec<Matcher>) -> Vec<Matcher
     result
 }
 
-fn union_label_filters_internal(first: &mut Vec<Matcher>, second: &Vec<Matcher>) {
+fn union_label_filters_internal(first: &mut Vec<Matcher>, second: &[Matcher]) {
     // use SmallVec here because generally the number of filters is small, and we want to avoid allocations
     let set: SmallVec<Signature, 6> = SmallVec::from_iter(first.iter().map(Signature::new));
     for matcher in second.iter() {

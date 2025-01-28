@@ -11,7 +11,7 @@ use crate::types::{MetricName, SeriesSlice, Timeseries, Timestamp};
 use crate::{RuntimeError, RuntimeResult};
 
 // todo: move elsewhere
-
+#[allow(dead_code)]
 pub(crate) fn compress_series(series: &[Timeseries], buf: &mut Vec<u8>) -> RuntimeResult<()> {
     let series_slices: Vec<SeriesSlice> = series
         .iter()

@@ -114,7 +114,7 @@ pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: Duration) ->
         );
         return Err(RuntimeError::from(msg));
     }
-    if ts_golden.timestamps.len() > 0 {
+    if !ts_golden.timestamps.is_empty() {
         let mut prev_timestamp = ts_golden.timestamps[0];
         let step_ms = step.as_millis() as i64;
         for timestamp in ts_golden.timestamps.iter().skip(1) {
@@ -147,7 +147,7 @@ pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: Duration) ->
             );
             return Err(RuntimeError::from(msg));
         }
-        if ts.timestamps.len() == 0 {
+        if ts.timestamps.is_empty() {
             continue;
         }
         if ts.timestamps[0] == ts_golden.timestamps[0] {

@@ -1,4 +1,3 @@
-use crate::hash::HashSetExt;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
@@ -699,7 +698,7 @@ mod tests {
 
     use test_case::test_case;
 
-    use crate::fast_cache::fast_cache::{FastCache, Stats, BUCKETS_COUNT, CHUNK_SIZE};
+    use crate::cache::fast_cache::{FastCache, Stats, BUCKETS_COUNT, CHUNK_SIZE};
 
     const BIG_CACHE_SIZE_MIN: usize = 32 * 1024 * 1024;
 
@@ -785,7 +784,7 @@ mod tests {
 
     #[test]
     fn test_cache_empty_value() {
-        let mut c = FastCache::new(1);
+        let c = FastCache::new(1);
 
         let mut v: Vec<u8> = vec![];
 

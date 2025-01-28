@@ -315,7 +315,7 @@ fn handle_function_expr(fe: FunctionExpr) -> Expr {
                 }
                 Expr::NumberLiteral(n) => Expr::from(n.value),
                 _ => {
-                    let mut expr = const_simplify(arg.clone());
+                    let expr = const_simplify(arg.clone());
                     // `Scalar(q)` returns q if q contains only a single time series. Otherwise, it returns nothing.
                     // It's difficult to determine if a time series is a single time series from a vector selector.
                     match expr {
@@ -455,7 +455,7 @@ mod tests {
 
     fn set_bool_modifier(expr: Expr) -> Expr {
         match expr {
-            Expr::BinaryOperator(mut be) => Expr::BinaryOperator(be.with_bool_modifier()),
+            Expr::BinaryOperator(be) => Expr::BinaryOperator(be.with_bool_modifier()),
             _ => expr,
         }
     }

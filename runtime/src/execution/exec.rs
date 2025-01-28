@@ -184,7 +184,7 @@ pub fn exec(
     }
 
     if is_first_point_only {
-        if rv[0].timestamps.len() > 0 {
+        if !rv[0].timestamps.is_empty() {
             let timestamps = Arc::new(vec![rv[0].timestamps[0]]);
             // Remove all the points except the first one from every time series.
             for ts in rv.iter_mut() {

@@ -11,7 +11,7 @@ use crate::runtime_error::{RuntimeError, RuntimeResult};
 use ahash::{AHashMap, AHashSet};
 use enquote::enquote;
 use metricsql_common::prelude::Label;
-use metricsql_parser::parser::{parse_metric_name, ParseError, ParseResult};
+use metricsql_parser::{parse_metric_name, ParseError, ParseResult};
 use metricsql_parser::prelude::{AggregateModifier, VectorMatchModifier};
 use serde::{Deserialize, Serialize};
 

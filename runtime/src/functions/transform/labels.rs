@@ -320,7 +320,7 @@ fn handle_label_replace(
         }
 
         let b = r.replace_all(haystack, replacement);
-        if b.len() == 0 {
+        if b.is_empty() {
             ts.metric_name.remove_label(dst_label)
         } else {
             // if we have borrowed src_value, we need to clone it to avoid holding

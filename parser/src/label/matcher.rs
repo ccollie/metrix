@@ -184,8 +184,8 @@ impl Matcher {
         match self.op {
             Equal => self.value.is_empty(),
             NotEqual => !self.value.is_empty() && !is_name_label,
-            RegexEqual => is_empty_regex_matcher(&self),
-            RegexNotEqual => is_empty_regex_matcher(&self) && !is_name_label,
+            RegexEqual => is_empty_regex_matcher(self),
+            RegexNotEqual => is_empty_regex_matcher(self) && !is_name_label,
         }
     }
 
@@ -196,7 +196,7 @@ impl Matcher {
             MatchOp::RegexEqual => {
                 // slight optimization for frequent case
                 if str.is_empty() {
-                    return is_empty_regex_matcher(&self);
+                    return is_empty_regex_matcher(self);
                 }
                 if let Some(re) = &self.re {
                     re.matches(str)

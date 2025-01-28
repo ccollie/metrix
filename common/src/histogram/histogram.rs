@@ -21,7 +21,7 @@ static LOWER_BUCKET_RANGE: LazyLock<String> =
 /// Each bucket contains a counter for values in the given range.
 /// Each non-empty bucket is exposed via the following metric:
 ///
-///	`<metric_name>_bucket{<optional_tags>,vmrange="<start>...<end>"} <counter>`
+///    `<metric_name>_bucket{<optional_tags>,vmrange="<start>...<end>"} <counter>`
 ///
 /// Where:
 ///
@@ -34,7 +34,7 @@ static LOWER_BUCKET_RANGE: LazyLock<String> =
 /// with `prometheus_buckets(<metric_name>_bucket)` function from PromQL extensions in VictoriaMetrics.
 /// (see https://docs.victoriametrics.com/metricsql/ ):
 ///
-///	`prometheus_buckets(request_duration_bucket)`
+///    `prometheus_buckets(request_duration_bucket)`
 ///
 /// Time series produced by the Histogram have better compression ratio comparing to
 /// Prometheus histogram buckets with `le` labels, since they don't include counters

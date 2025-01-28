@@ -142,27 +142,6 @@ fn label_alpha_numeric_sort_impl(
     Ok(series)
 }
 
-/// Order `a` and `b` lexicographically using `Ord`
-#[inline]
-pub fn iter_cmp<A, L, R>(mut a: L, mut b: R) -> Ordering
-where
-    A: Ord,
-    L: Iterator<Item = A>,
-    R: Iterator<Item = A>,
-{
-    loop {
-        match (a.next(), b.next()) {
-            (None, None) => return Ordering::Equal,
-            (None, _) => return Ordering::Less,
-            (_, None) => return Ordering::Greater,
-            (Some(x), Some(y)) => match x.cmp(&y) {
-                Ordering::Equal => (),
-                non_eq => return non_eq,
-            },
-        }
-    }
-}
-
 #[inline]
 fn reverse_ordering(order: Ordering) -> Ordering {
     match order {

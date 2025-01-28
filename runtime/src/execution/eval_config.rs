@@ -212,12 +212,12 @@ impl EvalConfig {
 
     pub fn get_timestamps(&self) -> RuntimeResult<Arc<Vec<Timestamp>>> {
         let locked = self._timestamps.read().unwrap();
-        if locked.len() > 0 {
+        if !locked.is_empty() {
             return Ok(Arc::clone(&locked));
         }
         drop(locked);
         let mut write_locked = self._timestamps.write().unwrap();
-        if write_locked.len() > 0 {
+        if !write_locked.is_empty() {
             return Ok(Arc::clone(&write_locked));
         }
         let ts = get_timestamps(self.start, self.end, self.step, self.max_points_per_series)?;

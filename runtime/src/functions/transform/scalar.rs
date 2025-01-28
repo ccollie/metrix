@@ -1,4 +1,4 @@
-use metricsql_parser::parser::parse_number;
+use metricsql_parser::parse_number;
 
 use crate::execution::eval_number;
 use crate::functions::transform::utils::expect_transform_args_num;

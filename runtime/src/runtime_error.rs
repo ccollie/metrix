@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
-use metricsql_parser::parser::ParseError;
+use metricsql_parser::ParseError;
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 

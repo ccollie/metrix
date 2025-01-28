@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::hash::Hasher;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 /// import commonly used items from the prelude:
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,6 @@ use tracing::{field, info, span_enabled, trace_span, Level, Span};
 use xxhash_rust::xxh3::Xxh3;
 use metricsql_common::hash::{FastHasher, Signature};
 use metricsql_common::prelude::{get_pooled_buffer, AtomicCounter, RelaxedU64Counter};
-use metricsql_common::time::Time;
 use metricsql_common::types::Label;
 use metricsql_parser::ast::Expr;
 use metricsql_parser::prelude::Matchers;
@@ -185,7 +184,7 @@ impl RollupResultCache {
         if !inner
             .cache
             .get_big(bb.as_slice(), &mut compressed_result_buf)
-            || compressed_result_buf.len() == 0
+            || compressed_result_buf.is_empty()
         {
             mi.remove_key(key);
             mi.marshal(&mut meta_info_buf);
@@ -446,7 +445,7 @@ impl RollupResultCache {
         );
         let mut meta_info_buf = get_pooled_buffer(512);
         let found = inner.cache.get(&hash.to_ne_bytes(), &mut meta_info_buf);
-        if found && meta_info_buf.len() > 0 {
+        if found && !meta_info_buf.is_empty() {
             match RollupResultCacheMetaInfo::from_buf(&meta_info_buf) {
                 Err(_) => {
                     let msg = "BUG: cannot unmarshal RollupResultCacheMetaInfo; it looks like it was improperly saved";
@@ -616,7 +615,6 @@ pub(crate) fn merge_timeseries(
             metric_name: ts_b.metric_name,
             timestamps: Arc::clone(&shared_timestamps),
             values: Vec::with_capacity(sample_count),
-            ..Default::default()
         };
 
         // Append values from `a` or NaNs if `a` doesn't have the series.
@@ -641,7 +639,6 @@ pub(crate) fn merge_timeseries(
             metric_name: ts_a.metric_name.clone(),
             timestamps: Arc::clone(&shared_timestamps),
             values: Vec::with_capacity(sample_count),
-            ..Default::default()
         };
 
         // Append values from `a`.
@@ -657,18 +654,6 @@ pub(crate) fn merge_timeseries(
     }
 
     Ok(merged_series)
-}
-
-fn validate_timeseries_length(ts: &Timeseries) -> RuntimeResult<()> {
-    if ts.values.len() != ts.timestamps.len() {
-        let msg = format!(
-            "mismatched timestamp/value length in timeseries; got {}; want {}",
-            ts.values.len(),
-            ts.timestamps.len()
-        );
-        return Err(RuntimeError::InvalidState(msg));
-    }
-    Ok(())
 }
 
 #[derive(Clone, Default)]
@@ -892,7 +877,7 @@ fn metric_name_hash_sorted(metric_name: &MetricName) -> u64 {
         labels.push(label);
     }
 
-    labels.sort_unstable_by(|a, b| a.cmp(&b));
+    labels.sort_unstable();
 
     hasher.write_str(&metric_name.measurement);
     for label in labels.iter() {

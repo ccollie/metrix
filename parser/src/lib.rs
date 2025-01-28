@@ -17,7 +17,18 @@ pub mod common;
 pub mod functions;
 pub mod label;
 pub mod optimizer;
-pub mod parser;
+mod parser;
+
+pub use crate::parser::{
+    parse,
+    parse_duration_value,
+    parse_number,
+    parse_metric_expr,
+    parse_metric_name,
+    parse_timestamp,
+    parse_numeric_timestamp,
+    ParseErr, ParseError, ParseResult,
+};
 
 pub mod prelude {
     pub use crate::ast::*;
@@ -27,5 +38,4 @@ pub mod prelude {
     pub use crate::label::*;
     pub use crate::optimizer::*;
     pub use crate::parser::*;
-    pub use crate::ast::utils::*;
 }

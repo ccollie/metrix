@@ -297,13 +297,13 @@ impl RollupConfig {
     ) -> RuntimeResult<(u64, Vec<Timeseries>)> {
         let func_keeps_metric_name = func.keep_metric_name();
         if TimeSeriesMap::is_valid_function(func) {
-            let tsm = Arc::new(Box::new(
+            let tsm = Arc::new(
                 TimeSeriesMap::new(
                     keep_metric_names || func_keeps_metric_name,
                     shared_timestamps,
                     metric,
                 )
-            ));
+            );
             let scanned = self.do_timeseries_map(tsm.clone(), values, timestamps)?;
             let len = tsm.series_len();
             if len == 0 {
@@ -333,7 +333,7 @@ impl RollupConfig {
     /// returns the number of samples scanned
     pub(crate) fn do_timeseries_map(
         &self,
-        tsm: Arc<Box<TimeSeriesMap>>,
+        tsm: Arc<TimeSeriesMap>,
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
@@ -344,7 +344,7 @@ impl RollupConfig {
     pub(crate) fn exec_internal(
         &self,
         dst_values: &mut Vec<f64>,
-        tsm: Option<Arc<Box<TimeSeriesMap>>>,
+        tsm: Option<Arc<TimeSeriesMap>>,
         values: &[f64],
         timestamps: &[Timestamp],
     ) -> RuntimeResult<u64> {
@@ -414,10 +414,11 @@ impl RollupConfig {
             nj = seek_first_timestamp_idx_after(&timestamps[j..], t_end, nj);
             j += nj;
 
-            let mut rfa = RollupFuncArg::default();
-            rfa.window = window_ms;
-
-            rfa.prev_timestamp = t_start - max_prev_interval;
+            let mut rfa = RollupFuncArg {
+                window: window_ms,
+                prev_timestamp: t_start - max_prev_interval,
+                ..Default::default()
+            };
 
             if i < sample_len && i > 0 && timestamps[i-1] > rfa.prev_timestamp {
                 // SAFETY: range is checked above

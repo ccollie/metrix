@@ -1,12 +1,15 @@
+use metricsql_parser::parse;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use lru_time_cache::LruCache;
 
 use metricsql_parser::ast::{Expr, Operator};
-use metricsql_parser::parser;
-use metricsql_parser::parser::ParseError;
-use metricsql_parser::prelude::{adjust_comparison_ops, optimize as optimize_expr};
+use metricsql_parser::prelude::{
+    adjust_comparison_ops,
+    optimize as optimize_expr,
+    ParseError
+};
 
 const PARSE_CACHE_MAX_LEN: usize = 500;
 
@@ -90,7 +93,7 @@ impl ParseCache {
 
     // todo: pass options
     pub(super) fn parse_internal(q: &str, optimize: bool) -> ParseCacheValue {
-        match parser::parse(q) {
+        match parse(q) {
             Ok(mut expr) => {
                 adjust_comparison_ops(&mut expr);
                 let has_subquery = expr.contains_subquery();

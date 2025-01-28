@@ -1,4 +1,4 @@
-use metricsql_common::fast_cache::FastCache;
+use metricsql_common::cache::FastCache;
 
 use crate::cache::RollupResultCacheStorage;
 

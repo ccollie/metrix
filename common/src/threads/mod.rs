@@ -39,6 +39,7 @@ where F: Fn(&T) -> R + Send + Sync, R: Clone + Send
     }
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     fn handle_six<T: Send + Sync, F, R: Send>(s: &mut Scope<'_>, f: &F, first: &T, second: &T, third: &T, fourth: &T, fifth: &T, sixth: &T) -> (R, R, R, R, R, R)
     where F: Fn(&T) -> R + Send + Sync
     {

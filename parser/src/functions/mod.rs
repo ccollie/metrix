@@ -220,7 +220,7 @@ fn init_registry() -> FunctionRegistry {
 impl BuiltinFunction {
     pub fn new(name: &str) -> ParseResult<Self> {
         if let Some(meta) = FunctionMeta::lookup(name) {
-            return Ok(meta.function.clone());
+            return Ok(meta.function);
         }
         Err(ParseError::InvalidFunction(format!("built-in::{name}")))
     }

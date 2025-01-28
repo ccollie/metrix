@@ -361,7 +361,7 @@ impl Display for Token {
     }
 }
 
-pub(crate) const IDENT_LIKE_TOKENS: &'static [Token] =
+pub(crate) const IDENT_LIKE_TOKENS: &[Token] =
     &[
         Token::By,
         Token::Bool,
