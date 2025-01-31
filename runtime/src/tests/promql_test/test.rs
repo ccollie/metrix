@@ -264,7 +264,6 @@ impl Test {
 }
 
     fn exec_range_eval(&self, cmd: &EvalCmd) -> Result<(), TestAssertionError> {
-        let step = cmd.step.as_millis() as i64;
         let start = timestamp_from_system_time(&cmd.start);
         let end = timestamp_from_system_time(&cmd.end);
         let mut ec = EvalConfig::new(start, end, cmd.step);

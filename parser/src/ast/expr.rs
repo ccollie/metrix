@@ -583,7 +583,7 @@ impl DurationExpr {
         matches!(self, DurationExpr::StepValue(_))
     }
 
-    /// Duration returns the duration from de in milliseconds.
+    /// Duration returns the duration in milliseconds.
     pub fn value(&self, step: Duration) -> i64 {
         match self {
             DurationExpr::Millis(v) => *v,
@@ -1157,7 +1157,7 @@ pub struct RollupExpr {
     pub window: Option<DurationExpr>,
 
     /// step contains optional step value from square brackets. Equivalent to `resolution`
-    /// in the prometheus docs
+    /// in the `prometheus` docs
     ///
     /// For example, `foobar[1h:3m]` will have step value `3m`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1413,7 +1413,7 @@ impl BinaryExpr {
         true
     }
 
-    pub fn should_reset_metric_group(&self) -> bool {
+    pub fn should_reset_metric_name(&self) -> bool {
         if matches!(&self.modifier, Some(modifier) if modifier.keep_metric_names) {
             return false;
         }

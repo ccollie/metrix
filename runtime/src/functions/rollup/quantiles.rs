@@ -8,6 +8,7 @@ use crate::functions::rollup::{RollupFuncArg, RollupHandler, RollupHandlerFloat}
 use crate::{RuntimeResult};
 use crate::types::QueryValue;
 
+
 pub(super) fn new_rollup_quantiles(args: &[QueryValue]) -> RuntimeResult<RollupHandler> {
     let phi_label = get_string_param_value(args, 0, "quantiles", "phi_label").unwrap();
     let cap = args.len() - 1;

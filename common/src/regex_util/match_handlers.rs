@@ -602,30 +602,6 @@ impl StringMatchHandler {
             StringMatchHandler::MatchAny(_))
     }
 
-    pub(super) fn is_literal(&self) -> bool {
-        matches!(self, StringMatchHandler::Literal(_))
-    }
-
-    pub(super) fn quantifier(&self) -> Option<Quantifier> {
-        match self {
-            StringMatchHandler::Repetition(r) => {
-                if r.min == 0 && r.max == Some(1) {
-                    Some(Quantifier::ZeroOrOne)
-                } else if r.min == 0 && r.max.is_none() {
-                    Some(Quantifier::ZeroOrMore)
-                } else if r.min == 1 && r.max.is_none() {
-                    Some(Quantifier::OneOrMore)
-                } else {
-                    None
-                }
-            }
-            StringMatchHandler::MatchAny(_) => Some(Quantifier::ZeroOrMore),
-            StringMatchHandler::ZeroOrOneChars(_) => Some(Quantifier::ZeroOrOne),
-            StringMatchHandler::NotEmpty(_) => Some(Quantifier::OneOrMore),
-            _ => None,
-        }
-    }
-
     pub fn matches(&self, s: &str) -> bool {
         match self {
             StringMatchHandler::MatchAny(m) => m.matches(s),

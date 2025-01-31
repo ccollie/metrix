@@ -186,6 +186,7 @@ fake_wrapper!(new_rollup, "rollup");
 fake_wrapper!(new_rollup_candlestick, "rollup_candlestick");
 fake_wrapper!(new_rollup_scrape_interval_fake, "rollup_scrape_interval");
 
+#[cfg(test)]
 pub(crate) fn get_rollup_function_handler(
     func: RollupFunction,
     args: &[QueryValue],

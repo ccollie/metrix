@@ -1211,9 +1211,6 @@ mod tests {
 
     #[test]
     fn test_rollup_increase_pure_with_staleness_staleness_marker() {
-        let timestamps = vec![0, 15000, 30000, 70000];
-        let values = vec![1.0, 1.0, 1.0, 1.0];
-
         // Test case: staleness marker
         let timestamps = vec![0, 10000, 20000, 30000, 40000];
         let values = vec![1.0, 1.0, 1.0, NAN, 1.0];
