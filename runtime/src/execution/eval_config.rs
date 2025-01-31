@@ -207,7 +207,7 @@ impl EvalConfig {
         self.max_points_per_series = state_config.max_points_subquery_per_timeseries;
         self.no_stale_markers = state_config.no_stale_markers;
         self.lookback_delta = state_config.max_lookback;
-        self.max_series = state_config.max_unique_timeseries;
+        self.max_series = state_config.max_response_series;
     }
 
     pub fn get_timestamps(&self) -> RuntimeResult<Arc<Vec<Timestamp>>> {

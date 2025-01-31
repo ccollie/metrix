@@ -11,7 +11,7 @@ pub(crate) fn get_string_arg(args: &[QueryValue], arg_num: usize) -> RuntimeResu
         return Err(RuntimeError::ArgumentError(msg));
     }
     let res = match &args[arg_num] {
-        QueryValue::String(s) => Ok(Cow::Borrowed(s)), // todo: use .into ??
+        QueryValue::String(s) => Ok(Cow::Borrowed(s)),
         QueryValue::Scalar(f) => Ok(Cow::Owned(f.to_string())),
         QueryValue::InstantVector(series) => {
             if series.len() != 1 {
@@ -32,9 +32,7 @@ pub(crate) fn get_string_arg(args: &[QueryValue], arg_num: usize) -> RuntimeResu
             let res = Cow::Owned(series[0].metric_name.measurement.clone());
             return Ok(res);
         }
-        _ => Err(RuntimeError::ArgumentError(
-            "string parameter expected ".to_string(),
-        )),
+        _ => Err(RuntimeError::ArgumentError(format!("string expected for parameter {} ", arg_num + 1))),
     };
     res
 }

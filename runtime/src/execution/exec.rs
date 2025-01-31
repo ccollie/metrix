@@ -196,7 +196,17 @@ pub fn exec(
         }
     }
 
-    let mut result = timeseries_to_result(&mut rv, parsed.sort_results)?;
+    // remove mutability
+    let rv = rv;
+    let mut result = timeseries_to_result(rv, parsed.sort_results)?;
+
+    let max_series = context.config.max_response_series;
+    if max_series > 0 && result.len() > max_series {
+        return Err(RuntimeError::MaxSeriesExceeded {
+            max_series,
+            found_series: result.len(),
+        });
+    }
 
     let n = ec.round_digits;
     if n < 100 {
@@ -217,10 +227,12 @@ pub fn exec(
 
 
 pub(crate) fn timeseries_to_result(
-    tss: &mut Vec<Timeseries>,
+    tss: Vec<Timeseries>,
     may_sort: bool,
 ) -> RuntimeResult<Vec<QueryResult>> {
-    remove_empty_series(tss);
+    let mut tss = tss;
+
+    remove_empty_series(&mut tss);
     if tss.is_empty() {
         return Ok(vec![]);
     }
@@ -235,17 +247,15 @@ pub(crate) fn timeseries_to_result(
 
         if m.insert(key) {
             let res = QueryResult {
-                metric: ts.metric_name.clone(), // todo(perf) into vs clone/take
-                values: ts.values.clone(),      // perf) .into vs clone/take
+                metric: std::mem::take(&mut ts.metric_name),
+                values: std::mem::take(&mut ts.values),
                 timestamps: ts.timestamps.as_ref().clone(), // todo(perf): declare field as Rc<Vec<i64>>
             };
 
             result.push(res);
         } else {
-            return Err(RuntimeError::from(format!(
-                "duplicate output timeseries: {}",
-                ts.metric_name
-            )));
+            let series_name = ts.metric_name.to_string();
+            return Err(RuntimeError::DuplicateOutputSeries(series_name));
         }
     }
 
@@ -420,7 +430,7 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
                         let right = eval_number(ec, scalar)?;
                         exec_vector_vector_binop(ctx, vector, right, be.op, &be.modifier)
                     } else {
-                        eval_vector_scalar_binop(vector, be.op, scalar, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                        eval_vector_scalar_binop(vector, be.op, scalar, be.returns_bool(), be.should_reset_metric_name(), is_tracing)
                     }
                 }
                 (QueryValue::Scalar(scalar), QueryValue::InstantVector(vector)) => {
@@ -428,7 +438,7 @@ fn exec_binary_op(ctx: &Context, ec: &EvalConfig, be: &BinaryExpr) -> RuntimeRes
                         let left = eval_number(ec, scalar)?;
                         exec_vector_vector_binop(ctx, left, vector, be.op, &be.modifier)
                     } else {
-                        eval_scalar_vector_binop(scalar, be.op, vector, be.returns_bool(), be.should_reset_metric_group(), is_tracing)
+                        eval_scalar_vector_binop(scalar, be.op, vector, be.returns_bool(), be.should_reset_metric_name(), is_tracing)
                     }
                 }
                 (QueryValue::String(left), QueryValue::String(right)) => {

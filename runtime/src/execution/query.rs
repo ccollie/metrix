@@ -329,7 +329,7 @@ pub fn query(context: &Context, params: &QueryParams) -> RuntimeResult<Vec<Query
 }
 
 fn export_handler(ctx: &Context, cp: CommonParams) -> RuntimeResult<QueryResults> {
-    let max_series = &ctx.config.max_unique_timeseries;
+    let max_series = &ctx.config.max_response_series;
     let CommonParams {
         start,
         end,

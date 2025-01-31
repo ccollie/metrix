@@ -169,7 +169,7 @@ pub struct SessionConfig {
 
     /// The maximum number of unique time series to be returned from instant or range queries
     /// This option allows limiting memory usage
-    pub max_unique_timeseries: usize,
+    pub max_response_series: usize,
 
     /// Synonym to -provider.lookback-delta from Prometheus.
     /// The value is dynamically detected from interval between time series data-points if not set.
@@ -229,7 +229,7 @@ impl Default for SessionConfig {
             max_points_subquery_per_timeseries: 0,
             max_staleness_interval: Duration::ZERO,
             min_staleness_interval: Duration::ZERO,
-            max_unique_timeseries: DEFAULT_MAX_UNIQUE_TIMESERIES,
+            max_response_series: DEFAULT_MAX_UNIQUE_TIMESERIES,
             max_lookback: Duration::ZERO,
             set_lookback_to_step: false,
             max_step_for_points_adjustment: Duration::from_millis(1000),

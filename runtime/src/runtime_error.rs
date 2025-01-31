@@ -43,8 +43,15 @@ pub enum RuntimeError {
     NotImplemented(String),
     #[error("Cannot optimize expression: {0}")]
     OptimizerError(String),
+    #[error("Duplicate output series: {0}")]
+    DuplicateOutputSeries(String),
     #[error("Duplicate metric labels: {0}")]
     DuplicateMetricLabels(String),
+    #[error("The response contains more than {max_series} series: found {found_series};")]
+    MaxSeriesExceeded {
+        found_series: usize,
+        max_series: usize,
+    },
 }
 
 impl RuntimeError {
