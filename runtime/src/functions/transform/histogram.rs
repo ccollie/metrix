@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ahash::AHashMap;
-use metricsql_common::hash::Signature;
+use ahash::{AHashMap, HashMapExt};
+use metricsql_common::hash::{IntMap, Signature};
 use metricsql_parser::parse_number;
 
 use crate::execution::merge_non_overlapping_timeseries;
@@ -48,7 +48,7 @@ pub(crate) fn buckets_limit(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Tim
         ts: Timeseries,
     }
 
-    let mut bucket_map: AHashMap<Signature, Vec<Bucket>> = AHashMap::new();
+    let mut bucket_map: IntMap<Signature, Vec<Bucket>> = IntMap::new();
 
     let mut mn: MetricName = MetricName::default();
     let empty_str = "".to_string();
@@ -195,7 +195,7 @@ impl Bucket {
 pub(crate) fn vmrange_buckets_to_le(tss: Vec<Timeseries>) -> Vec<Timeseries> {
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(tss.len());
 
-    let mut buckets: AHashMap<Signature, Vec<Bucket>> = AHashMap::with_capacity(tss.len());
+    let mut buckets: IntMap<Signature, Vec<Bucket>> = IntMap::with_capacity(tss.len());
 
     let empty_str = "".to_string();
     let values_count = tss[0].values.len();
@@ -726,8 +726,8 @@ pub(super) struct LeTimeseries {
     pub ts: Timeseries,
 }
 
-fn group_le_timeseries(tss: &mut [Timeseries]) -> AHashMap<Signature, Vec<LeTimeseries>> {
-    let mut m: AHashMap<Signature, Vec<LeTimeseries>> = AHashMap::new();
+fn group_le_timeseries(tss: &mut [Timeseries]) -> IntMap<Signature, Vec<LeTimeseries>> {
+    let mut m: IntMap<Signature, Vec<LeTimeseries>> = IntMap::new();
 
     for ts in tss.iter_mut() {
         if let Some(tag_value) = ts.metric_name.label_value(LE) {

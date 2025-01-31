@@ -1,16 +1,16 @@
 use super::{MetricName, Timestamp};
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use ahash::AHashMap;
-use metricsql_common::hash::Signature;
+use metricsql_common::hash::{IntMap, Signature};
 use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::ast::VectorMatchModifier;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
+use ahash::HashMapExt;
 
-pub type TimeseriesHashMap = AHashMap<Signature, Vec<Timeseries>>;
-pub type TimeseriesHashMapRef<'a> = AHashMap<Signature, &'a [Timeseries]>;
+pub type TimeseriesHashMap = IntMap<Signature, Vec<Timeseries>>;
+pub type TimeseriesHashMapRef<'a> = IntMap<Signature, &'a [Timeseries]>;
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Timeseries {
@@ -164,70 +164,6 @@ pub(crate) fn assert_identical_timestamps(tss: &[Timeseries], step: Duration) ->
     Ok(())
 }
 
-fn assert_identical_timestamps_internal<'a>(
-    ts_iter: &mut impl Iterator<Item = &'a [Timestamp]>,
-    values_iter: &mut impl Iterator<Item = &'a [f64]>,
-    step: i64,
-) -> RuntimeResult<()> {
-    let ts_golden = ts_iter.next().unwrap_or_default();
-    let values_golden = values_iter.next().unwrap_or_default();
-    if values_golden.len() != ts_golden.len() {
-        let msg = format!(
-            "BUG: ts_golden.values.len() must match ts_golden.timestamps.len(); got {} vs {}",
-            values_golden.len(),
-            ts_golden.len()
-        );
-        return Err(RuntimeError::from(msg));
-    }
-    if !ts_golden.is_empty() {
-        let mut prev_timestamp = ts_golden[0];
-        for timestamp in ts_golden.iter() {
-            if timestamp - prev_timestamp != step {
-                let msg = format!(
-                    "BUG: invalid step between timestamps; got {}; want {};",
-                    timestamp - prev_timestamp,
-                    step
-                );
-                return Err(RuntimeError::from(msg));
-            }
-            prev_timestamp = *timestamp
-        }
-    }
-    for (ts, values) in ts_iter.zip(values_iter) {
-        if values.len() != values_golden.len() {
-            let msg = format!(
-                "BUG: unexpected ts.values.len(); got {}; want {}; ts.values={}",
-                values.len(),
-                values_golden.len(),
-                values.len()
-            );
-            return Err(RuntimeError::from(msg));
-        }
-        if ts.len() != ts_golden.len() {
-            let msg = format!(
-                "BUG: unexpected ts.timestamps.len(); got {}; want {};",
-                ts.len(),
-                ts_golden.len()
-            );
-            return Err(RuntimeError::from(msg));
-        }
-        if ts.is_empty() {
-            continue;
-        }
-        if ts[0] == ts_golden[0] {
-            // Fast path - shared timestamps.
-            continue;
-        }
-        for (ts, golden) in ts.iter().zip(ts_golden.iter()) {
-            if ts != golden {
-                let msg = format!("BUG: timestamps mismatch; got {}; want {};", ts, golden);
-                return Err(RuntimeError::from(msg));
-            }
-        }
-    }
-
-    Ok(())
-}
 
 pub(crate) fn get_timeseries() -> Timeseries {
     // timeseries_pool().pull().timeseries.borrow_mut()
@@ -242,7 +178,7 @@ pub fn group_series_by_match_modifier(
     modifier: &Option<VectorMatchModifier>,
     with_metric_name: bool,
 ) -> TimeseriesHashMap {
-    let mut m: TimeseriesHashMap = AHashMap::with_capacity(series.len());
+    let mut m: TimeseriesHashMap = IntMap::with_capacity(series.len());
     if series.len() >= SIGNATURE_PARALLELIZATION_THRESHOLD {
         for (sig, ts) in series
             .into_par_iter()

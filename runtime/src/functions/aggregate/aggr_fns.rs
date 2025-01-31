@@ -3,9 +3,10 @@ use std::collections::hash_map::Entry;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use ahash::AHashMap;
+use ahash::{AHashMap, HashMapExt};
 use lockfree_object_pool::LinearReusable;
-use metricsql_common::hash::Signature;
+use smallvec::SmallVec;
+use metricsql_common::hash::{IntMap, Signature};
 use metricsql_common::pool::{get_pooled_vec_f64, get_pooled_vec_f64_filled};
 use metricsql_parser::ast::AggregateModifier;
 use metricsql_parser::functions::AggregateFunction;
@@ -213,7 +214,7 @@ fn aggr_prepare_series(
     modifier: &Option<AggregateModifier>,
     max_series: usize,
     keep_original: bool,
-) -> AHashMap<Signature, Vec<Timeseries>> {
+) -> IntMap<Signature, Vec<Timeseries>> {
     let mut arg_orig = arg_orig;
 
     // Remove empty time series, e.g. series with all NaN samples,
@@ -223,7 +224,7 @@ fn aggr_prepare_series(
     let capacity = arg_orig.len();
 
     // Perform grouping.
-    let mut m = AHashMap::with_capacity(capacity);
+    let mut m = IntMap::with_capacity(capacity);
     for mut ts in arg_orig {
         let (series, k) = if keep_original {
             // todo: in this case we can calculate the hash without cloning
@@ -964,6 +965,7 @@ fn aggr_func_limitk(afa: &mut AggrFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     aggr_func_ext(afe, series, afa.modifier, afa.limit, true)
 }
 
+
 fn aggr_func_quantiles(afa: &mut AggrFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     let dst_label = get_string_arg(&afa.args, 0)?.to_string();
 
@@ -974,9 +976,8 @@ fn aggr_func_quantiles(afa: &mut AggrFuncArg) -> RuntimeResult<Vec<Timeseries>> 
             "quantiles() must have at least one phi argument".to_string(),
         ));
     }
-
-    // smallvec ??
-    let mut phis: Vec<f64> = Vec::with_capacity(phi_count);
+    
+    let mut phis : SmallVec<f64, 4> = SmallVec::new();
 
     for arg in afa.args[1..afa.args.len() - 1].iter() {
         phis.push(arg.get_scalar()?);
@@ -990,8 +991,7 @@ fn aggr_func_quantiles(afa: &mut AggrFuncArg) -> RuntimeResult<Vec<Timeseries>> 
             ts.metric_name.set(&dst_label, &format!("{}", phi));
             tss_dst.push(ts);
         }
-
-        //let _vals = tiny_vec!([f64; 10]);
+        
         let mut qs = get_pooled_vec_f64_filled(phis.len(), 0f64);
 
         let mut values = get_pooled_vec_f64_filled(phis.len(), f64::NAN);
@@ -1145,6 +1145,7 @@ fn get_per_point_medians(tss: &mut [Timeseries]) -> Vec<f64> {
     if tss.is_empty() {
         // todo: handle this case
         // panic!("BUG: expecting non-empty tss")
+        return Vec::new();
     }
     let count = tss[0].values.len();
     let mut medians = Vec::with_capacity(count);

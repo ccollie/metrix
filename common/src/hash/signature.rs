@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use crate::hash::FastHasher;
+use crate::hash::{FastHasher, IsEnabled};
 use crate::types::Label;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Ord, PartialOrd)]
@@ -10,9 +10,11 @@ pub struct Signature(u64);
 /// implement hash which returns the value of the inner u64
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
+        state.write_u64(self.0);
     }
 }
+
+impl IsEnabled for Signature {}
 
 impl Deref for Signature {
     type Target = u64;
