@@ -20,7 +20,7 @@ resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace.dependencies]
-agnostic-lite = { version = "0.4.0", default-features = false, features = ["time"] }
+agnostic-lite = { version = "0.5.0", default-features = false, features = ["time"] }
 ahash = { version = "0.8", features = ["std", "serde"] }
 byte-pool = "0.2"
 chili = "0.2"
@@ -35,8 +35,8 @@ integer-encoding = "4.0"
 num-traits = "0.2"
 pco = "0.4"
 pretty_assertions = "1.4"
-rand = "0.8.5"
-rand_distr = "0.4.3"
+rand = "0.9.0"
+rand_distr = "0.5.0"
 rayon = "1.10"
 regex = "1"
 regex-syntax = "0.8"

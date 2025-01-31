@@ -1,7 +1,6 @@
-use rand::distributions::Standard;
 use rand::prelude::{Rng, StdRng, SeedableRng, Distribution};
 use rand::rngs::ThreadRng;
-use rand_distr::{Exp1, StandardNormal};
+use rand_distr::{Exp1, StandardNormal, StandardUniform};
 use crate::execution::eval_number;
 use crate::functions::transform::TransformFuncArg;
 use crate::types::Timeseries;
@@ -19,9 +18,8 @@ fn create_rng(tfa: &mut TransformFuncArg) -> RuntimeResult<StdRng> {
             },
         };
     }
-    let rng = ThreadRng::default();
-    StdRng::from_rng(rng)
-        .map_err(|_| RuntimeError::ArgumentError("unable to create rng".to_string()))
+    let mut rng = ThreadRng::default();
+    Ok(StdRng::from_rng(&mut rng))
 }
 
 fn rand_fn_inner<D>(tfa: &mut TransformFuncArg, distro: D) -> RuntimeResult<Vec<Timeseries>>
@@ -38,7 +36,7 @@ where
 }
 
 pub(crate) fn rand(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
-    rand_fn_inner(tfa, Standard)
+    rand_fn_inner(tfa, StandardUniform)
 }
 
 pub(crate) fn rand_norm(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {

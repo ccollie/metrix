@@ -38,8 +38,8 @@ static ROLLUP_RESULT_CACHE_KEY_PREFIX: OnceLock<u64> = OnceLock::new();
 fn get_rollup_result_cache_key_prefix() -> u64 {
     *ROLLUP_RESULT_CACHE_KEY_PREFIX.get_or_init(|| {
         // todo: some sort of uid
-        let mut rng = thread_rng();
-        rng.gen::<u64>()
+        let mut rng = rand::rng();
+        rng.random()
     })
 }
 
@@ -90,11 +90,11 @@ impl RollupResultCache {
     }
 
     pub fn with_size(max_size: usize) -> Self {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         let cache = Box::new(DefaultResultCacheStorage::new(max_size));
         let hasher = Xxh3::default();
-        let suffix: u64 = rng.gen_range((1 << 16)..(1 << 31));
+        let suffix: u64 = rng.random_range((1 << 16)..(1 << 31));
         let memory_limiter = MemoryLimiter::new(max_size);
 
         let inner = Inner {
