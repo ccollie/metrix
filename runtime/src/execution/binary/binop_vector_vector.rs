@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use ahash::AHashMap;
+use ahash::HashMapExt;
+use smallvec::SmallVec;
 use tracing::{field, trace_span, Span};
-use metricsql_common::hash::{Signature};
+use metricsql_common::hash::{IntMap, Signature};
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};
 use metricsql_parser::binaryop::{
     get_scalar_binop_handler, get_scalar_comparison_handler, BinopFunc,
@@ -353,9 +354,8 @@ fn group_join(
         left: Timeseries,
         right: Timeseries,
     }
-
-    // todo(perf): IntMap
-    let mut map: AHashMap<Signature, TsPair> = AHashMap::with_capacity(tss_left.len());
+    
+    let mut map: IntMap<Signature, TsPair> = IntMap::with_capacity(tss_left.len());
 
     for ts_left in tss_left.iter_mut() {
         if reset_metric_group {
@@ -528,45 +528,51 @@ fn binary_op_default(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> 
 /// of vector1 and additionally all elements of vector2 which do not have matching label sets in vector1.
 ///
 /// https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators
-fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
+fn binary_op_or(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<Vec<Timeseries>> {
 
-    // this https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
-    // may become relevant if we go cluster-mode, but for now, don't sort series
-
+    remove_empty_series(&mut bfa.left);
+    
     if bfa.left.is_empty() {
         // Short-circuit.
+        remove_empty_series(&mut bfa.right);
+        bfa.right.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
         return Ok(std::mem::take(&mut bfa.right));
     }
 
     if bfa.right.is_empty() {
         // Short-circuit
+        bfa.left.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
         return Ok(std::mem::take(&mut bfa.left));
     }
-
+    
     let (mut m_left, m_right) = create_series_map_by_tag_set(bfa);
 
-    let mut rvs: Vec<Timeseries> = Vec::with_capacity(m_right.len());
-
-    for (sig, ref mut tss_right) in m_right.into_iter() {
-        if let Some(tss_left) = m_left.get_mut(&sig) {
-            fill_left_nans_with_right_values(tss_left, tss_right);
+    let mut rvs = Vec::with_capacity(bfa.left.len());
+    
+    for (k, mut tss_right) in m_right.into_iter() {
+        if let Some(tss_left) = m_left.get_mut(&k) {
+            fill_left_nans_with_right_values_or_merge(tss_left, &mut tss_right);
+            remove_empty_series(&mut tss_right);
+            if !tss_right.is_empty() {
+                rvs.extend(tss_right);
+            }
         } else {
-            // add right if it is not in left
-            rvs.append(tss_right);
-        };
+            rvs.extend(tss_right);
+        }
     }
 
-    // todo(perf): there is a lot of copying and moving here, can we avoid it?
     let mut left = m_left.into_values().flatten().collect::<Vec<Timeseries>>();
-    if rvs.is_empty() {
-        return Ok(left);
-    }
-
-    left.append(&mut rvs);
-    // Sort series by metric name as Prometheus does.
+    // Sort left-hand-side series by metric name as Prometheus does.
     // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
-    // sort_series_by_metric_name(&mut left);
+    left.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
 
+    // Sort the added right-hand-side series by metric name as Prometheus does.
+    // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5393
+    if !rvs.is_empty() {
+        rvs.sort_by(|a, b| a.metric_name.cmp(&b.metric_name));
+        left.extend(rvs);   
+    }
+    
     Ok(left)
 }
 
@@ -596,7 +602,7 @@ fn binary_op_unless(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     Ok(rvs)
 }
 
-/// q1 ifnot q2 removes values from q1 for existing values from q2.
+/// q1 `ifnot` q2 removes values from q1 for existing values from q2.
 fn binary_op_if_not(bfa: &mut BinaryOpFuncArg) -> RuntimeResult<InstantVector> {
     let (m_left, m_right) = create_series_map_by_tag_set(bfa);
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(m_left.len());
@@ -625,6 +631,33 @@ fn fill_left_nans_with_right_values(tss_left: &mut [Timeseries], tss_right: &[Ti
                 if !v_right.is_nan() {
                     *left_value = v_right;
                     break;
+                }
+            }
+        }
+    }
+}
+
+// fill gaps in tss_left with values from tss_right when labels match
+// Set NaNs to tss_right when tss_left has corresponding values
+// or if tss_left and tss_right can be merged.
+//
+// See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/7759
+// https://github.com/VictoriaMetrics/VictoriaMetrics/issues/7640
+fn fill_left_nans_with_right_values_or_merge(tss_left: &mut [Timeseries], tss_right: &mut [Timeseries]) {
+    for ts_left in tss_left.iter_mut() {
+        let name_left = &ts_left.metric_name;
+
+        for (i, v) in ts_left.values.iter_mut().enumerate() {
+            let left_is_nan = v.is_nan();
+            for ts_right in tss_right.iter_mut() {
+                let can_be_merged = name_left == &ts_right.metric_name;
+                let value_right = ts_right.values[i];
+
+                if left_is_nan && can_be_merged {
+                    *v = value_right;
+                }
+                if !left_is_nan || can_be_merged {
+                    ts_right.values[i] = f64::NAN;
                 }
             }
         }

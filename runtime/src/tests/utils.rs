@@ -124,31 +124,28 @@ pub fn test_rows_equal(
 pub fn test_metric_names_equal(mn: &MetricName, expected: &MetricName, pos: usize) {
     assert_eq!(
         mn.measurement, expected.measurement,
-        "unexpected MetricGroup at #{}; got {}; want {}; metricGot={}, metricExpected={}",
-        pos, mn.measurement, expected.measurement, mn, expected
+        "unexpected MetricGroup at #{pos}; got {}; want {}; got metric={mn}, expected metric={expected}",
+        mn.measurement, expected.measurement,
     );
 
     assert_eq!(
         mn.labels.len(),
         expected.labels.len(),
-        "unexpected labels count at #{}; got {}; want {}; metricGot={}, metricExpected={}",
-        pos,
+        "unexpected labels count at #{pos}; got {}; want {}; got metric={mn}, expected metric={expected}",
         mn.labels.len(),
         expected.labels.len(),
-        mn,
-        expected
     );
 
     for (i, (tag, tag_expected)) in mn.labels.iter().zip(expected.labels.iter()).enumerate() {
         assert_eq!(
             tag.name, tag_expected.name,
-            "unexpected tag key at #{pos}, {i}; got {}; want {}; got={mn}, expected={expected}",
+            "unexpected tag key at #{pos}, {i}; got {}; want {}; got metric={mn}, expected metric={expected}",
             tag.name, tag_expected.name
         );
 
         assert_eq!(
             tag.value, tag_expected.value,
-            "unexpected tag value at #{pos},{i}; got {}; want {}; got={mn}, expected={expected}",
+            "unexpected tag value at #{pos},{i}; got {}; want {}; got metric={mn}, expected metric={expected}",
             tag.value, tag_expected.value,
         )
     }
