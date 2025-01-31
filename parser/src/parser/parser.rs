@@ -6,7 +6,8 @@ use crate::ast::{DurationExpr, Expr, ParensExpr, StringExpr};
 use crate::parser::expr::parse_expression;
 use crate::parser::tokens::{Token, IDENT_LIKE_TOKENS};
 use crate::parser::{
-    extract_string_value, invalid_token_error, parse_duration_value, parse_number, syntax_error,
+    extract_string_value, invalid_token_error, parse_duration_value,
+    parse_number, syntax_error,
     ParseErr, ParseError, ParseResult,
 };
 use crate::parser::tokens::Token::Identifier;

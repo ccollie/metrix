@@ -16,7 +16,7 @@ const MILLIS_PER_YEAR: f64 = 365.0 * MILLIS_PER_DAY;
 /// Duration in s may be combined, i.e. 2h5m or 2h-5m.
 ///
 /// Error is returned if the duration in s is negative.
-pub fn positive_duration_value(s: &str, step: i64) -> Result<i64, ParseError> {
+pub fn parse_positive_duration_value(s: &str, step: i64) -> Result<i64, ParseError> {
     let d = parse_duration_value(s, step)?;
     if d < 0 {
         return Err(ParseError::InvalidDuration(format!(
@@ -195,7 +195,7 @@ fn scan_single_duration(s: &str, can_be_negative: bool) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::duration::positive_duration_value;
+    use crate::parser::duration::parse_positive_duration_value;
     use crate::parser::parse_duration_value;
 
     const MS: i64 = 1;
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn test_positive_duration_error() {
         fn f(s: &str) {
-            if positive_duration_value(s, 42).is_ok() {
+            if parse_positive_duration_value(s, 42).is_ok() {
                 panic!("Expecting an error for duration {}", s)
             }
         }

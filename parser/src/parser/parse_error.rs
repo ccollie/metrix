@@ -3,9 +3,9 @@ use std::fmt::{Display, Formatter};
 
 use logos::Span;
 use thiserror::Error;
+use crate::parser::parser::TokenWithLocation;
+use super::tokens::{Token};
 
-use crate::parser::tokens::Token;
-use crate::parser::TokenWithLocation;
 pub type ParseResult<T> = Result<T, ParseError>;
 
 #[derive(Default, Debug, PartialEq, Clone, Error)]
@@ -240,7 +240,7 @@ impl ArgCountError {
 }
 
 impl Display for ArgCountError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         if self.min == self.max {
             write!(f, "{}: expected {} args", self.signature, self.min)?;
         } else {

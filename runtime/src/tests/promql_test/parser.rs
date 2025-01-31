@@ -14,7 +14,7 @@ use super::test_command::{EvalCmd, LoadCmd, TestCommand};
 use super::types::{raise, ParseErr, SequenceValue};
 use metricsql_common::time::current_time_millis;
 use metricsql_parser::ast::Expr;
-use metricsql_parser::parser::parse_duration_value;
+use metricsql_parser::parse_duration_value;
 use prometheus_parse::{Labels, Scrape, Value};
 use regex::Regex;
 use std::error::Error;
@@ -82,7 +82,7 @@ fn labels_to_metric_name(labels: &Labels) -> MetricName {
     metric_name
 }
 
-// Implementation of parse_series function
+/// Implementation of parse_series function
 pub(super) fn parse_series(def_line: &str, line: usize) -> Result<(MetricName, Vec<SequenceValue>), ParseErr> {
     let br = io::BufReader::new(def_line.as_bytes());
     let scrape = Scrape::parse(br.lines()).unwrap(); // todo: remove unwrap
@@ -169,7 +169,7 @@ pub fn parse_eval(lines: &[String], mut i: usize) -> Result<(usize, TestCommand)
         let pos_offset = lines[i].find(expr).unwrap_or(0);
         let parse_err = ParseErr {
             line_offset: i,
-            position_range: (0 + pos_offset, 0 + pos_offset),
+            position_range: (pos_offset, pos_offset),
             query: lines[i].clone(),
             err: "invalid expression".to_string(),
         };

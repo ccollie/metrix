@@ -5,8 +5,7 @@ use phf::phf_map;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
-use crate::parser::tokens::Token;
-use crate::parser::ParseError;
+use crate::parser::{Token, ParseError};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, EnumIter, Serialize, Deserialize)]
 pub enum Operator {

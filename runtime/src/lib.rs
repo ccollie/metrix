@@ -34,9 +34,8 @@ mod functions;
 mod histogram;
 pub mod provider;
 pub mod query_stats;
-pub mod runtime_error;
+mod runtime_error;
 pub mod types;
-
 mod common;
 #[cfg(test)]
 mod tests;
