@@ -193,6 +193,10 @@ impl Bucket {
 }
 
 pub(crate) fn vmrange_buckets_to_le(tss: Vec<Timeseries>) -> Vec<Timeseries> {
+    if tss.is_empty() {
+        return tss;
+    }
+    
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(tss.len());
 
     let mut buckets: IntMap<Signature, Vec<Bucket>> = IntMap::with_capacity(tss.len());
@@ -596,11 +600,15 @@ pub(crate) fn histogram_quantiles(tfa: &mut TransformFuncArg) -> RuntimeResult<V
 }
 
 pub(crate) fn histogram_quantile(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
-    let phis: Vec<f64> = get_scalar_arg_as_vec(&tfa.args, 0, tfa.ec)?;
-
     // Convert buckets with `vmrange` labels to buckets with `le` labels.
     let series = get_series_arg(&tfa.args, 1, tfa.ec)?;
+    if series.is_empty() {
+        return Ok(Vec::new());    
+    }
+    
     let mut tss = vmrange_buckets_to_le(series);
+    
+    let phis: Vec<f64> = get_scalar_arg_as_vec(&tfa.args, 0, tfa.ec)?;
 
     // Parse bounds_label. See https://github.com/prometheus/prometheus/issues/5706 for details.
     let bounds_label = if tfa.args.len() > 2 {
