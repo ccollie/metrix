@@ -1,13 +1,12 @@
-use std::cmp::Ordering;
-use rayon::prelude::ParallelSliceMut;
-use crate::common::strings::compare_str_alphanumeric;
 use crate::functions::arg_parse::get_series_arg;
 use crate::functions::transform::TransformFuncArg;
-use crate::{RuntimeError, RuntimeResult};
 use crate::types::Timeseries;
+use crate::{RuntimeError, RuntimeResult};
+use rayon::prelude::ParallelSliceMut;
+use std::cmp::Ordering;
 
 /// The threshold for switching to a parallel sort implementation.
-const THREAD_SORT_THRESHOLD: usize = 4;
+const THREAD_SORT_THRESHOLD: usize = 6;
 
 pub(crate) fn sort(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     transform_sort_impl(tfa, false)
@@ -115,15 +114,18 @@ fn label_alpha_numeric_sort_impl(
 
     fn sort(a: &Timeseries, b: &Timeseries, labels: &[String], is_desc: bool) -> Ordering {
         let comparator = if is_desc {
-            |a: &String, b: &String| compare_str_alphanumeric(b, a)
+            |a: &String, b: &String| compare_string_alphanumeric(b, a)
         } else {
-            |a: &String, b: &String| compare_str_alphanumeric(a, b)
+            |a: &String, b: &String| compare_string_alphanumeric(a, b)
         };
 
         for label in labels.iter() {
-            let a = a.metric_name.label_value(label);
-            let b = b.metric_name.label_value(label);
-            let order = comparator(a.unwrap_or(EMPTY_STRING_REF), b.unwrap_or(EMPTY_STRING_REF));
+            let a = a.metric_name.label_value(label).unwrap_or(EMPTY_STRING_REF);
+            let b = b.metric_name.label_value(label).unwrap_or(EMPTY_STRING_REF);
+            if a == b {
+                continue;
+            }
+            let order = comparator(a, b);
             if order != Ordering::Equal {
                 return order;
             }
@@ -202,4 +204,196 @@ fn compare_string(a: Option<&String>, b: Option<&String>) -> Ordering {
     let a = a.unwrap_or(EMPTY_STRING_REF);
     let b = b.unwrap_or(EMPTY_STRING_REF);
     a.cmp(b)
+}
+
+fn compare_string_alphanumeric(a: &str, b: &str) -> Ordering {
+    let mut a = a;
+    let mut b = b;
+
+    loop {
+        if a == b {
+            return Ordering::Equal;
+        }
+        if a.is_empty() || b.is_empty() {
+            return a.len().cmp(&b.len());
+        }
+
+        let mut a_prefix = get_num_prefix(a);
+        let mut b_prefix = get_num_prefix(b);
+
+        a = &a[a_prefix.len()..];
+        b = &b[b_prefix.len()..];
+
+        match (a_prefix.is_empty(), b_prefix.is_empty()) {
+            (true, true) => {},
+            (true, false) => return Ordering::Greater,
+            (false, true) => return Ordering::Less,
+            (false, false) => {
+                let a_num = a_prefix.parse::<f64>().unwrap_or(0.0);
+                let b_num = b_prefix.parse::<f64>().unwrap_or(0.0);
+                if a_num != b_num {
+                    return a_num.partial_cmp(&b_num).unwrap();
+                }
+            }
+        }
+
+        a_prefix = get_non_num_prefix(a);
+        b_prefix = get_non_num_prefix(b);
+        if a_prefix != b_prefix {
+            return a_prefix.cmp(b_prefix);
+        }
+
+        a = &a[a_prefix.len()..];
+        b = &b[b_prefix.len()..];
+    }
+}
+
+fn get_num_prefix(s: &str) -> &str {
+    let mut i = 0;
+    let mut iter = s.chars().peekable();
+    match iter.peek() {
+        Some(&'-') | Some(&'+') => {
+            iter.next();
+            i += 1
+        },
+        _ => {}
+    }
+
+    let mut has_num = false;
+    let mut has_dot = false;
+    for ch in iter {
+        if !ch.is_digit(10) {
+            if !has_dot && ch == '.' {
+                has_dot = true;
+                i += 1;
+                continue;
+            }
+            if !has_num {
+                return "";
+            }
+            return &s[..i];
+        }
+        has_num = true;
+        i += 1;
+    }
+    if !has_num {
+        return "";
+    }
+    &s[..i]
+}
+
+fn get_non_num_prefix(s: &str) -> &str {
+    for (i, ch) in s.chars().enumerate() {
+        if ch.is_digit(10) {
+            return &s[..i];
+        }
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_get_num_prefix(s: &str, prefix_expected: &str) {
+        let prefix = get_num_prefix(s);
+        assert_eq!(prefix, prefix_expected, "unexpected get_num_prefix({:?}): got {:?}; want {:?}", s, prefix, prefix_expected);
+        if !prefix.is_empty() {
+            assert!(prefix.parse::<f64>().is_ok(), "cannot parse num {:?}", prefix);
+        }
+    }
+
+    #[test]
+    fn test_get_num_prefix_cases() {
+        test_get_num_prefix("", "");
+        test_get_num_prefix("foo", "");
+        test_get_num_prefix("-", "");
+        test_get_num_prefix(".", "");
+        test_get_num_prefix("-.", "");
+        test_get_num_prefix("+..", "");
+        test_get_num_prefix("1", "1");
+        test_get_num_prefix("12", "12");
+        test_get_num_prefix("1foo", "1");
+        test_get_num_prefix("-123", "-123");
+        test_get_num_prefix("-123bar", "-123");
+        test_get_num_prefix("+123", "+123");
+        test_get_num_prefix("+123.", "+123.");
+        test_get_num_prefix("+123..", "+123.");
+        test_get_num_prefix("+123.-", "+123.");
+        test_get_num_prefix("12.34..", "12.34");
+        test_get_num_prefix("-12.34..", "-12.34");
+        test_get_num_prefix("-12.-34..", "-12.");
+    }
+
+
+    #[test]
+    fn test_numeric_cmp() {
+        fn test_ordering(a: &str, b: &str, want: Ordering) {
+            let got = compare_string_alphanumeric(a, b);
+            assert_eq!(got, want, "unexpected numeric_less({:?}, {:?}): got {:?}; want {:?}", a, b, got, want);
+        }
+
+        // empty strings
+        test_ordering("", "", Ordering::Equal);
+        test_ordering("", "321", Ordering::Less);
+        test_ordering("321", "", Ordering::Greater);
+        test_ordering("", "abc", Ordering::Less);
+        test_ordering("abc", "", Ordering::Greater);
+        test_ordering("foo", "123", Ordering::Greater);
+        test_ordering("123", "foo", Ordering::Less);
+        // same length numbers
+        test_ordering("123", "321", Ordering::Less);
+        test_ordering("321", "123", Ordering::Greater);
+        test_ordering("123", "123", Ordering::Equal);
+        // same length strings
+        test_ordering("a", "b", Ordering::Less);
+        test_ordering("b", "a", Ordering::Greater);
+        test_ordering("a", "a", Ordering::Equal);
+        // identical string prefix
+        test_ordering("foo123", "foo", Ordering::Greater);
+        test_ordering("foo", "foo123", Ordering::Less);
+        test_ordering("foo", "foo", Ordering::Equal);
+        // identical num prefix
+        test_ordering("123foo", "123bar", Ordering::Greater);
+        test_ordering("123bar", "123foo", Ordering::Less);
+        test_ordering("123bar", "123bar", Ordering::Equal);
+        // numbers with special chars
+        test_ordering("1:0:0", "1:0:2", Ordering::Less);
+        // numbers with special chars and different number rank
+        test_ordering("1:0:15", "1:0:2", Ordering::Greater);
+        // multiple zeroes
+        test_ordering("0", "00", Ordering::Equal);
+        // only chars
+        test_ordering("aa", "ab", Ordering::Less);
+        // strings with different lengths
+        test_ordering("ab", "abc", Ordering::Less);
+        // multiple zeroes after equal char
+        test_ordering("a0001", "a0000001", Ordering::Equal);
+        // short first string with numbers and highest rank
+        test_ordering("a10", "abcdefgh2", Ordering::Less);
+        // less as second string
+        test_ordering("a1b", "a01b", Ordering::Equal);
+        // equal strings by length with different number rank
+        test_ordering("a001b01", "a01b001", Ordering::Equal);
+        // different numbers rank
+        test_ordering("a01b001", "a001b01", Ordering::Equal);
+        // highest char and number
+        test_ordering("a1", "a1x", Ordering::Less);
+        // highest number reverse chars
+        test_ordering("1b", "1ax", Ordering::Greater);
+        // numbers with leading zero
+        test_ordering("082", "83", Ordering::Less);
+        // numbers with leading zero and chars
+        test_ordering("083a", "9a", Ordering::Greater);
+        test_ordering("083a", "94a", Ordering::Less);
+        // negative number
+        test_ordering("-123", "123", Ordering::Less);
+        test_ordering("-123", "+123", Ordering::Less);
+        test_ordering("-123", "-123", Ordering::Equal);
+        test_ordering("123", "-123", Ordering::Greater);
+        // fractional number
+        test_ordering("12.9", "12.56", Ordering::Greater);
+        test_ordering("12.56", "12.9", Ordering::Less);
+        test_ordering("12.9", "12.9", Ordering::Equal);
+    }
 }
