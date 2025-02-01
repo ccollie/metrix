@@ -2,16 +2,16 @@ use ahash::AHashSet;
 use crate::execution::{eval_number, EvalConfig};
 use crate::functions::transform::TransformFuncArg;
 use crate::{RuntimeError, RuntimeResult};
-use crate::types::{QueryValue, Timeseries };
+use crate::types::{FunctionArgs, QueryValue, Timeseries};
 
 pub(crate) fn union(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<Timeseries>> {
     // we don't use args after this
-    let args = std::mem::take(&mut tfa.args);
-    handle_union(args, tfa.ec)
+    let mut args = std::mem::take(&mut tfa.args);
+    handle_union(&mut args, tfa.ec)
 }
 
 pub(crate) fn handle_union(
-    args: Vec<QueryValue>,
+    args: &mut FunctionArgs,
     ec: &EvalConfig,
 ) -> RuntimeResult<Vec<Timeseries>> {
     if args.is_empty() {
@@ -21,11 +21,11 @@ pub(crate) fn handle_union(
     let len = args[0].len();
     let mut rvs: Vec<Timeseries> = Vec::with_capacity(len);
 
-    if are_all_args_scalar(&args) {
-        for mut arg in args.into_iter() {
+    if are_all_args_scalar(args) {
+        for arg in args.into_iter() {
             match arg {
                 QueryValue::Scalar(v) => {
-                    let mut ts = eval_number(ec, v)?;
+                    let mut ts = eval_number(ec, *v)?;
                     rvs.append(&mut ts);
                 }
                 QueryValue::InstantVector(ref mut v) => {
@@ -55,8 +55,7 @@ pub(crate) fn handle_union(
             }
         }
     }
-
-    let mut args = args;
+    
     for arg in args.iter_mut() {
         // done this way to avoid allocating a new vector in the case of a InstantVector
         match arg {

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ahash::{AHashMap, HashMapExt};
+use smallvec::smallvec;
 use metricsql_common::hash::{IntMap, Signature};
 use metricsql_parser::parse_number;
 
@@ -12,11 +13,7 @@ use crate::functions::arg_parse::{
 use crate::functions::transform::utils::{copy_timeseries, is_inf};
 use crate::functions::transform::TransformFuncArg;
 use crate::{RuntimeError, RuntimeResult};
-use crate::types::{
-    MetricName,
-    QueryValue,
-    Timeseries
-};
+use crate::types::{FunctionArgs, MetricName, QueryValue, Timeseries};
 
 static ELLIPSIS: &str = "...";
 static LE: &str = "le";
@@ -566,7 +563,7 @@ pub(crate) fn histogram_quantiles(tfa: &mut TransformFuncArg) -> RuntimeResult<V
 
     let mut tfa_tmp = TransformFuncArg {
         ec: tfa.ec,
-        args: vec![],
+        args: FunctionArgs::new(),
         fe: tfa.fe,
     };
 
@@ -579,7 +576,7 @@ pub(crate) fn histogram_quantiles(tfa: &mut TransformFuncArg) -> RuntimeResult<V
         let phi_str = phi_arg.to_string();
         let tss = copy_timeseries(&tss_orig);
 
-        tfa_tmp.args = vec![QueryValue::Scalar(phi_arg), QueryValue::InstantVector(tss)];
+        tfa_tmp.args = smallvec![QueryValue::Scalar(phi_arg), QueryValue::InstantVector(tss)];
 
         match histogram_quantile(&mut tfa_tmp) {
             Err(e) => {

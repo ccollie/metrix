@@ -10,7 +10,7 @@ use crate::functions::transform::math::{
 };
 use crate::functions::transform::ru::transform_ru;
 use crate::runtime_error::RuntimeResult;
-use crate::types::{QueryValue, Timeseries};
+use crate::types::{FunctionArgs, Timeseries};
 use absent::transform_absent;
 use bitmap::{
     transform_bitmap_and, transform_bitmap_or, transform_bitmap_xor,
@@ -88,10 +88,10 @@ mod utils;
 mod vector;
 mod ru;
 
-pub struct TransformFuncArg<'a> {
+pub(crate) struct TransformFuncArg<'a> {
     pub ec: &'a EvalConfig,
     pub fe: &'a FunctionExpr,
-    pub args: Vec<QueryValue>, // todo: SmallVec
+    pub args: FunctionArgs,
 }
 
 // https://stackoverflow.com/questions/57937436/how-to-alias-an-impl-trait

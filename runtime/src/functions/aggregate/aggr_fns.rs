@@ -24,13 +24,13 @@ use crate::functions::utils::{
 };
 use crate::histogram::{get_pooled_histogram, Histogram, NonZeroBucket};
 use crate::runtime_error::{RuntimeError, RuntimeResult};
-use crate::types::{QueryValue, Timeseries};
+use crate::types::{FunctionArgs, QueryValue, Timeseries};
 
 const MAX_SERIES_PER_AGGR_FUNC: usize = 100000;
 
 
 pub struct AggrFuncArg<'a> {
-    pub args: Vec<QueryValue>,
+    pub args: FunctionArgs,
     pub ec: &'a EvalConfig,
     pub modifier: &'a Option<AggregateModifier>,
     pub limit: usize,

@@ -9,6 +9,7 @@ use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
 use std::time::Duration;
+use smallvec::SmallVec;
 use crate::common::format::format_number;
 use crate::execution::{eval_number, EvalConfig};
 use crate::functions::types::get_single_timeseries;
@@ -388,6 +389,9 @@ impl Display for QueryValue {
         }
     }
 }
+
+/// Type of runtime function arguments to minimize allocations
+pub(crate) type FunctionArgs = SmallVec<QueryValue, 4>;
 
 pub enum ScalarIterator {
     Empty,
