@@ -255,12 +255,21 @@ pub(crate) fn linear_regression(
     let mut tv_sum: f64 = 0.0;
     let mut tt_sum: f64 = 0.0;
 
+    let mut n: usize = 0;
     for (ts, v) in timestamps.iter().zip(values.iter()) {
+        if v.is_nan() {
+            continue;
+        }
         let dt = (ts - intercept_time) as f64 / 1e3_f64;
         v_sum += v;
         t_sum += dt;
         tv_sum += dt * v;
-        tt_sum += dt * dt
+        tt_sum += dt * dt;
+        n += 1;
+    }
+    
+    if n == 0 {
+        return (f64::NAN, f64::NAN);
     }
 
     let mut k: f64 = 0.0;
