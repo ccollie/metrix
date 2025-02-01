@@ -1,15 +1,19 @@
-use std::borrow::Cow;
-use tracing::{field, trace, trace_span, Span};
-use metricsql_parser::ast::{BinModifier, BinaryExpr, Expr, Operator};
-use metricsql_parser::label::Matcher;
-use metricsql_parser::optimizer::{push_down_binary_op_filters_in_place, trim_filters_by_match_modifier};
-use crate::execution::{Context, EvalConfig};
-use crate::execution::binary::{can_push_down_common_filters, get_common_label_filters};
+use crate::execution::binary::{
+    can_push_down_common_filters, exec_vector_vector_binop, get_common_label_filters,
+};
 use crate::execution::exec::eval_expr;
 use crate::execution::utils::series_len;
+use crate::execution::{Context, EvalConfig};
 use crate::prelude::Timeseries;
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::QueryValue;
+use metricsql_parser::ast::{BinModifier, BinaryExpr, Expr, Operator};
+use metricsql_parser::label::Matcher;
+use metricsql_parser::optimizer::{
+    push_down_binary_op_filters_in_place, trim_filters_by_match_modifier,
+};
+use std::borrow::Cow;
+use tracing::{field, trace, trace_span, Span};
 
 pub(super) fn vector_vector_binop(
     expr: &BinaryExpr,
@@ -23,7 +27,7 @@ pub(super) fn vector_vector_binop(
     } else {
         Span::none()
     }
-        .entered();
+    .entered();
 
     // todo debug_assert!(expr.left.is_instant_vector() && expr.right.is_instant_vector());
 
@@ -40,11 +44,7 @@ pub(super) fn vector_vector_binop(
     let left_series = to_vector(left)?;
     let right_series = to_vector(right)?;
 
-    let result = crate::execution::binary::exec_vector_vector_binop(ctx, 
-                                                                    left_series, 
-                                                                    right_series, 
-                                                                    expr.op, 
-                                                                    &expr.modifier)
+    let result = exec_vector_vector_binop(ctx, left_series, right_series, expr.op, &expr.modifier)
         .map_err(|err| RuntimeError::from(format!("cannot evaluate {}: {:?}", &expr, err)))?;
 
     if is_tracing {
@@ -68,7 +68,7 @@ fn exec_binary_op_args(
         let op = be.op.as_str();
         let span = trace_span!("execute left and right sides in parallel", op);
         let _guard = span.enter();
-        // todo: chili
+
         return match chili::Scope::global().join(
             |_| {
                 trace!("left");

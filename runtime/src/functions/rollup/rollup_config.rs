@@ -8,7 +8,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-use itertools::Itertools;
+
 use crate::common::math::quantile;
 use crate::execution::{get_timestamps, validate_max_points_per_timeseries};
 use crate::functions::rollup::candlestick::{rollup_close, rollup_high, rollup_low, rollup_open};

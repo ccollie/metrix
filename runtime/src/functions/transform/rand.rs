@@ -11,9 +11,7 @@ fn create_rng(tfa: &mut TransformFuncArg) -> RuntimeResult<StdRng> {
         return match tfa.args[0].get_int() {
             Err(e) => Err(e),
             Ok(val) => match u64::try_from(val) {
-                Err(_) => Err(RuntimeError::ArgumentError(
-                    format!("invalid rand seed {}", val).to_string(),
-                )),
+                Err(_) => Err(RuntimeError::ArgumentError(format!("invalid rand seed {val}"))),
                 Ok(seed) => Ok(StdRng::seed_from_u64(seed)),
             },
         };
