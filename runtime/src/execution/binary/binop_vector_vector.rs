@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use ahash::HashMapExt;
-use smallvec::SmallVec;
 use tracing::{field, trace_span, Span};
 use metricsql_common::hash::{IntMap, Signature};
 use metricsql_parser::ast::{Operator, VectorMatchCardinality, VectorMatchModifier};

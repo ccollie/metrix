@@ -4,6 +4,13 @@ pub(crate) use utils::{extract_labels_from_expr, get_timezone_offset};
 
 use crate::execution::EvalConfig;
 use crate::functions::arg_parse::get_series_arg;
+use crate::functions::transform::math::{
+    abs, acos, acosh, asin, asinh, atan, atanh, ceil, cos, cosh, deg, exp, floor, ln, log10, log2,
+    rad, sgn, sin, sinh, sqrt, tan, tanh, transform_pi,
+};
+use crate::functions::transform::ru::transform_ru;
+use crate::runtime_error::RuntimeResult;
+use crate::types::{QueryValue, Timeseries};
 use absent::transform_absent;
 use bitmap::{
     transform_bitmap_and, transform_bitmap_or, transform_bitmap_xor,
@@ -17,7 +24,7 @@ use drop_empty_series::transform_drop_empty_series;
 use end::transform_end;
 use histogram::{
     buckets_limit, histogram_avg, histogram_quantile, histogram_quantiles, histogram_share,
-    histogram_stddev, histogram_stdvar, prometheus_buckets,
+    histogram_stddev, histogram_stdvar, prometheus_buckets
 };
 use interpolate::interpolate;
 use keep_last_value::keep_last_value;
@@ -29,10 +36,6 @@ use labels::{
 };
 use limit_offset::limit_offset;
 use metricsql_parser::ast::FunctionExpr;
-use crate::functions::transform::math::{
-    abs, acos, acosh, asin, asinh, atan, atanh, ceil, cos, cosh, deg, exp, floor, ln, log10, log2,
-    rad, sgn, sin, sinh, sqrt, tan, tanh, transform_pi,
-};
 use rand::{rand, rand_exp, rand_norm};
 use range::{
     range_avg, range_first, range_last, range_linear_regression, range_mad, range_max, range_median,
@@ -49,12 +52,10 @@ use sort::{
 };
 use start::transform_start;
 use step::step;
-use union::{union};
-pub(crate) use union::handle_union;
+use union::union;
 use vector::vector;
-use crate::functions::transform::ru::transform_ru;
-use crate::runtime_error::RuntimeResult;
-use crate::types::{QueryValue, Timeseries};
+
+pub(crate) use union::handle_union;
 
 
 mod absent;

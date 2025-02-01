@@ -10,7 +10,11 @@ use metricsql_parser::ast::{BinaryExpr, Expr, FunctionExpr, Operator, ParensExpr
 use metricsql_parser::functions::{BuiltinFunction, RollupFunction, TransformFunction};
 use crate::execution::{Context, EvalConfig};
 use crate::functions::rollup::{get_rollup_function_factory, rollup_default, RollupHandler};
-use crate::functions::transform::{exec_transform_fn, TransformFuncArg};
+use crate::functions::transform::{
+    handle_union,
+    exec_transform_fn,
+    TransformFuncArg
+};
 use crate::prelude::{eval_number, QueryValue, Timeseries};
 use crate::{QueryResult, RuntimeError, RuntimeResult};
 use crate::common::math::round_to_decimal_digits;
@@ -382,7 +386,7 @@ fn eval_parens_op(ctx: &Context, ec: &EvalConfig, pe: &ParensExpr) -> RuntimeRes
         return eval_expr(ctx, ec, &pe.expressions[0]);
     }
     let args = eval_exprs_in_parallel(ctx, ec, &pe.expressions)?;
-    let rv = crate::functions::transform::handle_union(args, ec)?;
+    let rv = handle_union(args, ec)?;
     let val = QueryValue::InstantVector(rv);
     Ok(val)
 }
