@@ -6,12 +6,10 @@ use crate::common::math::{
     is_stale_nan, linear_regression, mad, mode_no_nans, quantile, stddev, stdvar,
 };
 use crate::functions::arg_parse::get_scalar_param_value;
-use crate::functions::rollup::counts::{
-    new_rollup_count_values, new_rollup_sum_eq, new_rollup_sum_gt, new_rollup_sum_le,
-};
-use crate::functions::rollup::types::RollupHandlerFactory;
 use crate::functions::rollup::{
+    RollupHandlerFloat, RollupFunc, RollupFuncArg, RollupHandler,
     counts::{
+        new_rollup_count_values, new_rollup_sum_eq, new_rollup_sum_gt, new_rollup_sum_le,
         new_rollup_count_eq, new_rollup_count_gt, new_rollup_count_le, new_rollup_count_ne,
         new_rollup_share_eq, new_rollup_share_gt, new_rollup_share_le,
     },
@@ -35,9 +33,9 @@ use crate::functions::rollup::{
         new_rollup_quantile,
         new_rollup_quantiles
     },
-    RollupHandlerFloat,
+    types::{ RollupHandlerFactory }
 };
-use crate::functions::rollup::{RollupFunc, RollupFuncArg, RollupHandler};
+
 use crate::runtime_error::{RuntimeError, RuntimeResult};
 use crate::types::QueryValue;
 
