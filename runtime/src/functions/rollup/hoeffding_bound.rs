@@ -43,14 +43,14 @@ fn hoeffding_bound_internal(values: &[f64], phi: f64) -> (f64, f64) {
         let mut v_min = values[0];
         let mut v_max = v_min;
         let mut v_sum = 0.0;
-        for v in values.iter() {
-            if *v < v_min {
-                v_min = *v;
+        for v in values.iter().copied() {
+            if v < v_min {
+                v_min = v;
             }
-            if *v > v_max {
-                v_max = *v;
+            if v > v_max {
+                v_max = v;
             }
-            v_sum += *v;
+            v_sum += v;
         }
         let v_avg = v_sum / values.len() as f64;
         let v_range = v_max - v_min;
