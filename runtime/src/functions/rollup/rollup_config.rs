@@ -8,7 +8,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-
+use itertools::Itertools;
 use crate::common::math::quantile;
 use crate::execution::{get_timestamps, validate_max_points_per_timeseries};
 use crate::functions::rollup::candlestick::{rollup_close, rollup_high, rollup_low, rollup_open};
@@ -416,7 +416,9 @@ impl RollupConfig {
 
             let mut rfa = RollupFuncArg {
                 window: window_ms,
+                prev_value: f64::NAN,
                 prev_timestamp: t_start - max_prev_interval,
+                real_prev_value: f64::NAN,
                 ..Default::default()
             };
 
@@ -431,8 +433,7 @@ impl RollupConfig {
 
             rfa.values = &values[i..j];
             rfa.timestamps = &timestamps[i..j];
-
-            rfa.real_prev_value = f64::NAN;
+            
             if i > 0 {
                 let idx = i - 1;
 
@@ -556,15 +557,10 @@ fn exec_handler_internal(scope: &mut Scope,
             dest.extend_from_slice(&[v1, v2, v3, v4]);
         }
         _ => {
-            args.par_iter()
-                .map(|rfa| handler.eval(rfa))
-                .collect_into_vec(dest);
-            // let mid = args.len() / 2;
-            // let (head, tail) = args.split_at(mid);
-            // scope.join(
-            //     |s1| exec_handler_internal(s1, handler, dest, head),
-            //     |s2| exec_handler_internal(s2, handler, dest, tail),
-            // );
+            let mid = args.len() / 2;
+            let (head, tail) = args.split_at(mid);
+            exec_handler_internal(scope, handler, dest, head);
+            exec_handler_internal(scope, handler, dest, tail);
         }
     }
 }

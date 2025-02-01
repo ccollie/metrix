@@ -230,12 +230,12 @@ pub(crate) fn range_normalize(tfa: &mut TransformFuncArg) -> RuntimeResult<Vec<T
         for (j, ts) in series.iter_mut().enumerate() {
             let mut min = f64::INFINITY;
             let mut max = f64::NEG_INFINITY;
-            for v in ts.values.iter() {
+            for v in ts.values.iter().copied() {
                 if v.is_nan() {
                     continue;
                 }
-                min = min.min(*v);
-                max = max.max(*v);
+                min = min.min(v);
+                max = max.max(v);
             }
             let d = max - min;
             if d.is_infinite() {
