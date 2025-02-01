@@ -10,7 +10,7 @@ use crate::types::QueryValue;
 
 
 pub(super) fn new_rollup_quantiles(args: &[QueryValue]) -> RuntimeResult<RollupHandler> {
-    let phi_label = get_string_param_value(args, 0, "quantiles", "phi_label").unwrap();
+    let phi_label = get_string_param_value(args, 0, "quantiles", "phi_label")?;
     let cap = args.len() - 1;
 
     let mut phis = Vec::with_capacity(cap);
@@ -19,7 +19,7 @@ pub(super) fn new_rollup_quantiles(args: &[QueryValue]) -> RuntimeResult<RollupH
 
     for i in 1..args.len() {
         // unwrap should be safe, since parameters types are checked before calling the function
-        let v = get_scalar_param_value(args, i, "quantiles", "phi").unwrap();
+        let v = get_scalar_param_value(args, i, "quantiles", "phi")?;
         phis.push(v);
         phi_labels.push(format!("{}", v));
     }
