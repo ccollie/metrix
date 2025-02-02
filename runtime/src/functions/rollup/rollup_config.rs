@@ -2,25 +2,27 @@ use chili::Scope;
 use metricsql_common::prelude::humanize_duration;
 use metricsql_parser::ast::Expr;
 use metricsql_parser::functions::RollupFunction;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use smallvec::SmallVec;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::candlestick::{rollup_close, rollup_high, rollup_low, rollup_open};
+use super::delta::delta_values;
+use super::deriv::deriv_values;
+use super::rollup_fns::{
+    get_rollup_fn,
+    get_rollup_func_by_name,
+    remove_counter_resets,
+    rollup_avg,
+    rollup_max,
+    rollup_min
+};
+use super::{RollupFuncArg, RollupHandler, TimeSeriesMap};
 use crate::common::math::quantile;
 use crate::execution::{get_timestamps, validate_max_points_per_timeseries};
-use crate::functions::rollup::candlestick::{rollup_close, rollup_high, rollup_low, rollup_open};
-use crate::functions::rollup::delta::delta_values;
-use crate::functions::rollup::deriv::deriv_values;
-use crate::functions::rollup::rollup_fns::{
-    get_rollup_fn, remove_counter_resets, rollup_avg, rollup_max, rollup_min,
-};
-use crate::functions::rollup::{
-    get_rollup_func_by_name, RollupFuncArg, RollupHandler, TimeSeriesMap,
-};
-use crate::types::{get_timeseries, MetricName, Timeseries, Timestamp};
+use crate::types::{get_timeseries, Timestamp};
 use crate::{RuntimeError, RuntimeResult};
 
 const EMPTY_STRING: &str = "";
@@ -28,24 +30,32 @@ const EMPTY_STRING: &str = "";
 /// The maximum interval without previous rows.
 pub const MAX_SILENCE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub(crate) type PreFunction = fn(&mut [f64], &[Timestamp]) -> ();
+#[derive(Debug, Clone)]
+pub(crate) enum PreFunction {
+    RemoveCounterResets(i64),
+    DerivValues,
+    DeltaValues,
+    CalcSampleIntervals
+}
 
-#[inline]
-pub(crate) fn eval_pre_funcs(fns: &PreFunctionVec, values: &mut [f64], timestamps: &[Timestamp]) {
-    for f in fns {
-        f(values, timestamps)
+impl PreFunction {
+    pub(super) fn eval(&self, values: &mut [f64], timestamps: &[Timestamp]) {
+        match self {
+            PreFunction::RemoveCounterResets(delta) => remove_counter_resets(values, timestamps, *delta),
+            PreFunction::DerivValues => deriv_values(values, timestamps),
+            PreFunction::DeltaValues => delta_values_pre_func(values, timestamps),
+            PreFunction::CalcSampleIntervals => calc_sample_intervals_pre_fn(values, timestamps),
+        }
     }
 }
 
 #[inline]
-fn remove_counter_resets_pre_func(values: &mut [f64], _: &[Timestamp]) {
-    remove_counter_resets(values);
+pub(crate) fn eval_pre_funcs(fns: &PreFunctionVec, values: &mut [f64], timestamps: &[Timestamp]) {
+    for f in fns {
+        f.eval(values, timestamps)
+    }
 }
 
-#[inline]
-fn deriv_values_pre_func(values: &mut [f64], timestamps: &[Timestamp]) {
-    deriv_values(values, timestamps)
-}
 
 #[inline]
 fn delta_values_pre_func(values: &mut [f64], _: &[Timestamp]) {
@@ -134,7 +144,7 @@ pub(crate) fn get_rollup_configs(
     shared_timestamps: &Arc<Vec<i64>>,
 ) -> RuntimeResult<(RollupConfigVec, PreFunctionVec)> {
 
-    let mut meta = get_rollup_function_handler_meta(expr, func, rf)?;
+    let mut meta = get_rollup_function_handler_meta(expr, func, rf, lookback_delta)?;
     let pre_funcs = std::mem::take(&mut meta.pre_funcs);
     let rcs = get_rollup_configs_from_meta(
         meta,
@@ -286,48 +296,6 @@ impl RollupConfig {
         self.exec_internal(dst_values, None, values, timestamps)
     }
 
-    pub(crate) fn process_rollup(
-        &self,
-        func: RollupFunction,
-        metric: &MetricName,
-        keep_metric_names: bool,
-        values: &[f64],
-        timestamps: &[Timestamp],
-        shared_timestamps: &Arc<Vec<Timestamp>>,
-    ) -> RuntimeResult<(u64, Vec<Timeseries>)> {
-        let func_keeps_metric_name = func.keep_metric_name();
-        if TimeSeriesMap::is_valid_function(func) {
-            let tsm = Arc::new(
-                TimeSeriesMap::new(
-                    keep_metric_names || func_keeps_metric_name,
-                    shared_timestamps,
-                    metric,
-                )
-            );
-            let scanned = self.do_timeseries_map(tsm.clone(), values, timestamps)?;
-            let len = tsm.series_len();
-            if len == 0 {
-                return Ok((0u64, vec![]));
-            }
-            let mut series = Vec::with_capacity(len);
-            tsm.append_timeseries_to(&mut series);
-            return Ok((scanned, series));
-        }
-
-        let mut ts_dst: Timeseries = Timeseries::default();
-        ts_dst.metric_name.copy_from(metric);
-        if !self.tag_value.is_empty() {
-            ts_dst.metric_name.set("rollup", self.tag_value)
-        }
-        if !keep_metric_names && !func_keeps_metric_name {
-            ts_dst.metric_name.reset_measurement();
-        }
-        let samples_scanned = self.exec(&mut ts_dst.values, values, timestamps)?;
-        ts_dst.timestamps = Arc::clone(shared_timestamps);
-        let tss = vec![ts_dst];
-
-        Ok((samples_scanned, tss))
-    }
 
     /// calculates rollup for the given timestamps and values and puts them to tsm.
     /// returns the number of samples scanned
@@ -469,24 +437,7 @@ impl RollupConfig {
             rfa
         }).collect(); // todo: collect into a smallvec to avoid heap allocation
 
-        let len = func_args.len();
-        match len {
-            0 => {}
-            1 => dst_values.push(self.handler.eval(&func_args[0])),
-            2 => {
-                let (first, second) = rayon::join(
-                    || self.handler.eval(&func_args[0]),
-                    || self.handler.eval(&func_args[1]),
-                );
-                dst_values.push(first);
-                dst_values.push(second);
-            }
-            _ => {
-                func_args.par_iter()
-                    .map(|rfa| self.handler.eval(rfa))
-                    .collect_into_vec(dst_values);
-            }
-        }
+        exec_handlers(&self.handler, dst_values, &func_args);
 
         Ok(samples_scanned)
     }
@@ -523,7 +474,25 @@ impl RollupConfig {
     }
 }
 
-fn exec_handler_internal(scope: &mut Scope,
+
+// todo: better heuristics to determine whether to parallelize
+const PARALLEL_THRESHOLD: usize = 6;
+
+fn should_parallelize(args: &[RollupFuncArg]) -> bool {
+    args.len() > PARALLEL_THRESHOLD
+}
+fn exec_handlers(handler: &RollupHandler, dest: &mut Vec<f64>, args: &[RollupFuncArg]) {
+    if should_parallelize(args) {
+        let mut scope = Scope::global();
+        exec_handler_parallel(&mut scope, handler, dest, args)
+    } else {
+        for arg in args {
+            dest.push(handler.eval(arg));
+        }
+    }
+}
+
+fn exec_handler_parallel(scope: &mut Scope,
                          handler: &RollupHandler,
                          dest: &mut Vec<f64>,
                          args: &[RollupFuncArg]) {
@@ -559,8 +528,8 @@ fn exec_handler_internal(scope: &mut Scope,
         _ => {
             let mid = args.len() / 2;
             let (head, tail) = args.split_at(mid);
-            exec_handler_internal(scope, handler, dest, head);
-            exec_handler_internal(scope, handler, dest, tail);
+            exec_handler_parallel(scope, handler, dest, head);
+            exec_handler_parallel(scope, handler, dest, tail);
         }
     }
 }
@@ -683,11 +652,13 @@ fn get_rollup_function_handler_meta(
     expr: &Expr,
     func: RollupFunction,
     rf: &RollupHandler,
+    lookback_delta: Duration
 ) -> RuntimeResult<RollupFunctionHandlerMeta> {
+    let lookback = lookback_delta.as_millis() as i64;
     let mut pre_funcs: PreFunctionVec = PreFunctionVec::new();
 
     if func.should_remove_counter_resets() {
-        pre_funcs.push(remove_counter_resets_pre_func);
+        pre_funcs.push(PreFunction::RemoveCounterResets(lookback));
     }
 
     let new_function_config = |func: &RollupHandler, tag_value: &'static str| -> TagFunction {
@@ -736,11 +707,11 @@ fn get_rollup_function_handler_meta(
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupRate | RollupFunction::RollupDeriv => {
-            pre_funcs.push(deriv_values_pre_func);
+            pre_funcs.push(PreFunction::DerivValues);
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupIncrease | RollupFunction::RollupDelta => {
-            pre_funcs.push(delta_values_pre_func);
+            pre_funcs.push(PreFunction::DeltaValues);
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::RollupCandlestick => {
@@ -749,7 +720,7 @@ fn get_rollup_function_handler_meta(
             new_function_configs(&mut funcs, tag, &VALID)?;
         }
         RollupFunction::RollupScrapeInterval => {
-            pre_funcs.push(calc_sample_intervals_pre_fn);
+            pre_funcs.push(PreFunction::CalcSampleIntervals);
             append_stats_function(&mut funcs, expr)?;
         }
         RollupFunction::AggrOverTime => {
@@ -758,7 +729,7 @@ fn get_rollup_function_handler_meta(
                 if rf.should_remove_counter_resets() {
                     // There is no need to save the previous pre_func, since it is either empty or the same.
                     pre_funcs.clear();
-                    pre_funcs.push(remove_counter_resets_pre_func);
+                    pre_funcs.push(PreFunction::RemoveCounterResets(lookback));
                 }
                 let rollup_fn = get_rollup_fn(&rf)?;
                 let handler = RollupHandler::wrap(rollup_fn);

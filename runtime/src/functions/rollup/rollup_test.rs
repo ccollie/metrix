@@ -1,14 +1,20 @@
 #[cfg(test)]
 mod tests {
     use crate::common::math::{linear_regression, STALE_NAN};
-    use crate::functions::rollup::delta::*;
-    use crate::functions::rollup::deriv::*;
-    use crate::functions::rollup::integrate::rollup_integrate;
-    use crate::functions::rollup::outlier_iqr::rollup_outlier_iqr;
-    use crate::functions::rollup::rollup_fns::{remove_counter_resets, rollup_avg, rollup_changes, rollup_changes_prometheus, rollup_count, rollup_default, rollup_distinct, rollup_first, rollup_increase_pure, rollup_lag, rollup_lifetime, rollup_max, rollup_min, rollup_mode_over_time, rollup_rate_over_sum, rollup_resets, rollup_scrape_interval, rollup_stddev, rollup_sum, rollup_zscore_over_time, ROLLUP_LAST};
     use crate::functions::rollup::{
         get_rollup_func_by_name, get_rollup_function_factory, get_rollup_function_handler,
         RollupConfig, RollupFuncArg, RollupHandler, RollupHandlerFactory,
+        delta::*,
+        deriv::*,
+        rollup_fns::{
+            remove_counter_resets, rollup_avg, rollup_changes, rollup_changes_prometheus, 
+            rollup_count, rollup_default, rollup_distinct, rollup_first, rollup_increase_pure, 
+            rollup_lag, rollup_lifetime, rollup_max, rollup_min, rollup_mode_over_time, 
+            rollup_rate_over_sum, rollup_resets, rollup_scrape_interval, rollup_stddev, rollup_sum, 
+            rollup_zscore_over_time, ROLLUP_LAST
+        },
+        integrate::rollup_integrate,
+        outlier_iqr::rollup_outlier_iqr,
     };
     use crate::types::{QueryValue, Timeseries, Timestamp};
     use crate::{compare_floats, test_rows_equal, RuntimeResult};
@@ -124,58 +130,58 @@ mod tests {
 
     #[test]
     fn test_remove_counter_resets() {
-        let mut values = Vec::from(TEST_VALUES);
-        remove_counter_resets(&mut values);
-        let values_expected: Vec<f64> = vec![
-            123_f64, 157.0, 167.0, 188.0, 221.0, 255.0, 320.0, 332.0, 364.0, 396.0, 398.0, 398.0,
-        ];
-        test_rows_equal(
-            &values,
-            &TEST_TIMESTAMPS,
-            &values_expected,
-            &TEST_TIMESTAMPS,
-        );
+        remove_counter_resets(&mut vec![], &mut vec![], 0);
+
+        let mut values = TEST_VALUES.to_vec();
+        let mut timestamps = TEST_TIMESTAMPS.to_vec();
+        remove_counter_resets(&mut values, &mut timestamps, 0);
+        let values_expected = vec![123.0, 157.0, 167.0, 188.0, 221.0, 255.0, 320.0, 332.0, 364.0, 396.0, 398.0, 398.0];
+        test_rows_equal(&values, &TEST_TIMESTAMPS, &values_expected, &TEST_TIMESTAMPS);
 
         // removeCounterResets doesn't expect negative values, so it doesn't work properly with them.
-        let mut values: Vec<f64> = vec![-100.0, -200.0, -300.0, -400.0];
-        remove_counter_resets(&mut values);
+        let mut values = vec![-100.0, -200.0, -300.0, -400.0];
+        let timestamps_expected = vec![0, 1, 2, 3];
+        remove_counter_resets(&mut values, &timestamps_expected, 0);
         let values_expected = vec![-100.0, -100.0, -100.0, -100.0];
-        let timestamps_expected: Vec<i64> = vec![0, 1, 2, 3];
-        test_rows_equal(
-            &values,
-            &timestamps_expected,
-            &values_expected,
-            &timestamps_expected,
-        );
+        test_rows_equal(&values, &timestamps_expected, &values_expected, &timestamps_expected);
 
         // verify how partial counter reset is handled.
         // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/2787
-        let mut values = vec![100_f64, 95.0, 120.0, 119.0, 139.0, 50.0];
-        remove_counter_resets(&mut values);
-        let values_expected = vec![100_f64, 100.0, 125.0, 125.0, 145.0, 195.0];
+        let mut values = vec![100.0, 95.0, 120.0, 119.0, 139.0, 50.0];
         let timestamps_expected = vec![0, 1, 2, 3, 4, 5];
-        test_rows_equal(
-            &values,
-            &timestamps_expected,
-            &values_expected,
-            &timestamps_expected,
-        );
+        remove_counter_resets(&mut values, &timestamps_expected, 0);
+        let values_expected = vec![100.0, 100.0, 125.0, 125.0, 145.0, 195.0];
+        test_rows_equal(&values, &timestamps_expected, &values_expected, &timestamps_expected);
+
+        // verify that staleness interval is respected during resets
+        // see https://github.com/VictoriaMetrics/VictoriaMetrics/issues/8072
+        let mut values = vec![10.0, 12.0, 14.0, 4.0, 6.0, 8.0, 6.0, 8.0, 4.0, 6.0];
+        let mut timestamps = vec![10, 20, 30, 60, 70, 80, 90, 100, 120, 130];
+        let values_expected = vec![10.0, 12.0, 14.0, 4.0, 6.0, 8.0, 14.0, 16.0, 4.0, 6.0];
+        remove_counter_resets(&mut values, &mut timestamps, 10);
+        test_rows_equal(&values, &timestamps, &values_expected, &timestamps);
+
+        // verify that staleness is respected if there was no counter reset
+        // but correction was made previously
+        let mut values = vec![10.0, 12.0, 2.0, 4.0];
+        let mut timestamps = vec![10, 20, 30, 60];
+        let values_expected = vec![10.0, 12.0, 14.0, 4.0];
+        remove_counter_resets(&mut values, &mut timestamps, 10);
+        test_rows_equal(&values, &timestamps, &values_expected, &timestamps);
 
         // verify results always increase monotonically with possible float operations precision error
-        let mut values = [
-            34.094223, 2.7518, 2.140669, 0.044878, 1.887095, 2.546569, 2.490149, 0.045, 0.035684,
-            0.062454, 0.058296,
-        ];
-        remove_counter_resets(&mut values);
-
-        let mut prev: f64 = values[0];
-        for (i, v) in values.iter().enumerate() {
-            if *v < prev {
-                panic!("error: unexpected value keep getting bigger {i}; cur {v}; pre {prev}\n");
+        let mut values = vec![34.094223, 2.7518, 2.140669, 0.044878, 1.887095, 2.546569, 2.490149, 0.045, 0.035684, 0.062454, 0.058296];
+        let timestamps_expected = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        remove_counter_resets(&mut values, &timestamps_expected, 0);
+        let mut prev = f64::NAN;
+        for (i, &v) in values.iter().enumerate() {
+            if v < prev {
+                panic!("error: unexpected value keep getting bigger {};\ncur {};\npre {}\n", i, v, prev);
             }
-            prev = *v;
+            prev = v;
         }
     }
+
 
     #[test]
     fn test_delta_values() {
@@ -205,7 +211,7 @@ mod tests {
         values.clear();
         // remove counter resets
         values.extend_from_slice(&TEST_VALUES);
-        remove_counter_resets(&mut values);
+        remove_counter_resets(&mut values, &TEST_TIMESTAMPS, 0);
         delta_values(&mut values);
 
         let values_expected = vec![
@@ -258,7 +264,7 @@ mod tests {
         values.clear();
         // remove counter resets
         values.extend_from_slice(&TEST_VALUES);
-        remove_counter_resets(&mut values);
+        remove_counter_resets(&mut values, &TEST_TIMESTAMPS, 0);
         deriv_values(&mut values, &TEST_TIMESTAMPS);
         let mut values_expected = vec![
             3400_f64,
@@ -297,7 +303,7 @@ mod tests {
         let mut values = Vec::from(TEST_VALUES);
         if func.should_remove_counter_resets() {
             let mut slice = values.as_mut_slice();
-            remove_counter_resets(&mut slice);
+            remove_counter_resets(&mut slice, &TEST_TIMESTAMPS, 0);
             rfa.values = slice;
         } else {
             rfa.values = &values;

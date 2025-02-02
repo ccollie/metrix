@@ -1,27 +1,22 @@
 use metricsql_common::pool::get_pooled_vec_f64;
 use metricsql_parser::functions::RollupFunction;
-use metricsql_parser::prelude::{BuiltinFunction, FunctionMeta};
 
 use crate::common::math::{
     is_stale_nan, linear_regression, mad, mode_no_nans, quantile, stddev, stdvar,
 };
 use crate::functions::arg_parse::get_scalar_param_value;
 use crate::functions::rollup::{
-    RollupHandlerFloat, RollupFunc, RollupFuncArg, RollupHandler,
     counts::{
-        new_rollup_count_values, new_rollup_sum_eq, new_rollup_sum_gt, new_rollup_sum_le,
         new_rollup_count_eq, new_rollup_count_gt, new_rollup_count_le, new_rollup_count_ne,
-        new_rollup_share_eq, new_rollup_share_gt, new_rollup_share_le,
-    },
-    delta::{
+        new_rollup_count_values, new_rollup_share_eq, new_rollup_share_gt, new_rollup_share_le,
+        new_rollup_sum_eq, new_rollup_sum_gt, new_rollup_sum_le,
+    }, delta::{
         new_rollup_delta, new_rollup_delta_prometheus, new_rollup_idelta, new_rollup_increase,
         rollup_delta, rollup_idelta,
-    },
-    deriv::{
+    }, deriv::{
         new_rollup_deriv, new_rollup_deriv_fast, new_rollup_ideriv, new_rollup_irate,
         new_rollup_rate, rollup_deriv_fast, rollup_deriv_slow, rollup_ideriv,
-    },
-    duration_over_time::new_rollup_duration_over_time,
+    }, duration_over_time::new_rollup_duration_over_time,
     hoeffding_bound::{
         new_rollup_hoeffding_bound_lower,
         new_rollup_hoeffding_bound_upper
@@ -33,7 +28,11 @@ use crate::functions::rollup::{
         new_rollup_quantile,
         new_rollup_quantiles
     },
-    types::{ RollupHandlerFactory }
+    types::RollupHandlerFactory,
+    RollupFunc,
+    RollupFuncArg,
+    RollupHandler,
+    RollupHandlerFloat
 };
 
 use crate::runtime_error::{RuntimeError, RuntimeResult};
@@ -109,10 +108,8 @@ pub(super) fn get_rollup_fn(f: &RollupFunction) -> RuntimeResult<RollupFunc> {
 }
 
 pub(crate) fn get_rollup_func_by_name(name: &str) -> RuntimeResult<RollupFunction> {
-    if let Some(meta) = FunctionMeta::lookup(name) {
-        if let BuiltinFunction::Rollup(f) = meta.function {
-            return Ok(f);
-        }
+    if let Some(rf) = RollupFunction::lookup(name) {
+        return Ok(rf);
     }
     Err(RuntimeError::UnknownFunction(name.to_string()))
 }
@@ -279,35 +276,52 @@ pub(crate) const fn get_rollup_function_factory(func: RollupFunction) -> RollupH
     }
 }
 
-pub(super) fn remove_counter_resets(values: &mut [f64]) {
-    // There is no need in handling NaNs here, since they are impossible
-    // on values from storage.
+pub(super) fn remove_counter_resets(values: &mut [f64], timestamps: &[i64], max_staleness_interval: i64) {
     if values.is_empty() {
         return;
     }
-    let mut correction: f64 = 0.0;
-    let mut prev_value = values[0];
 
-    for (i, v) in values.iter_mut().enumerate() {
-        let mut val = *v;
-        let d = val - prev_value;
+    let mut correction: f64 = 0.0;
+    let mut prev_value: f64 = values[0];
+
+    for i in 0..values.len() {
+        let v = values[i];
+        let d = v - prev_value;
+
         if d < 0.0 {
             if (-d * 8.0) < prev_value {
                 // This is likely a partial counter reset.
                 // See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/2787
-                correction += prev_value - val;
+                correction += prev_value - v;
             } else {
                 correction += prev_value;
             }
         }
-        prev_value = val;
-        val += correction;
-        // Check again, there could be precision error in float operations,
-        // see https://github.com/VictoriaMetrics/VictoriaMetrics/issues/5571
-        if i > 0 && val < prev_value {
-            val = prev_value;
+
+        if i > 0 && max_staleness_interval > 0 {
+            let gap = timestamps[i] - timestamps[i - 1];
+            if gap > max_staleness_interval {
+                // Reset correction if gap between samples exceeds staleness interval.
+                correction = 0.0;
+                prev_value = v;
+                continue;
+            }
         }
-        *v = val;
+
+        prev_value = v;
+        let new_value = v + correction;
+        values[i] = new_value;
+
+        // Check again, there could be precision error in float operations.
+        // SAFETY: the i > 0 check ensures that both indices are valid
+        unsafe {
+            if i > 0 {
+                let prev = *values.get_unchecked(i - 1);
+                if new_value < prev {
+                    values[i] = prev;
+                }
+            }
+        }
     }
 }
 
