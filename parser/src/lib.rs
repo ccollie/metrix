@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 extern crate core;
 extern crate enquote;
+extern crate hashify;
 extern crate logos;
 extern crate num_traits;
-extern crate phf;
 extern crate regex;
 extern crate serde;
 extern crate strum;

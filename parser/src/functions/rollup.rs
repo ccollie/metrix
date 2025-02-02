@@ -190,7 +190,16 @@ impl RollupFunction {
             ZScoreOverTime => "zscore_over_time",
         }
     }
-
+    
+    pub fn lookup(name: &str) -> Option<RollupFunction> {
+        if let Some(func) = lookup_rollup_fn(name.as_bytes()) {
+            Some(func)
+        } else { 
+            let lower = name.to_ascii_lowercase();
+            lookup_rollup_fn(lower.as_bytes())
+        }
+    }
+    
     /// the signatures supported by the function `fun`.
     pub fn signature(&self) -> Signature {
         use RollupFunction::*;
@@ -502,4 +511,127 @@ pub fn is_rollup_aggregation_over_time(func: RollupFunction) -> bool {
         | RollupDelta
         | RollupIncrease
         | RollupRate)
+}
+
+
+fn lookup_rollup_fn(key: &[u8]) -> Option<RollupFunction> {
+    use RollupFunction::*;
+    // This must be kept in sync with RollupFunction
+    hashify::tiny_map! { 
+        key,
+        "absent_over_time" => AbsentOverTime,
+        "aggr_over_time" => AggrOverTime,
+        "ascent_over_time" => AscentOverTime,
+        "avg_over_time" => AvgOverTime,
+        "changes" => Changes,
+        "changes_prometheus" => ChangesPrometheus,
+        "count_eq_over_time" => CountEqOverTime,
+        "count_gt_over_time" => CountGtOverTime,
+        "count_le_over_time" => CountLeOverTime,
+        "count_ne_over_time" => CountNeOverTime,
+        "count_over_time" => CountOverTime,
+        "count_values_over_time" => CountValuesOverTime,
+        "decreases_over_time" => DecreasesOverTime,
+        "default_rollup" => DefaultRollup,
+        "delta" => Delta,
+        "delta_prometheus" => DeltaPrometheus,
+        "deriv" => Deriv,
+        "deriv_fast" => DerivFast,
+        "descent_over_time" => DescentOverTime,
+        "distinct_over_time" => DistinctOverTime,
+        "duration_over_time" => DurationOverTime,
+        "first_over_time" => FirstOverTime,
+        "geomean_over_time" => GeomeanOverTime,
+        "histogram_over_time" => HistogramOverTime,
+        "hoeffding_bound_lower" => HoeffdingBoundLower,
+        "hoeffding_bound_upper" => HoeffdingBoundUpper,
+        "holt_winters" => HoltWinters,
+        "idelta" => IDelta,
+        "ideriv" => IDeriv,
+        "increase" => Increase,
+        "increase_prometheus" => IncreasePrometheus,
+        "increase_pure" => IncreasePure,
+        "increases_over_time" => IncreasesOverTime,
+        "integrate" => Integrate,
+        "iqr_over_time" => IQROverTime,
+        "irate" => IRate,
+        "lag" => Lag,
+        "last_over_time" => LastOverTime,
+        "lifetime" => Lifetime,
+        "mad_over_time" => MadOverTime,
+        "max_over_time" => MaxOverTime,
+        "median_over_time" => MedianOverTime,
+        "min_over_time" => MinOverTime,
+        "mode_over_time" => ModeOverTime,
+        "outlier_iqr_over_time" => OutlierIQROverTime,
+        "predict_linear" => PredictLinear,
+        "present_over_time" => PresentOverTime,
+        "quantile_over_time" => QuantileOverTime,
+        "quantiles_over_time" => QuantilesOverTime,
+        "range_over_time" => RangeOverTime,
+        "rate" => Rate,
+        "rate_over_sum" => RateOverSum,
+        "resets" => Resets,
+        "rollup" => Rollup,
+        "rollup_candlestick" => RollupCandlestick,
+        "rollup_delta" => RollupDelta,
+        "rollup_deriv" => RollupDeriv,
+        "rollup_increase" => RollupIncrease,
+        "rollup_rate" => RollupRate,
+        "rollup_scrape_interval" => RollupScrapeInterval,
+        "scrape_interval" => ScrapeInterval,
+        "share_eq_over_time" => ShareEqOverTime,
+        "share_gt_over_time" => ShareGtOverTime,
+        "share_le_over_time" => ShareLeOverTime,
+        "stale_samples_over_time" => StaleSamplesOverTime,
+        "stddev_over_time" => StddevOverTime,
+        "stdvar_over_time" => StdvarOverTime,
+        "sum_eq_over_time" => SumEqOverTime,
+        "sum_gt_over_time" => SumGtOverTime,
+        "sum_le_over_time" => SumLeOverTime,
+        "sum_over_time" => SumOverTime,
+        "sum2_over_time" => Sum2OverTime,
+        "tfirst_over_time" => TFirstOverTime,
+        "timestamp" => Timestamp,
+        "timestamp_with_name" => TimestampWithName,
+        "tlast_change_over_time" => TLastChangeOverTime,
+        "tlast_over_time" => TLastOverTime,
+        "tmax_over_time" => TMaxOverTime,
+        "tmin_over_time" => TMinOverTime,
+        "zscore_over_time" => ZScoreOverTime,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use strum::IntoEnumIterator;
+    use crate::functions::rollup::lookup_rollup_fn;
+    use crate::functions::RollupFunction;
+
+    #[test]
+    fn test_lookup_rollup_fn() {
+        for rf in RollupFunction::iter() {
+            let key = rf.name().as_bytes();
+            let found_fn = lookup_rollup_fn(key);
+            assert!(found_fn.is_some(), "missing lookup entry for {}", rf.name());
+            let found_fn = found_fn.unwrap();
+            assert_eq!(rf, found_fn, "invalid entry for {rf}. Found for {found_fn}");
+        }
+    }
+    
+    #[test]
+    fn test_rollup_function_lookup() {
+        for rf in RollupFunction::iter() {
+            let key = rf.name();
+            let found_fn = RollupFunction::lookup(key);
+            assert!(found_fn.is_some(), "missing lookup entry for {}", rf.name());
+            let found_fn = found_fn.unwrap();
+            assert_eq!(rf, found_fn, "invalid entry for {rf}. Found for {found_fn}");
+
+            let upper_key = key.to_uppercase();
+            let found_upper_fn = RollupFunction::lookup(&upper_key);
+            assert!(found_upper_fn.is_some(), "missing lookup entry for {}", upper_key);
+            assert_eq!(found_upper_fn.unwrap(), found_fn);
+        }
+    }
 }

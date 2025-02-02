@@ -1,11 +1,10 @@
 use std::fmt;
 use std::str::FromStr;
 
-use phf::phf_map;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
-use crate::parser::{Token, ParseError};
+use crate::parser::{ParseError, Token};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, EnumIter, Serialize, Deserialize)]
 pub enum Operator {
@@ -31,35 +30,53 @@ pub enum Operator {
     Unless,
 }
 
-pub static BINARY_OPS_MAP: phf::Map<&'static str, Operator> = phf_map! {
-    "+" => Operator::Add,
-    "-" => Operator::Sub,
-    "*" => Operator::Mul,
-    "/" => Operator::Div,
-    "%" => Operator::Mod,
-    "^" => Operator::Pow,
+fn lookup_operator_internal(key: &[u8]) -> Option<Operator> {
+    hashify::tiny_map! { key,
+        "+" => Operator::Add,
+        "-" => Operator::Sub,
+        "*" => Operator::Mul,
+        "/" => Operator::Div,
+        "%" => Operator::Mod,
+        "^" => Operator::Pow,
 
-    // See https://github.com/prometheus/prometheus/pull/9248
-    "atan2" => Operator::Atan2,
+        // See https://github.com/prometheus/prometheus/pull/9248
+        "atan2" => Operator::Atan2,
 
-    // cmp ops
-    "==" => Operator::Eql,
-    "!=" => Operator::NotEq,
-    "<" => Operator::Lt,
-    ">" => Operator::Gt,
-    "<=" => Operator::Lte,
-    ">=" => Operator::Gte,
+        // cmp ops
+        "==" => Operator::Eql,
+        "!=" => Operator::NotEq,
+        "<" => Operator::Lt,
+        ">" => Operator::Gt,
+        "<=" => Operator::Lte,
+        ">=" => Operator::Gte,
 
-    // logic set ops
-    "and" => Operator::And,
-    "or" => Operator::Or,
-    "unless" => Operator::Unless,
+        // logic set ops
+        "and" => Operator::And,
+        "or" => Operator::Or,
+        "unless" => Operator::Unless,
 
-    // New ops for MetricsQL
-    "if" => Operator::If,
-    "ifnot" => Operator::IfNot,
-    "default" => Operator::Default,
-};
+        // New ops for MetricsQL
+        "if" => Operator::If,
+        "ifnot" => Operator::IfNot,
+        "default" => Operator::Default,
+    }
+}
+
+pub fn lookup_operator(op: &str) -> Option<Operator> {
+    if let Some(ch) = op.chars().next() {
+        if !ch.is_alphabetic() {
+            lookup_operator_internal(op.as_bytes())
+        } else {
+            // slight optimization - don't lowercase if not needed (save allocation)
+            lookup_operator_internal(op.as_bytes()).or_else(|| {
+                let lower = op.to_ascii_lowercase();
+                lookup_operator_internal(lower.as_bytes())
+            })
+        }
+    } else {
+        None
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum BinaryOpKind {
@@ -180,19 +197,8 @@ impl TryFrom<&str> for Operator {
     type Error = ParseError;
 
     fn try_from(op: &str) -> Result<Self, Self::Error> {
-        if let Some(ch) = op.chars().next() {
-            let value = if !ch.is_alphabetic() {
-                BINARY_OPS_MAP.get(op)
-            } else {
-                // slight optimization - don't lowercase if not needed (save allocation)
-                BINARY_OPS_MAP.get(op).or_else(|| {
-                    let lower = op.to_ascii_lowercase();
-                    BINARY_OPS_MAP.get(&lower)
-                })
-            };
-            if let Some(operator) = value {
-                return Ok(*operator);
-            }
+        if let Some(operator) = lookup_operator(op) {
+            return Ok(operator);
         }
         Err(ParseError::General(format!("Unknown binary op {}", op)))
     }
@@ -238,19 +244,15 @@ impl fmt::Display for Operator {
 }
 
 pub fn is_binary_op(op: &str) -> bool {
-    if let Some(ch) = op.chars().next() {
-        return if !ch.is_alphabetic() {
-            BINARY_OPS_MAP.contains_key(op)
-        } else {
-            BINARY_OPS_MAP.contains_key(op.to_lowercase().as_str())
-        };
-    }
-    false
+    lookup_operator(op).is_some()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+    use strum::IntoEnumIterator;
     use crate::ast::is_binary_op;
+    use crate::prelude::Operator;
 
     #[test]
     fn test_is_binary_op_success() {
@@ -289,5 +291,16 @@ mod tests {
         f("=");
         f("<==");
         f("234");
+    }
+    
+    #[test]
+    fn test_operator_from_str() {
+        for op in Operator::iter() {
+            let op_str = op.as_str();
+            assert_eq!(Operator::from_str(op.as_str()), Ok(op));
+            
+            let upper = op_str.to_ascii_uppercase();
+            assert_eq!(Operator::from_str(&upper), Ok(op));
+        }
     }
 }

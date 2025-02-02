@@ -31,6 +31,7 @@ enquote = "1.1"
 # peg this to 0.3.30 until all crate dependents are update, since 0.3.31 introduces a breaking change
 futures = "0.3.31"
 get-size = { version = "^0.1", features = ["derive"] }
+hashify = { version = "^0.2" }
 integer-encoding = "4.0"
 num-traits = "0.2"
 pco = "0.4"
@@ -49,7 +50,6 @@ smallvec = { version = "2.0.0-alpha.10", features = ["specialization", "std"] }
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = { version = "0.26" }
 tracing = "0.1"
-phf = { version = "0.11", features = ["macros"] }
 thiserror = "2.0"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
