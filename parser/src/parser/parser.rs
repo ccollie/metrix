@@ -82,14 +82,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn from_tokens(tokens: Vec<TokenWithLocation<'a>>) -> Self {
-        Self {
-            cursor: 0,
-            tokens,
-            needs_expansion: false,
-        }
-    }
-
     pub(super) fn next_token(&mut self) -> Option<&TokenWithLocation<'a>> {
         if self.is_eof() {
             return None;

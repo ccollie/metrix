@@ -13,7 +13,7 @@ use smallvec::SmallVec;
 ///
 ///    <metric_identifier> [<label_set>]
 ///
-pub fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
+pub(crate) fn parse_metric_expr(p: &mut Parser) -> ParseResult<Expr> {
     let mut name: Option<String> = None;
 
     let tok = p.current_token()?;

@@ -42,6 +42,8 @@ pub enum ParseError {
     DivisionByZero,
     #[error("{0}")]
     Unsupported(String),
+    #[error("Unparsed data")]
+    UnparsedData,
     #[default]
     #[error("Parse error")]
     Other,
