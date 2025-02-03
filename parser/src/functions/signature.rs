@@ -25,22 +25,6 @@ use crate::common::ValueType;
 use crate::functions::MAX_ARG_COUNT;
 use crate::parser::{ParseError, ParseResult};
 
-///A function's volatility, which defines the functions eligibility for certain optimizations
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub enum Volatility {
-    /// Immutable - An immutable function will always return the same output when given the same
-    /// input. An example of this is [super::BuiltinScalarFunction::Cos].
-    Immutable,
-    /// Stable - A stable function may return different values given the same input across different
-    /// queries but must return the same value for a given input within a query. An example of
-    /// this is [super::BuiltinScalarFunction::Now].
-    Stable,
-    /// Volatile - A volatile function may change the return value from evaluation to evaluation.
-    /// Multiple invocations of a volatile function may return different results when used in the
-    /// same query. An example of this is [super::BuiltinScalarFunction::Random].
-    Volatile,
-}
-
 /// A function's type signature, which defines the function's supported argument types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeSignature {
@@ -119,63 +103,54 @@ impl TypeSignature {
 pub struct Signature {
     /// type_signature - The types that the function accepts. See [TypeSignature] for more information.
     pub type_signature: TypeSignature,
-    /// volatility - The volatility of the function. See [Volatility] for more information.
-    pub volatility: Volatility,
-
     pub return_type: ValueType,
 }
 
 impl Signature {
     /// new - Creates a new Signature from any type signature and the volatility.
-    pub fn new(type_signature: TypeSignature, volatility: Volatility) -> Self {
+    pub fn new(type_signature: TypeSignature) -> Self {
         Signature {
             type_signature,
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// variadic - Creates a variadic signature that represents an arbitrary number of arguments all from a type in common_types.
-    pub fn variadic(common_types: Vec<ValueType>, volatility: Volatility) -> Self {
+    pub fn variadic(common_types: Vec<ValueType>) -> Self {
         Self {
             type_signature: TypeSignature::Variadic(common_types, 0),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// variadic - Creates a variadic signature that represents an arbitrary number of arguments all from a type in common_types.
-    pub fn variadic_min(common_types: Vec<ValueType>, min: usize, volatility: Volatility) -> Self {
+    pub fn variadic_min(common_types: Vec<ValueType>, min: usize) -> Self {
         Self {
             type_signature: TypeSignature::Variadic(common_types, min),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// variadic_equal - Creates a variadic signature that represents an arbitrary number of arguments of the same type.
-    pub fn variadic_equal(valid_type: ValueType, min: usize, volatility: Volatility) -> Self {
+    pub fn variadic_equal(valid_type: ValueType, min: usize) -> Self {
         Self {
             type_signature: TypeSignature::VariadicEqual(valid_type, min),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// uniform - Creates a signature with a fixed number of arguments of the same type, which must be from valid_types.
-    pub fn uniform(arg_count: usize, valid_type: ValueType, volatility: Volatility) -> Self {
+    pub fn uniform(arg_count: usize, valid_type: ValueType) -> Self {
         Self {
             type_signature: TypeSignature::Uniform(valid_type, arg_count),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// exact - Creates a signature which must match the types in exact_types in order.
-    pub fn exact(exact_types: Vec<ValueType>, volatility: Volatility) -> Self {
+    pub fn exact(exact_types: Vec<ValueType>) -> Self {
         Signature {
             type_signature: TypeSignature::Exact(exact_types, None),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
@@ -185,31 +160,27 @@ impl Signature {
     pub fn exact_with_min_args(
         exact_types: Vec<ValueType>,
         min: usize,
-        volatility: Volatility,
     ) -> Self {
         // todo: panic if out of range
         let min_arg = min.clamp(0, exact_types.len());
         Signature {
             type_signature: TypeSignature::Exact(exact_types, Some(min_arg)),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// any - Creates a signature which can be made of any type but of a fixed number
-    pub fn any(arg_count: usize, volatility: Volatility) -> Self {
+    pub fn any(arg_count: usize) -> Self {
         Signature {
             type_signature: TypeSignature::Any(arg_count),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }
 
     /// variadic_any - creates a variadic signature that represents an arbitrary number of arguments of any type.
-    pub fn variadic_any(min_arg_count: usize, volatility: Volatility) -> Self {
+    pub fn variadic_any(min_arg_count: usize) -> Self {
         Signature {
             type_signature: TypeSignature::VariadicAny(min_arg_count),
-            volatility,
             return_type: ValueType::InstantVector,
         }
     }

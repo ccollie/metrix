@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
 use crate::common::ValueType;
-use crate::functions::signature::{Signature, Volatility};
+use crate::functions::signature::Signature;
 use crate::functions::{BuiltinFunction, FunctionMeta, MAX_ARG_COUNT};
 use crate::parser::ParseError;
 
@@ -310,67 +310,50 @@ impl TransformFunction {
 
         // note: the expression must accept the type returned by this function or the execution panics.
         match self {
-            Alias => Signature::exact(
-                vec![ValueType::InstantVector, ValueType::String],
-                Volatility::Stable,
-            ),
-            BitmapAnd | BitmapOr | BitmapXor => Signature::exact(
-                vec![ValueType::InstantVector, ValueType::Scalar],
-                Volatility::Immutable,
-            ),
-            BucketsLimit => Signature::exact(
-                vec![ValueType::Scalar, ValueType::InstantVector],
-                Volatility::Immutable,
-            ),
+            Alias => Signature::exact(vec![ValueType::InstantVector, ValueType::String]),
+            BitmapAnd | BitmapOr | BitmapXor => Signature::exact(vec![ValueType::InstantVector, ValueType::Scalar]),
+            BucketsLimit => Signature::exact(vec![ValueType::Scalar, ValueType::InstantVector]),
             Clamp => Signature::exact(
                 vec![
                     ValueType::InstantVector,
                     ValueType::Scalar,
                     ValueType::Scalar,
                 ],
-                Volatility::Volatile,
             ),
             ClampMax | ClampMin => Signature::exact(
                 vec![ValueType::InstantVector, ValueType::Scalar],
-                Volatility::Immutable,
             ),
-            Start | End => Signature::exact(vec![], Volatility::Stable),
+            Start | End => Signature::exact(vec![]),
             DropCommonLabels => {
-                Signature::variadic_equal(ValueType::InstantVector, 1, Volatility::Stable)
+                Signature::variadic_equal(ValueType::InstantVector, 1)
             }
-            HistogramQuantile => Signature::exact(
-                vec![ValueType::Scalar, ValueType::InstantVector],
-                Volatility::Stable,
-            ),
+            HistogramQuantile => Signature::exact(vec![ValueType::Scalar, ValueType::InstantVector]),
             HistogramQuantiles => {
                 // histogram_quantiles("phiLabel", phi1, ..., phiN, buckets)
                 // todo: need a better way to handle variadic args with specific types
-                Signature::variadic_any(3, Volatility::Stable)
+                Signature::variadic_any(3)
             }
             // histogram_share(le, buckets)
-            HistogramShare => Signature::exact(
-                vec![ValueType::Scalar, ValueType::InstantVector],
-                Volatility::Stable,
-            ),
+            HistogramShare => Signature::exact(vec![ValueType::Scalar, ValueType::InstantVector]),
             LabelCopy | LabelMove | LabelSet => {
                 let mut types = vec![ValueType::String; MAX_ARG_COUNT];
                 types.insert(0, ValueType::InstantVector);
-                Signature::exact_with_min_args(types, 3, Volatility::Stable)
+                Signature::exact_with_min_args(types, 3)
             }
             LabelDel | LabelKeep | LabelLowercase | LabelUppercase => {
                 let mut types = vec![ValueType::String; MAX_ARG_COUNT];
                 types.insert(0, ValueType::InstantVector);
-                Signature::exact_with_min_args(types, 2, Volatility::Stable)
+                Signature::exact_with_min_args(types, 2)
             }
             LabelJoin => {
                 let mut types = vec![ValueType::String; MAX_ARG_COUNT];
                 types.insert(0, ValueType::InstantVector);
-                Signature::exact_with_min_args(types, 4, Volatility::Stable)
+                Signature::exact_with_min_args(types, 4)
             }
             LabelMap => {
                 let mut types = vec![ValueType::String; MAX_ARG_COUNT];
                 types.insert(0, ValueType::InstantVector);
-                Signature::exact_with_min_args(types, 4, Volatility::Stable)
+                Signature::exact_with_min_args(types, 4)
             }
             LabelMatch | LabelMismatch => {
                 let types = vec![
@@ -378,13 +361,13 @@ impl TransformFunction {
                     ValueType::String,
                     ValueType::String,
                 ];
-                Signature::exact_with_min_args(types, 3, Volatility::Stable)
+                Signature::exact_with_min_args(types, 3)
             }
             LabelGraphiteGroup => {
                 // label_graphite_group(q, groupNum1, ... groupNumN)
                 let mut types = vec![ValueType::Scalar; MAX_ARG_COUNT];
                 types.insert(0, ValueType::InstantVector);
-                Signature::exact(types, Volatility::Stable)
+                Signature::exact(types)
             }
             LabelReplace => {
                 // label_replace(q, "dst_label", "replacement", "src_label", "regex")
@@ -396,7 +379,6 @@ impl TransformFunction {
                         ValueType::String,
                         ValueType::String,
                     ],
-                    Volatility::Stable,
                 )
             }
             LabelTransform => {
@@ -408,76 +390,52 @@ impl TransformFunction {
                         ValueType::String,
                         ValueType::String,
                     ],
-                    Volatility::Stable,
                 )
             }
-            LabelValue => Signature::exact(
-                vec![ValueType::InstantVector, ValueType::String],
-                Volatility::Stable,
-            ),
+            LabelValue => Signature::exact(vec![ValueType::InstantVector, ValueType::String]),
             LimitOffset => Signature::exact(
                 vec![
                     ValueType::Scalar,
                     ValueType::Scalar,
                     ValueType::InstantVector,
                 ],
-                Volatility::Stable,
             ),
-            Now => Signature::exact(vec![], Volatility::Stable),
-            Pi => Signature::exact(vec![], Volatility::Immutable),
+            Now => Signature::exact(vec![]),
+            Pi => Signature::exact(vec![]),
             Random | RandExponential | RandNormal => {
-                Signature::exact_with_min_args(vec![ValueType::Scalar], 0, Volatility::Volatile)
+                Signature::exact_with_min_args(vec![ValueType::Scalar], 0)
             }
             RangeNormalize => {
-                Signature::variadic_min(vec![ValueType::InstantVector], 1, Volatility::Stable)
+                Signature::variadic_min(vec![ValueType::InstantVector], 1)
             }
             RangeTrimOutliers | RangeTrimSpikes | RangeTrimZScore => Signature::exact(
-                vec![ValueType::Scalar, ValueType::InstantVector],
-                Volatility::Stable,
-            ),
-            RangeQuantile => Signature::exact(
-                vec![ValueType::Scalar, ValueType::InstantVector],
-                Volatility::Stable,
-            ),
-            Round => Signature::exact_with_min_args(
-                vec![ValueType::InstantVector, ValueType::Scalar],
-                1,
-                Volatility::Stable,
-            ),
-            Ru => Signature::exact(
-                vec![ValueType::RangeVector, ValueType::RangeVector],
-                Volatility::Stable,
-            ),
-            Scalar => Signature::any(1, Volatility::Stable),
-            SmoothExponential => Signature::exact(
-                vec![ValueType::InstantVector, ValueType::Scalar],
-                Volatility::Stable,
-            ),
-            Sort => Signature::exact(vec![ValueType::RangeVector], Volatility::Stable),
+                vec![ValueType::Scalar, ValueType::InstantVector]),
+            RangeQuantile => Signature::exact(vec![ValueType::Scalar, ValueType::InstantVector]),
+            Round => Signature::exact_with_min_args(vec![ValueType::InstantVector, ValueType::Scalar], 1),
+            Ru => Signature::exact(vec![ValueType::RangeVector, ValueType::RangeVector]),
+            Scalar => Signature::any(1),
+            SmoothExponential => Signature::exact(vec![ValueType::InstantVector, ValueType::Scalar]),
+            Sort => Signature::exact(vec![ValueType::RangeVector]),
             SortByLabel | SortByLabelDesc | SortByLabelNumeric | SortByLabelNumericDesc => {
                 let mut types = vec![ValueType::String; MAX_ARG_COUNT];
                 types.insert(0, ValueType::RangeVector);
-                Signature::exact_with_min_args(types, 2, Volatility::Stable)
+                Signature::exact_with_min_args(types, 2)
             }
-            Step => Signature::exact(vec![], Volatility::Stable),
-            Time => Signature::exact(vec![], Volatility::Stable),
-            TimezoneOffset => Signature::exact(vec![ValueType::String], Volatility::Stable),
+            Step => Signature::exact(vec![]),
+            Time => Signature::exact(vec![]),
+            TimezoneOffset => Signature::exact(vec![ValueType::String]),
             Union => {
                 let types = vec![ValueType::InstantVector; MAX_ARG_COUNT];
-                Signature::exact_with_min_args(types, 1, Volatility::Stable)
+                Signature::exact_with_min_args(types, 1)
             }
-            Vector => Signature::exact(vec![ValueType::InstantVector], Volatility::Stable),
+            Vector => Signature::exact(vec![ValueType::InstantVector]),
             // DateTime functions
             DayOfMonth | DayOfWeek | DayOfYear | DaysInMonth | Hour | Minute | Month | Year => {
-                Signature::exact_with_min_args(
-                    vec![ValueType::InstantVector],
-                    0,
-                    Volatility::Immutable,
-                )
+                Signature::exact_with_min_args(vec![ValueType::InstantVector], 0)
             }
             _ => {
                 // by default we take a single arg containing series
-                Signature::exact(vec![ValueType::InstantVector], Volatility::Immutable)
+                Signature::exact(vec![ValueType::InstantVector])
             }
         }
     }

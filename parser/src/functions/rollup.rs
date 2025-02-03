@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
 use crate::common::ValueType;
-use crate::functions::signature::{Signature, Volatility};
+use crate::functions::signature::Signature;
 use crate::functions::{BuiltinFunction, FunctionMeta, MAX_ARG_COUNT};
 use crate::parser::ParseError;
 
@@ -210,34 +210,34 @@ impl RollupFunction {
             CountEqOverTime | CountLeOverTime | CountNeOverTime | CountGtOverTime
             | DurationOverTime | PredictLinear | ShareEqOverTime | ShareGtOverTime
             | ShareLeOverTime | SumEqOverTime | SumGtOverTime | SumLeOverTime | TFirstOverTime => {
-                Signature::exact(vec![RangeVector, Scalar], Volatility::Immutable)
+                Signature::exact(vec![RangeVector, Scalar])
             }
             CountValuesOverTime => {
-                Signature::exact(vec![String, RangeVector], Volatility::Immutable)
+                Signature::exact(vec![String, RangeVector])
             }
             HoeffdingBoundLower | HoeffdingBoundUpper => {
-                Signature::exact(vec![Scalar, RangeVector], Volatility::Immutable)
+                Signature::exact(vec![Scalar, RangeVector])
             }
             HoltWinters => {
-                Signature::exact(vec![RangeVector, Scalar, Scalar], Volatility::Immutable)
+                Signature::exact(vec![RangeVector, Scalar, Scalar])
             }
             AggrOverTime => {
                 let mut quantile_types: Vec<ValueType> = vec![String; MAX_ARG_COUNT];
                 quantile_types.insert(0, RangeVector);
-                Signature::variadic_min(quantile_types, 2, Volatility::Volatile)
+                Signature::variadic_min(quantile_types, 2)
             }
             QuantilesOverTime => {
                 let mut quantile_types: Vec<ValueType> = vec![RangeVector; MAX_ARG_COUNT];
                 quantile_types.insert(0, RangeVector);
-                Signature::variadic_min(quantile_types, 3, Volatility::Volatile)
+                Signature::variadic_min(quantile_types, 3)
             }
             Rollup | RollupDelta | RollupDeriv | RollupIncrease | RollupRate
             | RollupScrapeInterval | RollupCandlestick => {
-                Signature::variadic_min(vec![RangeVector, String], 1, Volatility::Volatile)
+                Signature::variadic_min(vec![RangeVector, String], 1)
             }
             _ => {
                 // default
-                Signature::uniform(1, RangeVector, Volatility::Immutable)
+                Signature::uniform(1, RangeVector)
             }
         }
     }
@@ -604,9 +604,9 @@ fn lookup_rollup_fn(key: &[u8]) -> Option<RollupFunction> {
 
 #[cfg(test)]
 mod tests {
-    use strum::IntoEnumIterator;
     use crate::functions::rollup::lookup_rollup_fn;
     use crate::functions::RollupFunction;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_lookup_rollup_fn() {

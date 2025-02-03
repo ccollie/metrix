@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
 use crate::common::ValueType;
-use crate::functions::signature::{Signature, Volatility};
+use crate::functions::signature::Signature;
 use crate::functions::{BuiltinFunction, FunctionMeta, MAX_ARG_COUNT};
 use crate::parser::ParseError;
 
@@ -167,18 +167,11 @@ impl FromStr for AggregateFunction {
 pub fn aggregate_function_signature(fun: &AggregateFunction) -> Signature {
     use AggregateFunction::*;
     match fun {
-        CountValues => Signature::exact(
-            vec![ValueType::String, ValueType::InstantVector],
-            Volatility::Stable,
-        ),
+        CountValues => Signature::exact(vec![ValueType::String, ValueType::InstantVector]),
         Topk | Limitk | Outliersk => Signature::exact(
-            vec![ValueType::Scalar, ValueType::InstantVector],
-            Volatility::Stable,
-        ),
+            vec![ValueType::Scalar, ValueType::InstantVector]),
         OutliersMAD => Signature::exact(
-            vec![ValueType::Scalar, ValueType::InstantVector],
-            Volatility::Stable,
-        ),
+            vec![ValueType::Scalar, ValueType::InstantVector]),
         TopkMin | TopkMax | TopkAvg | TopkMedian | BottomkMin | BottomkMax | BottomkAvg
         | BottomkLast | BottomkMedian => Signature::exact_with_min_args(
             vec![
@@ -187,24 +180,16 @@ pub fn aggregate_function_signature(fun: &AggregateFunction) -> Signature {
                 ValueType::String,
             ],
             2,
-            Volatility::Stable,
         ),
-        Quantile => Signature::exact(
-            vec![ValueType::Scalar, ValueType::InstantVector],
-            Volatility::Stable,
-        ),
+        Quantile => Signature::exact(vec![ValueType::Scalar, ValueType::InstantVector]),
         Quantiles => {
             // todo:
             let mut quantile_types: Vec<ValueType> = vec![ValueType::Scalar; MAX_ARG_COUNT];
             quantile_types.insert(0, ValueType::String);
             quantile_types.push(ValueType::InstantVector);
-            Signature::variadic_min(quantile_types, 3, Volatility::Volatile)
+            Signature::variadic_min(quantile_types, 3)
         }
-        _ => Signature::variadic_min(
-            vec![ValueType::InstantVector, ValueType::Scalar],
-            1,
-            Volatility::Stable,
-        ),
+        _ => Signature::variadic_min(vec![ValueType::InstantVector, ValueType::Scalar], 1),
     }
 }
 
