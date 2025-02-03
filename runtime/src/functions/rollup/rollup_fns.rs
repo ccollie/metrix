@@ -108,10 +108,10 @@ pub(super) fn get_rollup_fn(f: &RollupFunction) -> RuntimeResult<RollupFunc> {
 }
 
 pub(crate) fn get_rollup_func_by_name(name: &str) -> RuntimeResult<RollupFunction> {
-    if let Some(rf) = RollupFunction::lookup(name) {
-        return Ok(rf);
+    match RollupFunction::lookup(name) {
+        Some(rf) => Ok(rf),
+        None => Err(RuntimeError::UnknownFunction(name.to_string())),
     }
-    Err(RuntimeError::UnknownFunction(name.to_string()))
 }
 
 macro_rules! make_factory {
@@ -318,7 +318,7 @@ pub(super) fn remove_counter_resets(values: &mut [f64], timestamps: &[i64], max_
             if i > 0 {
                 let prev = *values.get_unchecked(i - 1);
                 if new_value < prev {
-                    values[i] = prev;
+                    *values.get_unchecked_mut(i) = prev;
                 }
             }
         }
@@ -754,8 +754,7 @@ pub(super) fn rollup_increases(rfa: &RollupFuncArg) -> f64 {
     }
 
     let mut n = 0;
-    for v in values.iter() {
-        let val = *v;
+    for val in values.iter().copied() {
         if val > prev_value {
             if change_below_tolerance(val, prev_value) {
                 // This may be precision error. See https://github.com/VictoriaMetrics/VictoriaMetrics/issues/767#issuecomment-1650932203
@@ -862,11 +861,12 @@ pub(super) fn rollup_descent_over_time(rfa: &RollupFuncArg) -> f64 {
 
     let mut s: f64 = 0.0;
     for v in &rfa.values[ofs..] {
-        let d = prev_value - *v;
+        let val = *v;
+        let d = prev_value - val;
         if d > 0.0 {
             s += d;
         }
-        prev_value = *v;
+        prev_value = val;
     }
 
     s

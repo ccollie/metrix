@@ -44,8 +44,8 @@ impl MapInner {
     }
 
     pub fn update(&mut self, values: &[f64]) {
-        for value in values {
-            self.hist.update(*value);
+        for value in values.iter().copied() {
+            self.hist.update(value);
         }
     }
 

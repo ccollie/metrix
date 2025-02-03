@@ -12,7 +12,7 @@ use crate::prelude::{eval_number, QueryValue, Timeseries};
 use crate::types::{FunctionArgs, InstantVector};
 use crate::{QueryResult, RuntimeError, RuntimeResult};
 use ahash::AHashSet;
-use metricsql_common::hash::Signature;
+use metricsql_common::hash::{HashSetExt, IntSet, Signature};
 use metricsql_common::prelude::current_time_millis;
 use metricsql_parser::ast::{
     BinaryExpr, Expr, FunctionExpr, Operator, ParensExpr, RollupExpr, UnaryExpr,
@@ -238,7 +238,7 @@ pub(crate) fn timeseries_to_result(
     }
 
     let mut result: Vec<QueryResult> = Vec::with_capacity(tss.len());
-    let mut m: AHashSet<Signature> = AHashSet::with_capacity(tss.len());
+    let mut m: IntSet<Signature> = IntSet::with_capacity(tss.len());
 
     for ts in tss.iter_mut() {
         ts.metric_name.sort_labels();
@@ -334,10 +334,7 @@ pub fn eval_expr(ctx: &Context, ec: &EvalConfig, expr: &Expr) -> RuntimeResult<Q
         }
         Expr::Function(fe) => eval_function(ctx, ec, expr, fe),
         Expr::UnaryOperator(ue) => eval_unary_op(ctx, ec, ue),
-        _ => Err(RuntimeError::NotImplemented(format!(
-            "No handler for {:?}",
-            expr
-        ))),
+        _ => Err(RuntimeError::NotImplemented(format!("No handler for {:?}", expr))),
     }
 }
 
@@ -600,11 +597,10 @@ fn eval_parallel_internal(
         _ => {
             let mid = args.len() / 2;
             let (left, right) = args.split_at(mid);
-            let left_half = eval_parallel_internal(scope, ctx, ec, left)?;
+            let mut left_half = eval_parallel_internal(scope, ctx, ec, left)?;
             let right_half = eval_parallel_internal(scope, ctx, ec, right)?;
-            let mut result = left_half;
-            result.extend(right_half);
-            Ok(result)
+            left_half.extend(right_half);
+            Ok(left_half)
         }
     }
 }
@@ -613,7 +609,7 @@ pub(super) fn eval_rollup_func_args<'a>(
     ctx: &Context,
     ec: &EvalConfig,
     fe: &'a FunctionExpr,
-) -> RuntimeResult<(Vec<Value>, Cow<'a, RollupExpr>, usize)> {
+) -> RuntimeResult<(FunctionArgs, Cow<'a, RollupExpr>, usize)> {
     let mut re = Default::default();
     // todo: i dont think we can have a empty arg_idx_for_optimization
     let rollup_arg_idx = fe
@@ -631,7 +627,7 @@ pub(super) fn eval_rollup_func_args<'a>(
         return Err(RuntimeError::from(msg));
     }
 
-    let mut args = Vec::with_capacity(fe.args.len());
+    let mut args = FunctionArgs::new();
     // todo(perf): extract rollup arg first, then evaluate the rest in parallel
     for (i, arg) in fe.args.iter().enumerate() {
         if i == rollup_arg_idx {

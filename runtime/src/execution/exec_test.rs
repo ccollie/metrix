@@ -2552,9 +2552,9 @@ mod tests {
     #[test]
     fn histogram_quantile_nan_bucket_count_some() {
         let q = r#"round(histogram_quantile(0.6,
-        label_set(90, "foo", "bar", "le", "10")
+        union(label_set(90, "foo", "bar", "le", "10")
         or label_set(NaN, "foo", "bar", "le", "30")
-        or label_set(300, "foo", "bar", "le", "+Inf")
+        or label_set(300, "foo", "bar", "le", "+Inf"))
         ),0.01)"#;
         let mut r = make_result(&[30.0, 30.0, 30.0, 30.0, 30.0, 30.0]);
         r.metric.set("foo", "bar");
@@ -3597,7 +3597,7 @@ mod tests {
     }
 
     #[test]
-    fn topk_max_1() {
+    fn topk_max_histogram_over_time() {
         let q = r#"topk_max(1, histogram_over_time(alias(label_set(rand(0)*1.3+1.1, "foo", "bar"), "xxx")[200s:5s]))"#;
         let mut r = make_result(&[6_f64, 6.0, 9.0, 13.0, 7.0, 7.0]);
         r.metric.set("foo", "bar");
@@ -4730,8 +4730,8 @@ mod tests {
         let mut r = make_result(&[0.99, 0.98, 0.98, 0.92, 0.98, 0.99]);
         r.metric.set_measurement("foobar");
         r.metric.set("rollup", "high");
-        let result_expected: Vec<QueryResult> = vec![r];
-        test_query(q, result_expected);
+
+        test_query(q, vec![r]);
     }
 
     #[test]
@@ -5168,6 +5168,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_with_nans_OR_scalar() {
         let q = r#"(label_set(time() >= 1600, "a", "a", "b", "b1")) or 1"#;
         let mut r1 = make_result(&[NAN, NAN, NAN, 1600.0, 1800.0, 2000.0]);
@@ -5180,6 +5181,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_OR_on_scalar() {
         // https://github.com/VictoriaMetrics/VictoriaMetrics/issues/7640
         let q = r#"(label_set(time() > 1200, "a", "a", "b", "b1")) or on() vector(0)"#;
@@ -5192,6 +5194,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_OR_on_series() {
         // left side + right side
         let q = r#"(label_set(time() <= 1200, "a", "a", "b", "b1")) or on(a) label_set(time() > 1200, "a", "a", "b", "b2")"#;
@@ -5218,6 +5221,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_OR_on_series_with_overlap() {
         // left overlap with right
         let q = r#"(label_set(time() <= 1500, "a", "a", "b", "b1")) or on(a) label_set(time() > 1100, "a", "a", "b", "b2")"#;
@@ -5233,6 +5237,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_OR_on_series_merge() {
         // left + right for same series
         let q = r#"(label_set(time() <= 1200, "a", "a", "b", "b1")) or on(a) label_set(time() > 1400, "a", "a", "b", "b1")"#;
@@ -5244,7 +5249,8 @@ mod tests {
     }
 
     #[test]
-    fn scalar_or_timeseries() {
+    #[allow(non_snake_case)]
+    fn scalar_OR_timeseries() {
         let q = r#"time() > 1400 or label_set(123, "foo", "bar")"#;
         let r1 = make_result(&[NAN, NAN, NAN, 1600.0, 1800.0, 2000.0]);
         let mut r2 = make_result(&[123.0, 123.0, 123.0, 123.0, 123.0, 123.0]);
@@ -5255,6 +5261,7 @@ mod tests {
 
 
     #[test]
+    #[allow(non_snake_case)]
     fn series_OR_many_series() {
         //load 1m
         //    foo{a="a", b="1"} 1 0 1 1 1
@@ -5289,6 +5296,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn many_series_OR_series() {
         //    foo{a="a", b="1"} 1 0 1 1 1
         //    foo{a="a", b="2"} 2 2 2 2 2
@@ -5316,6 +5324,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn many_series_OR_series_with_no_merge() {
         //	load 1m
         //    foo{job="a1", a="a"} 0 0 1 1 0
@@ -5347,6 +5356,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn many_series_OR_series_with_merge() {
         //	load 1m
         //    foo{job="a1", a="a"} 0 0 1 1 0

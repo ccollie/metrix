@@ -1743,7 +1743,7 @@ impl Expr {
         and ignoring (instance)
         sum(rate(some_queries{instance=~"localhost\\d+"} [5m])) > 100
     "#;
-    let ast = metricsql_parser::parser::parse(query).expect("valid query");
+    let ast = metricsql_parser::parse(query).expect("valid query");
     let series: Vec<String> = ast.series_names().collect();
     assert_eq!(series, vec![
             "something_used".to_string(),

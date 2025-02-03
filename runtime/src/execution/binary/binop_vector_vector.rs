@@ -137,8 +137,7 @@ fn binary_op_func_impl(bf: BinopFunc, bfa: &mut BinaryOpFuncArg) -> RuntimeResul
     }
 
     let is_right = is_group_right(bfa.modifier);
-
-    // todo: use rayon for items over a given length
+    
     for (left_ts, right_ts) in left.iter_mut().zip(right.iter_mut()) {
         if left_ts.values.len() != right_ts.values.len() {
             let msg = format!(
@@ -151,12 +150,12 @@ fn binary_op_func_impl(bf: BinopFunc, bfa: &mut BinaryOpFuncArg) -> RuntimeResul
 
         // todo: how to simplify this?
         if is_right {
-            for (left_val, right_val) in left_ts.values.iter_mut().zip(right_ts.values.iter_mut()) {
-                *right_val = bf(*left_val, *right_val);
+            for (left_val, right_val) in left_ts.values.iter().copied().zip(right_ts.values.iter_mut()) {
+                *right_val = bf(left_val, *right_val);
             }
         } else {
-            for (left_val, right_val) in left_ts.values.iter_mut().zip(right_ts.values.iter_mut()) {
-                *left_val = bf(*left_val, *right_val);
+            for (left_val, right_val) in left_ts.values.iter_mut().zip(right_ts.values.iter().copied()) {
+                *left_val = bf(*left_val, right_val);
             }
         }
     }

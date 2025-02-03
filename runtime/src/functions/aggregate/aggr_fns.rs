@@ -878,10 +878,7 @@ fn get_int_k(k: f64, k_max: usize) -> usize {
 fn avg_value(values: &[f64]) -> f64 {
     let mut sum: f64 = 0.0;
     let mut count = 0;
-    for v in values {
-        if v.is_nan() {
-            continue;
-        }
+    for v in values.iter().copied().filter(|x| !x.is_nan()) {
         count += 1;
         sum += v
     }
