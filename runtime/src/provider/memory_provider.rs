@@ -10,6 +10,7 @@ use metricsql_parser::prelude::{Matcher, Matchers};
 use crate::{
     Deadline, MetricStorage, QueryResult, QueryResults, RuntimeResult, SearchQuery,
 };
+use crate::prelude::MemoryPostings;
 use crate::types::{MetricName};
 
 #[derive(Debug, Clone)]
@@ -35,6 +36,7 @@ pub struct MemoryMetricProvider {
 struct Storage {
     labels_hash: BTreeMap<Signature, Arc<MetricName>>,
     sample_values: BTreeMap<Signature, Vec<Point>>,
+    postings: MemoryPostings
 }
 
 impl Storage {
@@ -117,6 +119,7 @@ impl MemoryMetricProvider {
             inner: RwLock::new(Storage {
                 labels_hash: Default::default(),
                 sample_values: Default::default(),
+                postings: MemoryPostings::new(),
             }),
         }
     }

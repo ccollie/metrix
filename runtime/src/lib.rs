@@ -1,5 +1,6 @@
 #![feature(hasher_prefixfree_extras)]
 extern crate ahash;
+extern crate blart;
 extern crate chrono;
 extern crate chrono_tz;
 extern crate clone_dyn;

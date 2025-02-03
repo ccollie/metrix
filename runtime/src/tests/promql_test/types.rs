@@ -28,6 +28,14 @@ pub(crate) struct SequenceValue {
     pub(crate) omitted: bool,
 }
 
+pub enum SequenceValueEnum {
+    Stale,
+    Missing,
+    Value(f64),
+    Scalar(SequenceValue),
+    Vector(Vec<SequenceValue>),
+}
+
 #[derive(Debug)]
 pub struct ParseErr {
     pub line_offset: usize,

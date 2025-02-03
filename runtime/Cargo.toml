@@ -23,8 +23,10 @@ ahash.workspace = true
 async-std = { version = "1.13", optional = true }
 async-trait = "0.1"
 enquote.workspace = true
+blart = "0.3"
 clone_dyn = "0.29"
 chili.workspace = true
+croaring = { version = "2.2" , features = ["alloc"] }
 chrono.workspace = true
 chrono-tz.workspace = true
 effective-limits = "0.5"
@@ -49,6 +51,7 @@ tracing.workspace = true
 xxhash-rust.workspace = true
 metricsql_common={ path = "../common" }
 metricsql_parser={ path = "../parser" }
+cfg-if = "1.0.0"
 
 [features]
 default = ["tokio"]
